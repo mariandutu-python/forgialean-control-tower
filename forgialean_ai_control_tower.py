@@ -1778,6 +1778,7 @@ def page_people_departments():
 # =========================
 
 PAGES = {
+    "Presentazione": page_presentation,  # 👈 nuova voce
     "Overview": page_overview,
     "Clienti": page_clients,
     "CRM & Vendite": page_crm_sales,
