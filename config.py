@@ -63,7 +63,8 @@ LOGO_PATH = "forgialean_logo.png"
 # Ruoli utenti (per access control)
 VALID_ROLES = ["admin", "user"]
 ADMIN_USERS = {
-    "Marian Dutu": "mariand",  # username: password (hash in produzione!)
+    "Marian Dutu": "mariand",
+    "Demo User": "demo",  # Utente demo per clienti/prove
 }
 
 # ========================
