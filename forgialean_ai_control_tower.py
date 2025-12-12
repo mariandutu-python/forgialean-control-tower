@@ -1,11 +1,51 @@
-from datetime import date
-
+from datetime import date, timedelta
 import streamlit as st
 import pandas as pd
 import plotly.express as px
 import pdfplumber
-from sqlmodel import SQLModel, Field, Session, select, delete
+from sqlmodel import select, delete
 from pathlib import Path
+from sqlmodel import SQLModel, Field, Session, select, delete
+from tracking import track_ga4_event, track_facebook_event
+
+# ✅ IMPORT DAL CONFIG E CACHE (NUOVO!)
+from config import CACHE_TTL, PAGES_BY_ROLE, APP_NAME, LOGO_PATH
+from cache_functions import (
+    get_all_clients,
+    get_all_opportunities,
+    get_all_invoices,
+    get_all_commesse,
+    get_all_task_fasi,
+    get_all_departments,
+    get_all_employees,
+    get_all_timeentries,
+    get_all_kpi_department_timeseries,
+    get_all_kpi_employee_timeseries,
+    invalidate_volatile_cache,
+    invalidate_transactional_cache,
+    invalidate_static_cache,
+    invalidate_all_cache,
+)
+
+# Import tracking
+from tracking import track_ga4_event, track_facebook_event
+
+# Import database
+from db import (
+    get_session,
+    Client,
+    Opportunity,
+    Invoice,
+    ProjectCommessa,
+    TaskFase,
+    Department,
+    Employee,
+    KpiDepartmentTimeseries,
+    KpiEmployeeTimeseries,
+    TimeEntry,
+)
+
+import io
 
 LOGO_PATH = Path("forgialean_logo.png")
 
@@ -51,20 +91,21 @@ st.set_page_config(page_title=APP_NAME, layout="wide")
 # =========================
 
 def page_overview():
-     
     st.title(f"🏢 {APP_NAME} Overview")
-       
-    with get_session() as session:
-        clients = session.exec(select(Client)).all()
-        opps = session.exec(select(Opportunity)).all()
-        invoices = session.exec(select(Invoice)).all()
-        commesse = session.exec(select(ProjectCommessa)).all()
+    
+    # ✅ USA LE FUNZIONI CACHED
+    clients = get_all_clients()
+    opps = get_all_opportunities()
+    invoices = get_all_invoices()
+    commesse = get_all_commesse()
+    
+    # Converti in DataFrame
+    df_clients = pd.DataFrame(clients) if clients else pd.DataFrame()
+    df_opps = pd.DataFrame(opps) if opps else pd.DataFrame()
+    df_invoices = pd.DataFrame(invoices) if invoices else pd.DataFrame()
+    df_commesse = pd.DataFrame(commesse) if commesse else pd.DataFrame()
 
-    df_clients = pd.DataFrame([c.__dict__ for c in clients]) if clients else pd.DataFrame()
-    df_opps = pd.DataFrame([o.__dict__ for o in opps]) if opps else pd.DataFrame()
-    df_invoices = pd.DataFrame([i.__dict__ for i in invoices]) if invoices else pd.DataFrame()
-    df_commesse = pd.DataFrame([c.__dict__ for c in commesse]) if commesse else pd.DataFrame()
-
+    # Mostra metriche
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         st.metric("Clienti", len(clients))
@@ -78,11 +119,11 @@ def page_overview():
     st.markdown("---")
     st.subheader("📈 KPI reparto (se presenti)")
 
-    with get_session() as session:
-        kpi_dept = session.exec(select(KpiDepartmentTimeseries)).all()
+    # ✅ USA LA FUNZIONE CACHED
+    kpi_dept = get_all_kpi_department_timeseries()
 
     if kpi_dept:
-        df = pd.DataFrame([k.__dict__ for k in kpi_dept])
+        df = pd.DataFrame(kpi_dept)
         df["data"] = pd.to_datetime(df["data"])
         kpi_sel = st.selectbox("Seleziona KPI", sorted(df["kpi_name"].unique()))
         df_f = df[df["kpi_name"] == kpi_sel].sort_values("data")
@@ -104,7 +145,6 @@ def page_overview():
         },
         "forgialean_control_tower.xlsx",
     )
-
 
 # =========================
 # PAGINA: CLIENTI – CRUD
@@ -267,7 +307,6 @@ def page_crm_sales():
         st.info("Prima crea almeno un cliente nella pagina 'Clienti'.")
     else:
         df_clients = pd.DataFrame([c.__dict__ for c in clients])
-        # Opzione visualizzata come "ID - Ragione sociale"
         df_clients["label"] = df_clients["client_id"].astype(str) + " - " + df_clients["ragione_sociale"]
 
         with st.form("new_opportunity"):
@@ -299,8 +338,12 @@ def page_crm_sales():
             if not nome_opportunita.strip():
                 st.warning("Il nome opportunità è obbligatorio.")
             else:
-                # Recupero client_id dalla label selezionata
                 client_id_sel = int(client_label.split(" - ")[0])
+
+                # Recupero info cliente per avere il nome nel tracking
+                client_row = df_clients[df_clients["client_id"] == client_id_sel].iloc[0]
+                client_name = client_row["ragione_sociale"]
+
                 with get_session() as session:
                     new_opp = Opportunity(
                         client_id=client_id_sel,
@@ -316,6 +359,36 @@ def page_crm_sales():
                     session.add(new_opp)
                     session.commit()
                     session.refresh(new_opp)
+
+                # === TRACKING GA4 ===
+                track_ga4_event(
+                    "lead_generato",
+                    {
+                        "client_name": client_name,
+                        "opportunity_name": new_opp.nome_opportunita,
+                        "opportunity_id": str(new_opp.opportunity_id),
+                        "pipeline_stage": new_opp.fase_pipeline,
+                        "owner": new_opp.owner or "",
+                        "opportunity_value": float(new_opp.valore_stimato or 0),
+                        "probability": float(new_opp.probabilita or 0),
+                        "status": new_opp.stato_opportunita,
+                    },
+                    client_id=None,  # per ora usiamo un fallback server
+                )
+
+                # === TRACKING FACEBOOK (Conversions API) ===
+                track_facebook_event(
+                    "Lead",
+                    {
+                        "value": float(new_opp.valore_stimato or 0),
+                        "currency": "EUR",
+                        "content_name": new_opp.nome_opportunita,
+                        "content_category": "CRM-Opportunity",
+                        "client_name": client_name,
+                        "status": new_opp.stato_opportunita,
+                    },
+                )
+
                 st.success(f"Opportunità creata con ID {new_opp.opportunity_id}")
                 st.rerun()
 
@@ -662,6 +735,12 @@ def page_finance_invoices():
     # =========================
     st.subheader("📊 Elenco fatture")
 
+    col_f1, col_f2 = st.columns(2)
+    with col_f1:
+        data_da = st.date_input("Da data (fattura)", value=None)
+    with col_f2:
+        data_a = st.date_input("A data (fattura)", value=None)
+
     with get_session() as session:
         invoices = session.exec(select(Invoice)).all()
 
@@ -670,6 +749,13 @@ def page_finance_invoices():
         return
 
     df_inv = pd.DataFrame([i.__dict__ for i in invoices])
+    df_inv["data_fattura"] = pd.to_datetime(df_inv["data_fattura"], errors="coerce")
+
+    if data_da:
+        df_inv = df_inv[df_inv["data_fattura"] >= pd.to_datetime(data_da)]
+    if data_a:
+        df_inv = df_inv[df_inv["data_fattura"] <= pd.to_datetime(data_a)]
+
     st.dataframe(df_inv)
 
     # KPI base: totale fatturato per anno
@@ -1442,11 +1528,23 @@ def page_people_departments():
         else:
             st.dataframe(df_emp_all)
 
-    st.markdown("---")
-    st.subheader("📈 KPI per reparto (time series)")
+        st.markdown("---")
+    st.subheader("📅 Filtro periodo KPI")
+
+    col_k1, col_k2 = st.columns(2)
+    with col_k1:
+        kpi_da = st.date_input("Da data KPI", value=None, key="kpi_da")
+    with col_k2:
+        kpi_a = st.date_input("A data KPI", value=None, key="kpi_a")
 
     if not df_kpi_dept.empty:
         df_kpi_dept["data"] = pd.to_datetime(df_kpi_dept["data"], errors="coerce")
+
+        if kpi_da:
+            df_kpi_dept = df_kpi_dept[df_kpi_dept["data"] >= pd.to_datetime(kpi_da)]
+        if kpi_a:
+            df_kpi_dept = df_kpi_dept[df_kpi_dept["data"] <= pd.to_datetime(kpi_a)]
+
         dept_opt = ["Tutti"]
         if not df_dept_all.empty and "nome_reparto" in df_dept_all.columns:
             dept_opt += df_dept_all["nome_reparto"].dropna().unique().tolist()
@@ -1477,6 +1575,12 @@ def page_people_departments():
 
     if not df_kpi_emp.empty:
         df_kpi_emp["data"] = pd.to_datetime(df_kpi_emp["data"], errors="coerce")
+
+        if kpi_da:
+            df_kpi_emp = df_kpi_emp[df_kpi_emp["data"] >= pd.to_datetime(kpi_da)]
+        if kpi_a:
+            df_kpi_emp = df_kpi_emp[df_kpi_emp["data"] <= pd.to_datetime(kpi_a)]
+
         if not df_emp_all.empty and {"nome", "cognome"}.issubset(df_emp_all.columns):
             df_emp_all["nome_completo"] = df_emp_all["nome"] + " " + df_emp_all["cognome"]
             emp_opt = ["Tutti"] + df_emp_all["nome_completo"].dropna().unique().tolist()
@@ -1673,14 +1777,21 @@ def check_login_sidebar():
         st.stop()
 
 def main():
-    # Login gestito nella sidebar
     check_login_sidebar()
+    role = st.session_state.get("role", "user")
 
     st.sidebar.title(APP_NAME)
     st.sidebar.caption("Versione SQLite – dati centralizzati in forgialean.db")
 
-    page = st.sidebar.radio("Pagina", list(PAGES.keys()))
+    if role == "admin":
+        pages = list(PAGES.keys())
+    else:
+        # esempio: niente Finanza / Operations per user
+        pages = ["Overview", "Clienti", "CRM & Vendite", "People & Reparti"]
+
+    page = st.sidebar.radio("Pagina", pages)
     PAGES[page]()
+
 
     # Spazio vuoto per spingere il logo in basso
     for _ in range(18):   # aumenta/diminuisci questo numero per più/meno spazio

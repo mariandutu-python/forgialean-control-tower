@@ -1,0 +1,8 @@
+streamlit
+sqlmodel
+pyodbc
+pandas
+plotly
+pdfplumber
+matplotlib
+python-dotenv
