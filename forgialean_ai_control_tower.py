@@ -1900,9 +1900,7 @@ def main():
 
     page = st.sidebar.radio("Pagina", pages)
     PAGES[page]()
-
-
-        # Spazio vuoto per spingere il logo in basso
+   # Spazio vuoto per spingere il logo in basso
     for _ in range(18):
         st.sidebar.write("")
 
