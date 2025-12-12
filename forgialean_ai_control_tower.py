@@ -85,6 +85,52 @@ APP_NAME = ""
 
 st.set_page_config(page_title=APP_NAME, layout="wide")
 
+def page_presentation():
+    st.title("ForgiaLean – quando l’OEE fa male")
+
+    st.subheader("Domanda iniziale")
+    st.markdown("""
+- OEE medio della tua linea principale è:
+  - superiore all’85%?
+  - tra 80% e 85%?
+  - tra 70% e 80%?
+  - sotto il 70%?
+
+Se non conosci il valore, questo è già un primo campanello d’allarme.
+""")
+
+    st.subheader("Segnali che l’OEE sta facendo male")
+    st.markdown("""
+- Fermi impianto ricorrenti, ma senza una visione chiara delle cause principali.
+- Scarti di qualità che aumentano, gestiti solo a consuntivo.
+- Performance macchina lontana dai valori di targa, senza un monitoraggio continuo.
+- Report e file Excel che richiedono molto tempo, ma danno poche risposte operative.
+""")
+
+    st.subheader("Perché l’OEE è il KPI centrale")
+    st.markdown("""
+- Combina disponibilità, performance e qualità in un unico indicatore.
+- Un OEE inferiore all’80% indica un importante potenziale di recupero capacità.
+- Lavorare sull’OEE significa agire contemporaneamente su fermi, velocità e scarti.
+""")
+
+    st.subheader("Cosa offre ForgiaLean")
+    st.markdown("""
+- Supporto a PMI manifatturiere con OEE inferiore all’80%.
+- Analisi dei dati esistenti (Excel, sistemi di produzione, report interni).
+- Costruzione di dashboard chiare per rendere visibili le perdite principali.
+- Definizione di azioni concrete di miglioramento su disponibilità, performance e qualità.
+""")
+
+    st.subheader("Come procedere")
+    st.markdown("""
+1. Raccogli il valore di OEE medio degli ultimi mesi (in %).
+2. Descrivi brevemente la tipologia di linea/impianto.
+3. Contatta ForgiaLean per un primo check senza impegno.
+
+_ForgiaLean – Crevalcore (BO)_
+""")
+
     
 # =========================
 # PAGINA: OVERVIEW

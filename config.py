@@ -72,6 +72,7 @@ ADMIN_USERS = {
 # ========================
 PAGES_BY_ROLE = {
     "admin": [
+        "Presentazione",
         "Overview",
         "Clienti",
         "CRM & Vendite",
@@ -80,6 +81,7 @@ PAGES_BY_ROLE = {
         "People & Reparti",
     ],
     "user": [
+        "Presentazione",
         "Overview",
         "Clienti",
         "CRM & Vendite",
