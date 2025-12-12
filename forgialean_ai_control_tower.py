@@ -11,8 +11,7 @@ from sqlmodel import SQLModel, Field, Session, select, delete
 from config import CACHE_TTL, PAGES_BY_ROLE, APP_NAME, LOGO_PATH
 from pathlib import Path
 
-BASE_DIR = Path(__file__).parent
-LOGO_PATH = BASE_DIR / "assets" / "forgialean_logo.png"  # adatta path/nome file
+LOGO_PATH = Path("forgialean_logo.png")
 
 from cache_functions import (
     get_all_clients,
