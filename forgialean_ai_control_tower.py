@@ -9,6 +9,11 @@ import pdfplumber
 from sqlmodel import SQLModel, Field, Session, select, delete
 
 from config import CACHE_TTL, PAGES_BY_ROLE, APP_NAME, LOGO_PATH
+from pathlib import Path
+
+BASE_DIR = Path(__file__).parent
+LOGO_PATH = BASE_DIR / "assets" / "forgialean_logo.png"  # adatta path/nome file
+
 from cache_functions import (
     get_all_clients,
     get_all_opportunities,
@@ -1943,11 +1948,12 @@ def main():
     PAGES[page]()
 
 
-    # Spazio vuoto per spingere il logo in basso
-    for _ in range(18):   # aumenta/diminuisci questo numero per più/meno spazio
+        # Spazio vuoto per spingere il logo in basso
+    for _ in range(18):
         st.sidebar.write("")
 
-    if LOGO_PATH.exists():
+    # Mostra il logo se il path è valido e il file esiste
+    if LOGO_PATH and isinstance(LOGO_PATH, Path) and LOGO_PATH.exists():
         st.sidebar.markdown("---")
         st.sidebar.image(str(LOGO_PATH), use_container_width=True)
 
