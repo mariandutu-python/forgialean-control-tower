@@ -276,7 +276,6 @@ _ForgiaLean - Crevalcore (BO) - by Marian Dutu_
         "Esempio: i fermi non pianificati e i setup assorbono la quota principale di perdita; "
         "focalizzarsi su questi due ambiti porta il maggior beneficio."
     
-_ForgiaLean – Crevalcore (BO)_ 
 """)
 
     
