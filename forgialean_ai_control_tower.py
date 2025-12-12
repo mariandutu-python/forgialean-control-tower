@@ -113,46 +113,7 @@ Se non conosci il valore, questo è già un primo campanello d'allarme.
 _ForgiaLean - Crevalcore (BO) - by Marian Dutu_
 """)
 
-    # =====================
-    # ESEMPIO INTERATTIVO OEE
-    # =====================
-    st.markdown("---")
-    st.subheader("Esempio interattivo: OEE prima e dopo")
-
-    periodi = ["Periodo 1", "Periodo 2", "Periodo 3", "Periodo 4", "Periodo 5"]
-    oee_values = [72, 74, 76, 81, 84]
-
-    df_oee_demo = pd.DataFrame({
-        "Periodo": periodi,
-        "OEE (%)": oee_values,
-    })
-
-    periodo_sel = st.slider(
-        "Seleziona il periodo da analizzare",
-        min_value=1,
-        max_value=len(periodi),
-        value=3,
-        step=1,
-        format="Periodo %d",
-    )
-
-    fig_oee = px.line(
-        df_oee_demo,
-        x="Periodo",
-        y="OEE (%)",
-        markers=True,
-        title="OEE simulato prima e dopo un intervento mirato",
-    )
-    fig_oee.add_hline(y=80, line_dash="dash", line_color="red")  # soglia 80%
-
-    st.plotly_chart(fig_oee, use_container_width=True)
-
-    st.caption(
-        "Esempio: dal 72-76% iniziale a oltre l'80% dopo un intervento, "
-        "con linea rossa a 80% come soglia minima."
-    )
-
-  # =====================
+      # =====================
 # ESEMPIO INTERATTIVO OEE
 # =====================
 st.markdown("---")
