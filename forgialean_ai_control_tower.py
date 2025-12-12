@@ -1883,7 +1883,8 @@ def check_login_sidebar():
         st.session_state.role = "user"
 
     with st.sidebar:
-                if not st.session_state.logged_in:
+
+            if not st.session_state.logged_in:
             st.markdown("### 🔐 Login")
 
             with st.form("login_form"):
