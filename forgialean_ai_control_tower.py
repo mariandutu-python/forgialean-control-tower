@@ -1883,8 +1883,7 @@ def check_login_sidebar():
         st.session_state.role = "user"
 
     with st.sidebar:
-
-            if not st.session_state.logged_in:
+        if not st.session_state.logged_in:
             st.markdown("### 🔐 Login")
 
             with st.form("login_form"):
@@ -1900,7 +1899,7 @@ def check_login_sidebar():
                     st.session_state.role = "admin"
                     st.rerun()
 
-                # Demo user: niente cambio password, accesso diretto come "user"
+                # Demo user: accesso diretto come "user"
                 elif username == "Demo User" and password == "demo":
                     st.session_state.logged_in = True
                     st.session_state.username = username
@@ -1910,6 +1909,12 @@ def check_login_sidebar():
                 # Credenziali sbagliate
                 else:
                     st.error("Credenziali non valide.")
+        else:
+            if st.button("Logout", key="logout_button"):
+                st.session_state.logged_in = False
+                st.session_state.username = ""
+                st.session_state.role = "user"
+                st.rerun()
 
     if not st.session_state.logged_in:
         st.stop()
@@ -1925,7 +1930,7 @@ def main():
         pages = list(PAGES.keys())
     else:
         # esempio: niente Finanza / Operations per user
-        pages = ["Overview", "Clienti", "CRM & Vendite", "People & Reparti"]
+        pages = ["Presentazione","Overview", "Clienti", "CRM & Vendite", "People & Reparti"]
 
     page = st.sidebar.radio("Pagina", pages)
     PAGES[page]()
