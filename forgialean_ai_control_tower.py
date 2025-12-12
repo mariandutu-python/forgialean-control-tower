@@ -1895,16 +1895,16 @@ def main():
     if role == "admin":
         pages = list(PAGES.keys())
     else:
-        # esempio: niente Finanza / Operations per user
-        pages = ["Presentazione","Overview", "Clienti", "CRM & Vendite", "People & Reparti"]
+        pages = ["Presentazione", "Overview", "Clienti", "CRM & Vendite", "People & Reparti"]
 
     page = st.sidebar.radio("Pagina", pages)
-PAGES[page]()
+    PAGES[page]()
 
-# Logo subito dopo il menu pagine
-if LOGO_PATH.exists():
-    st.sidebar.markdown("---")
-    st.sidebar.image(str(LOGO_PATH), use_container_width=True)
+    # Logo subito dopo il menu pagine
+    if LOGO_PATH.exists():
+        st.sidebar.markdown("---")
+        st.sidebar.image(str(LOGO_PATH), use_container_width=True)
+
 
 if __name__ == "__main__":
     main()
