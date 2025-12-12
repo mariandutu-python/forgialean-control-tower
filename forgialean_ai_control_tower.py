@@ -86,20 +86,20 @@ APP_NAME = ""
 st.set_page_config(page_title=APP_NAME, layout="wide")
 
 def page_presentation():
-    st.title("ForgiaLean – quando l’OEE fa male")
+    st.title("ForgiaLean - quando l'OEE fa male")
 
     st.subheader("Domanda iniziale")
     st.markdown("""
 - OEE medio della tua linea principale è:
-  - superiore all’85%?
+  - superiore all'85%?
   - tra 80% e 85%?
   - tra 70% e 80%?
   - sotto il 70%?
 
-Se non conosci il valore, questo è già un primo campanello d’allarme.
+Se non conosci il valore, questo è già un primo campanello d'allarme.
 """)
 
-    st.subheader("Segnali che l’OEE sta facendo male")
+    st.subheader("Segnali che l'OEE sta facendo male")
     st.markdown("""
 - Fermi impianto ricorrenti, ma senza una visione chiara delle cause principali.
 - Scarti di qualità che aumentano, gestiti solo a consuntivo.
@@ -107,16 +107,16 @@ Se non conosci il valore, questo è già un primo campanello d’allarme.
 - Report e file Excel che richiedono molto tempo, ma danno poche risposte operative.
 """)
 
-    st.subheader("Perché l’OEE è il KPI centrale")
+    st.subheader("Perché l'OEE è il KPI centrale")
     st.markdown("""
 - Combina disponibilità, performance e qualità in un unico indicatore.
-- Un OEE inferiore all’80% indica un importante potenziale di recupero capacità.
-- Lavorare sull’OEE significa agire contemporaneamente su fermi, velocità e scarti.
+- Un OEE inferiore all'80% indica un importante potenziale di recupero capacità.
+- Lavorare sull'OEE significa agire contemporaneamente su fermi, velocità e scarti.
 """)
 
     st.subheader("Cosa offre ForgiaLean")
     st.markdown("""
-- Supporto a PMI manifatturiere con OEE inferiore all’80%.
+- Supporto a PMI manifatturiere con OEE inferiore all'80%.
 - Analisi dei dati esistenti (Excel, sistemi di produzione, report interni).
 - Costruzione di dashboard chiare per rendere visibili le perdite principali.
 - Definizione di azioni concrete di miglioramento su disponibilità, performance e qualità.
@@ -128,8 +128,81 @@ Se non conosci il valore, questo è già un primo campanello d’allarme.
 2. Descrivi brevemente la tipologia di linea/impianto.
 3. Contatta ForgiaLean per un primo check senza impegno.
 
-_ForgiaLean – Crevalcore (BO) – by Marian Dutu_
+_ForgiaLean - Crevalcore (BO) - by Marian Dutu_
 """)
+
+    # =====================
+    # ESEMPIO INTERATTIVO OEE
+    # =====================
+    st.markdown("---")
+    st.subheader("Esempio interattivo: OEE prima e dopo")
+
+    periodi = ["Periodo 1", "Periodo 2", "Periodo 3", "Periodo 4", "Periodo 5"]
+    oee_values = [72, 74, 76, 81, 84]
+
+    df_oee_demo = pd.DataFrame({
+        "Periodo": periodi,
+        "OEE (%)": oee_values,
+    })
+
+    periodo_sel = st.slider(
+        "Seleziona il periodo da analizzare",
+        min_value=1,
+        max_value=len(periodi),
+        value=3,
+        step=1,
+        format="Periodo %d",
+    )
+
+    fig_oee = px.line(
+        df_oee_demo,
+        x="Periodo",
+        y="OEE (%)",
+        markers=True,
+        title="OEE simulato prima e dopo un intervento mirato",
+    )
+    fig_oee.add_hline(y=80, line_dash="dash", line_color="red")  # soglia 80%
+
+    st.plotly_chart(fig_oee, use_container_width=True)
+
+    st.caption(
+        "Esempio: dal 72–76% iniziale a oltre l'80% dopo un intervento, "
+        "con linea rossa a 80% come soglia minima."
+    )
+
+    # =====================
+    # ESEMPIO PARETO PERDITE
+    # =====================
+    st.markdown("---")
+    st.subheader("Esempio: dove si perdono i punti di OEE?")
+
+    cause = [
+        "Fermi non pianificati",
+        "Setup e cambi formato",
+        "Scarti qualità",
+        "Microfermi",
+        "Velocità ridotta",
+    ]
+    perdita_punti = [8, 5, 4, 3, 2]  # punti OEE persi (fittizi)
+
+    df_pareto = pd.DataFrame({
+        "Causa": cause,
+        "Punti OEE persi": perdita_punti,
+    })
+
+    fig_pareto = px.bar(
+        df_pareto,
+        x="Causa",
+        y="Punti OEE persi",
+        title="Pareto simulato delle perdite di OEE",
+    )
+
+    st.plotly_chart(fig_pareto, use_container_width=True)
+
+    st.caption(
+        "Esempio: i fermi non pianificati e i setup assorbono la quota principale di perdita; "
+        "focalizzarsi su questi due ambiti porta il maggior beneficio."
+    )
 
     # =====================
     # ESEMPIO INTERATTIVO OEE
