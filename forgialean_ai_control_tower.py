@@ -1883,7 +1883,7 @@ def check_login_sidebar():
         st.session_state.role = "user"
 
     with st.sidebar:
-        if not st.session_state.logged_in:
+                if not st.session_state.logged_in:
             st.markdown("### 🔐 Login")
 
             with st.form("login_form"):
@@ -1892,22 +1892,23 @@ def check_login_sidebar():
                 submit = st.form_submit_button("Login")
 
             if submit:
+                # Admin
                 if username == "Marian Dutu" and password == "mariand":
                     st.session_state.logged_in = True
                     st.session_state.username = username
                     st.session_state.role = "admin"
                     st.rerun()
-                else:
+
+                # Demo user: niente cambio password, accesso diretto come "user"
+                elif username == "Demo User" and password == "demo":
                     st.session_state.logged_in = True
                     st.session_state.username = username
                     st.session_state.role = "user"
                     st.rerun()
-        else:
-            if st.button("Logout", key="logout_button"):
-                st.session_state.logged_in = False
-                st.session_state.username = ""
-                st.session_state.role = "user"
-                st.rerun()
+
+                # Credenziali sbagliate
+                else:
+                    st.error("Credenziali non valide.")
 
     if not st.session_state.logged_in:
         st.stop()
