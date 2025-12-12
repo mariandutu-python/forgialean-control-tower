@@ -1899,15 +1899,12 @@ def main():
         pages = ["Presentazione","Overview", "Clienti", "CRM & Vendite", "People & Reparti"]
 
     page = st.sidebar.radio("Pagina", pages)
-    PAGES[page]()
-   # Spazio vuoto per spingere il logo in basso
-    for _ in range(18):
-        st.sidebar.write("")
+PAGES[page]()
 
-    # Mostra il logo se il path è valido e il file esiste
-    if LOGO_PATH and isinstance(LOGO_PATH, Path) and LOGO_PATH.exists():
-        st.sidebar.markdown("---")
-        st.sidebar.image(str(LOGO_PATH), use_container_width=True)
+# Logo subito dopo il menu pagine
+if LOGO_PATH.exists():
+    st.sidebar.markdown("---")
+    st.sidebar.image(str(LOGO_PATH), use_container_width=True)
 
 if __name__ == "__main__":
     main()
