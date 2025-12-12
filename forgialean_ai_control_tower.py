@@ -109,7 +109,7 @@ Se non conosci il valore, questo è già un primo campanello d'allarme.
 2. Descrivi brevemente la tipologia di linea/impianto.
 3. Contatta ForgiaLean per un primo check senza impegno.
 
-_ForgiaLean - Crevalcore (BO) - 0039/3467538724
+ForgiaLean - Crevalcore (BO) - 0039/3467538724
 """)
 
     # =====================
