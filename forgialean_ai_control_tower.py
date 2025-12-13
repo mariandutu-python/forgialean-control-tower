@@ -109,130 +109,9 @@ Se non conosci il valore, questo è già un primo campanello d'allarme.
 2. Descrivi brevemente la tipologia di linea/impianto.
 3. Contatta ForgiaLean per un primo check senza impegno.
 
-ForgiaLean - Crevalcore (BO) - 0039/3467538724
+ForgiaLean - Crevalcore (BO) 
+
 """)
-
-    # =====================
-    # ESEMPIO INTERATTIVO OEE PRIMA / DOPO FORGIALEAN
-    # =====================
-    st.markdown("---")
-    st.subheader("Esempio interattivo: OEE prima e dopo ForgiaLean")
-
-    # Periodi: 1-3 = prima di ForgiaLean, 4-5 = dopo ForgiaLean
-    periodi = ["Periodo 1", "Periodo 2", "Periodo 3", "Periodo 4", "Periodo 5"]
-    oee_values = [72, 74, 76, 81, 84]  # OEE simulato
-
-    df_oee_demo = pd.DataFrame({"Periodo": periodi, "OEE (%)": oee_values})
-
-    # Slider guidato: parte dal Periodo 1
-    periodo_sel = st.slider(
-        "Segui il percorso di miglioramento",
-        min_value=1,
-        max_value=len(periodi),
-        value=1,
-        step=1,
-        format="Periodo %d",
-        key="percorso_oee_forgialean_presentazione",  # key unica
-    )
-
-    # OEE: grafico completo + punto evidenziato
-    fig_oee = px.line(
-        df_oee_demo,
-        x="Periodo",
-        y="OEE (%)",
-        markers=True,
-        title="OEE prima e dopo l’intervento di ForgiaLean",
-    )
-    fig_oee.add_hline(y=80, line_dash="dash", line_color="red")  # soglia 80%
-
-    fig_oee.add_scatter(
-        x=[periodi[periodo_sel - 1]],
-        y=[oee_values[periodo_sel - 1]],
-        mode="markers",
-        marker=dict(size=14, color="orange"),
-        name="Periodo selezionato",
-    )
-
-    st.plotly_chart(fig_oee, use_container_width=True)
-
-    # Narrazione dinamica
-    if periodo_sel == 1:
-        st.caption(
-            "Periodo 1 – **prima di ForgiaLean**: OEE al 72%, molto sotto il target 80%. "
-            "Le perdite sono diffuse e non c’è una priorità chiara."
-        )
-    elif periodo_sel == 2:
-        st.caption(
-            "Periodo 2 – **diagnosi ForgiaLean**: mappiamo il flusso, misuriamo le perdite di OEE "
-            "e identifichiamo i colli di bottiglia (fermi, setup, scarti)."
-        )
-    elif periodo_sel == 3:
-        st.caption(
-            "Periodo 3 – **piano di intervento**: definiamo azioni mirate su fermi non pianificati "
-            "e setup, con obiettivi e indicatori chiari."
-        )
-    elif periodo_sel == 4:
-        st.caption(
-            "Periodo 4 – **dopo ForgiaLean**: OEE all’81%, sopra la soglia minima dell’80%. "
-            "Le prime azioni producono già un miglioramento visibile."
-        )
-    else:
-        st.caption(
-            "Periodo 5 – **risultato consolidato con ForgiaLean**: OEE all’84%, "
-            "processo più stabile e focalizzato sulle vere cause di perdita."
-        )
-
-    # =====================
-    # PARETO PERDITE – PRIMA / DOPO
-    # =====================
-    st.markdown("---")
-    st.subheader("Dove agisce ForgiaLean sull’OEE?")
-
-    cause = [
-        "Fermi non pianificati",
-        "Setup e cambi formato",
-        "Scarti qualità",
-        "Microfermi",
-        "Velocità ridotta",
-    ]
-
-    # prima di ForgiaLean (Periodo 1-3)
-    perdita_punti_prima = [8, 5, 4, 3, 2]
-    # dopo ForgiaLean (Periodo 4-5) – riduzione simulata
-    perdita_punti_dopo = [4, 3, 2, 2, 1]
-
-    if periodo_sel <= 3:
-        df_pareto = pd.DataFrame({
-            "Causa": cause,
-            "Punti OEE persi": perdita_punti_prima,
-        })
-        titolo_pareto = "Pareto delle perdite OEE – prima dell’intervento di ForgiaLean"
-    else:
-        df_pareto = pd.DataFrame({
-            "Causa": cause,
-            "Punti OEE persi": perdita_punti_dopo,
-        })
-        titolo_pareto = "Pareto delle perdite OEE – dopo l’intervento di ForgiaLean"
-
-    fig_pareto = px.bar(
-        df_pareto,
-        x="Causa",
-        y="Punti OEE persi",
-        title=titolo_pareto,
-    )
-
-    st.plotly_chart(fig_pareto, use_container_width=True)
-
-    if periodo_sel <= 3:
-        st.caption(
-            "Prima di ForgiaLean le maggiori perdite di OEE sono concentrate su fermi non pianificati "
-            "e setup: senza dati strutturati è difficile priorizzare."
-        )
-    else:
-        st.caption(
-            "Dopo l’intervento di ForgiaLean le perdite per fermi e setup si riducono sensibilmente: "
-            "il miglioramento di OEE è legato a interventi mirati sulle cause principali."
-        )
 
     # =====================
     # FORM: RICHIEDI REPORT OEE
@@ -269,11 +148,10 @@ ForgiaLean - Crevalcore (BO) - 0039/3467538724
         else:
             with get_session() as session:
                 opportunity = Opportunity(
-                    # ADATTA QUESTI CAMPI AI NOMI REALI DEL MODELLO
+                    # ADATTA QUESTI CAMPI AI NOMI REALI DEL TUO MODELLO
                     name=nome,
                     description=descrizione,
                     source="LinkedIn OEE",
-                    # aggiungi qui altri campi che esistono davvero nella tua tabella
                 )
                 session.add(opportunity)
                 session.commit()
@@ -1939,6 +1817,7 @@ PAGES = {
     "People & Reparti": page_people_departments,
 }
 
+
 def check_login_sidebar():
     if "logged_in" not in st.session_state:
         st.session_state.logged_in = False
@@ -1981,14 +1860,21 @@ def check_login_sidebar():
 def main():
     check_login_sidebar()
     role = st.session_state.get("role", "user")
+    username = st.session_state.get("username", "")
 
     st.sidebar.title(APP_NAME)
     st.sidebar.caption("Versione SQLite – dati centralizzati in forgialean.db")
 
     if role == "admin":
+        # Marian Dutu (admin) vede tutte le pagine
         pages = list(PAGES.keys())
     else:
-        pages = ["Presentazione", "Overview", "Clienti", "CRM & Vendite", "People & Reparti"]
+        if username == "Demo User":
+            # Demo User: solo Presentazione
+            pages = ["Presentazione"]
+        else:
+            # altri user: Presentazione + pagine base
+            pages = ["Presentazione", "Overview", "Clienti", "CRM & Vendite", "People & Reparti"]
 
     page = st.sidebar.radio("Pagina", pages)
     PAGES[page]()
