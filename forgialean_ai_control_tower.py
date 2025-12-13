@@ -146,17 +146,45 @@ ForgiaLean - Crevalcore (BO)
         if not (nome and azienda and email):
             st.error("Nome, azienda ed email sono obbligatori.")
         else:
-            with get_session() as session:
-                opportunity = Opportunity(
-                    # ADATTA QUESTI CAMPI AI NOMI REALI DEL TUO MODELLO
-                    name=nome,
-                    description=descrizione,
-                    source="LinkedIn OEE",
-                )
-                session.add(opportunity)
-                session.commit()
+            try:
+                with get_session() as session:
+                    # 1) Crea il Client (ragione_sociale è obbligatorio)
+                    new_client = Client(
+                        ragione_sociale=azienda,
+                        canale_acquisizione="Demo OEE LinkedIn",
+                        segmento_cliente="PMI manifatturiera",
+                        data_creazione=date.today(),
+                        stato_cliente="prospect",
+                        paese=None,
+                        settore=None,
+                        piva=None,
+                        cod_fiscale=None,
+                    )
+                    session.add(new_client)
+                    session.commit()
+                    session.refresh(new_client)
 
-            st.success("Richiesta ricevuta. Riceverai il tuo report OEE via email.")
+                    # 2) Crea l'Opportunity collegata al client
+                    new_opp = Opportunity(
+                        client_id=new_client.client_id,
+                        nome_opportunita=f"Lead OEE - {nome}",
+                        fase_pipeline="Lead",
+                        owner="Marian Dutu",
+                        valore_stimato=0.0,
+                        probabilita=10.0,
+                        data_apertura=date.today(),
+                        stato_opportunita="aperta",
+                        data_chiusura_prevista=None,
+                    )
+                    session.add(new_opp)
+                    session.commit()
+
+                st.success(
+                    "Richiesta ricevuta. Ti contatterò via email per condividere il report OEE e approfondire i risultati."
+                )
+            except Exception as e:
+                st.error("Si è verificato un errore nel salvataggio del lead OEE.")
+                st.text(str(e))
 
     
 # =========================
