@@ -1,3 +1,71 @@
+from datetime import date, timedelta
+from pathlib import Path
+import io
+
+import streamlit as st
+import pandas as pd
+import plotly.express as px
+import pdfplumber
+from sqlmodel import SQLModel, Field, Session, select, delete
+
+from config import CACHE_TTL, PAGES_BY_ROLE, APP_NAME, LOGO_PATH
+from pathlib import Path
+
+LOGO_PATH = Path("forgialean_logo.png")
+
+from cache_functions import (
+    get_all_clients,
+    get_all_opportunities,
+    get_all_invoices,
+    get_all_commesse,
+    get_all_task_fasi,
+    get_all_departments,
+    get_all_employees,
+    get_all_timeentries,
+    get_all_kpi_department_timeseries,
+    get_all_kpi_employee_timeseries,
+    invalidate_volatile_cache,
+    invalidate_transactional_cache,
+    invalidate_static_cache,
+    invalidate_all_cache,
+)
+
+from tracking import track_ga4_event, track_facebook_event
+
+from db import (
+    get_session,
+    Client,
+    Opportunity,
+    Invoice,
+    ProjectCommessa,
+    TaskFase,
+    Department,
+    Employee,
+    KpiDepartmentTimeseries,
+    KpiEmployeeTimeseries,
+    TimeEntry,
+)
+
+
+def export_all_to_excel(dfs: dict, filename: str):
+    buffer = io.BytesIO()
+    with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
+        for sheet_name, df in dfs.items():
+            if df is not None and not df.empty:
+                safe_name = sheet_name[:31]
+                df.to_excel(writer, index=False, sheet_name=safe_name)
+    buffer.seek(0)
+    st.download_button(
+        label="⬇️ Esporta tutto in Excel",
+        data=buffer,
+        file_name=filename,
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
+st.set_page_config(page_title=APP_NAME, layout="wide")
+
+
 def page_presentation():
     st.title("ForgiaLean - quando l'OEE fa male")
 
@@ -1857,9 +1925,12 @@ def page_people_departments():
 # =========================
 # ROUTER
 # =========================
+# =========================
+# ROUTER
+# =========================
 
 PAGES = {
-    "Presentazione": page_presentation,  # 👈 nuova voce
+    "Presentazione": page_presentation,
     "Overview": page_overview,
     "Clienti": page_clients,
     "CRM & Vendite": page_crm_sales,
@@ -1884,21 +1955,16 @@ def check_login_sidebar():
                 submit = st.form_submit_button("Login")
 
             if submit:
-                # Admin
                 if username == "Marian Dutu" and password == "mariand":
                     st.session_state.logged_in = True
                     st.session_state.username = username
                     st.session_state.role = "admin"
                     st.rerun()
-
-                # Demo user: accesso diretto come "user"
-                elif username == "Demo User" and password == "demodemo":
+                elif username == "Demo User" and password == "demo":
                     st.session_state.logged_in = True
                     st.session_state.username = username
                     st.session_state.role = "user"
                     st.rerun()
-
-                # Credenziali sbagliate
                 else:
                     st.error("Credenziali non valide.")
         else:
@@ -1911,6 +1977,7 @@ def check_login_sidebar():
     if not st.session_state.logged_in:
         st.stop()
 
+
 def main():
     check_login_sidebar()
     role = st.session_state.get("role", "user")
@@ -1921,7 +1988,7 @@ def main():
     if role == "admin":
         pages = list(PAGES.keys())
     else:
-        pages = ["Presentazione"]
+        pages = ["Presentazione", "Overview", "Clienti", "CRM & Vendite", "People & Reparti"]
 
     page = st.sidebar.radio("Pagina", pages)
     PAGES[page]()
