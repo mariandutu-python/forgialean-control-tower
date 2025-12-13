@@ -112,6 +112,176 @@ Se non conosci il valore, questo è già un primo campanello d'allarme.
 ForgiaLean - Crevalcore (BO) - 0039/3467538724
 """)
 
+    # =====================
+    # ESEMPIO INTERATTIVO OEE PRIMA / DOPO FORGIALEAN
+    # =====================
+    st.markdown("---")
+    st.subheader("Esempio interattivo: OEE prima e dopo ForgiaLean")
+
+    # Periodi: 1-3 = prima di ForgiaLean, 4-5 = dopo ForgiaLean
+    periodi = ["Periodo 1", "Periodo 2", "Periodo 3", "Periodo 4", "Periodo 5"]
+    oee_values = [72, 74, 76, 81, 84]  # OEE simulato
+
+    df_oee_demo = pd.DataFrame({"Periodo": periodi, "OEE (%)": oee_values})
+
+    # Slider guidato: parte dal Periodo 1
+    periodo_sel = st.slider(
+        "Segui il percorso di miglioramento",
+        min_value=1,
+        max_value=len(periodi),
+        value=1,
+        step=1,
+        format="Periodo %d",
+        key="percorso_oee_forgialean",
+    )
+
+    # OEE: grafico completo + punto evidenziato
+    fig_oee = px.line(
+        df_oee_demo,
+        x="Periodo",
+        y="OEE (%)",
+        markers=True,
+        title="OEE prima e dopo l’intervento di ForgiaLean",
+    )
+    fig_oee.add_hline(y=80, line_dash="dash", line_color="red")  # soglia 80%
+
+    fig_oee.add_scatter(
+        x=[periodi[periodo_sel - 1]],
+        y=[oee_values[periodo_sel - 1]],
+        mode="markers",
+        marker=dict(size=14, color="orange"),
+        name="Periodo selezionato",
+    )
+
+    st.plotly_chart(fig_oee, use_container_width=True)
+
+    # Narrazione dinamica
+    if periodo_sel == 1:
+        st.caption(
+            "Periodo 1 – **prima di ForgiaLean**: OEE al 72%, molto sotto il target 80%. "
+            "Le perdite sono diffuse e non c’è una priorità chiara."
+        )
+    elif periodo_sel == 2:
+        st.caption(
+            "Periodo 2 – **diagnosi ForgiaLean**: mappiamo il flusso, misuriamo le perdite di OEE "
+            "e identifichiamo i colli di bottiglia (fermi, setup, scarti)."
+        )
+    elif periodo_sel == 3:
+        st.caption(
+            "Periodo 3 – **piano di intervento**: definiamo azioni mirate su fermi non pianificati "
+            "e setup, con obiettivi e indicatori chiari."
+        )
+    elif periodo_sel == 4:
+        st.caption(
+            "Periodo 4 – **dopo ForgiaLean**: OEE all’81%, sopra la soglia minima dell’80%. "
+            "Le prime azioni producono già un miglioramento visibile."
+        )
+    else:
+        st.caption(
+            "Periodo 5 – **risultato consolidato con ForgiaLean**: OEE all’84%, "
+            "processo più stabile e focalizzato sulle vere cause di perdita."
+        )
+
+    # =====================
+    # PARETO PERDITE – PRIMA / DOPO
+    # =====================
+    st.markdown("---")
+    st.subheader("Dove agisce ForgiaLean sull’OEE?")
+
+    cause = [
+        "Fermi non pianificati",
+        "Setup e cambi formato",
+        "Scarti qualità",
+        "Microfermi",
+        "Velocità ridotta",
+    ]
+
+    # prima di ForgiaLean (Periodo 1-3)
+    perdita_punti_prima = [8, 5, 4, 3, 2]
+    # dopo ForgiaLean (Periodo 4-5) – riduzione simulata
+    perdita_punti_dopo = [4, 3, 2, 2, 1]
+
+    if periodo_sel <= 3:
+        df_pareto = pd.DataFrame({
+            "Causa": cause,
+            "Punti OEE persi": perdita_punti_prima,
+        })
+        titolo_pareto = "Pareto delle perdite OEE – prima dell’intervento di ForgiaLean"
+    else:
+        df_pareto = pd.DataFrame({
+            "Causa": cause,
+            "Punti OEE persi": perdita_punti_dopo,
+        })
+        titolo_pareto = "Pareto delle perdite OEE – dopo l’intervento di ForgiaLean"
+
+    fig_pareto = px.bar(
+        df_pareto,
+        x="Causa",
+        y="Punti OEE persi",
+        title=titolo_pareto,
+    )
+
+    st.plotly_chart(fig_pareto, use_container_width=True)
+
+    if periodo_sel <= 3:
+        st.caption(
+            "Prima di ForgiaLean le maggiori perdite di OEE sono concentrate su fermi non pianificati "
+            "e setup: senza dati strutturati è difficile priorizzare."
+        )
+    else:
+        st.caption(
+            "Dopo l’intervento di ForgiaLean le perdite per fermi e setup si riducono sensibilmente: "
+            "il miglioramento di OEE è legato a interventi mirati sulle cause principali."
+        )
+
+    # =====================
+    # FORM: RICHIEDI REPORT OEE
+    # =====================
+    st.markdown("---")
+    st.subheader("Richiedi il tuo report OEE ForgiaLean")
+
+    with st.form("lead_oee_form"):
+        nome = st.text_input("Nome e cognome")
+        azienda = st.text_input("Azienda")
+        email = st.text_input("Email aziendale")
+        descrizione = st.text_area("Descrizione impianto / linea principale")
+        ore_fermi = st.number_input(
+            "Ore di fermo macchina per turno (stima)", min_value=0.0, step=0.5
+        )
+        scarti = st.number_input(
+            "Percentuale scarti / rilavorazioni (%)",
+            min_value=0.0,
+            max_value=100.0,
+            step=0.5,
+        )
+        velocita = st.number_input(
+            "Velocità reale vs nominale (%)",
+            min_value=0.0,
+            max_value=200.0,
+            step=1.0,
+        )
+
+        submitted = st.form_submit_button("Richiedi report OEE")
+
+    if submitted:
+        if not (nome and azienda and email):
+            st.error("Nome, azienda ed email sono obbligatori.")
+        else:
+            # Salva nel CRM (tabella Opportunity) usando la tua sessione
+            with get_session() as session:
+                opportunity = Opportunity(
+                    name=nome,
+                    company_name=azienda if hasattr(Opportunity, "company_name") else None,
+                    # adatta i campi al tuo modello reale:
+                    description=descrizione,
+                    email=email if hasattr(Opportunity, "email") else None,
+                    source="LinkedIn OEE",
+                )
+                session.add(opportunity)
+                session.commit()
+
+            st.success("Richiesta ricevuta. Riceverai il tuo report OEE via email.")
+
      # =====================
     # ESEMPIO INTERATTIVO OEE PRIMA / DOPO FORGIALEAN
     # =====================
