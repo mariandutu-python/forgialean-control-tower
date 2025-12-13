@@ -1990,7 +1990,7 @@ def main():
 
     # ---------- SIDEBAR ----------
     st.sidebar.title(APP_NAME)
-    st.sidebar.caption("Versione SQLite – dati centralizzati in forgialean.db")
+    st.sidebar.caption("Versione SQLite")
 
     # Blocco login admin (semplice)
     if not st.session_state["authenticated"]:
