@@ -154,6 +154,7 @@ ForgiaLean - Crevalcore (BO)
                     # 1) Crea il Client (ragione_sociale è obbligatorio)
                     new_client = Client(
                         ragione_sociale=azienda,
+                        email=email,  # <-- importantissimo
                         canale_acquisizione="Demo OEE LinkedIn",
                         segmento_cliente="PMI manifatturiera",
                         data_creazione=date.today(),
