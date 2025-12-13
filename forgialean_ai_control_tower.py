@@ -44,8 +44,8 @@ from db import (
     KpiDepartmentTimeseries,
     KpiEmployeeTimeseries,
     TimeEntry,
+    LoginEvent,  # <--- aggiungi qui
 )
-
 
 def export_all_to_excel(dfs: dict, filename: str):
     buffer = io.BytesIO()
