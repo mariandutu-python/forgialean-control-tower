@@ -7,3 +7,7 @@ pdfplumber
 matplotlib
 python-dotenv
 xlsxwriter
+<<<<<<< HEAD
+=======
+
+>>>>>>> f44f3c6 (Add xlsxwriter dependency for Excel export)
