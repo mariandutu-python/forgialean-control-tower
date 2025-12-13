@@ -1980,31 +1980,57 @@ def check_login_sidebar():
 
 
 def main():
-    check_login_sidebar()
-    role = st.session_state.get("role", "user")
-    username = st.session_state.get("username", "")
+    # ---------- Inizializzazione stato ----------
+    if "authenticated" not in st.session_state:
+        st.session_state["authenticated"] = False
+        st.session_state["role"] = "anon"  # visitatore non loggato
 
+    # ---------- SIDEBAR ----------
     st.sidebar.title(APP_NAME)
     st.sidebar.caption("Versione SQLite – dati centralizzati in forgialean.db")
 
-    if role == "admin":
-        # Marian Dutu (admin) vede tutte le pagine
-        pages = list(PAGES.keys())
+    # Blocco login admin (semplice)
+    if not st.session_state["authenticated"]:
+        st.sidebar.subheader("Area riservata (admin)")
+        username_input = st.sidebar.text_input("Username admin")
+        password_input = st.sidebar.text_input("Password", type="password")
+        if st.sidebar.button("Login"):
+            # Sostituisci con la tua logica reale o con st.secrets
+            if username_input == "marian" and password_input == "la_tua_password":
+                st.session_state["authenticated"] = True
+                st.session_state["role"] = "admin"
+                st.session_state["username"] = username_input
+                st.experimental_rerun()
+            else:
+                st.sidebar.error("Credenziali non valide")
     else:
-        if username == "Demo User":
-            # Demo User: solo Presentazione
-            pages = ["Presentazione"]
-        else:
-            # altri user: Presentazione + pagine base
-            pages = ["Presentazione", "Overview", "Clienti", "CRM & Vendite", "People & Reparti"]
+        st.sidebar.write("✅ Accesso admin")
+        if st.sidebar.button("Logout"):
+            st.session_state["authenticated"] = False
+            st.session_state["role"] = "anon"
+            st.session_state["username"] = ""
+            st.experimental_rerun()
+
+    # Menu pagine in base al ruolo
+    role = st.session_state["role"]
+    if role == "anon":
+        # Visitatori: solo Presentazione (landing aperta)
+        pages = ["Presentazione"]
+    else:
+        # Admin: tutte le pagine definite in PAGES_BY_ROLE o PAGES
+        # Se hai già PAGES_BY_ROLE puoi usarlo, altrimenti prendi le chiavi da PAGES
+        pages = list(PAGES.keys())
 
     page = st.sidebar.radio("Pagina", pages)
-    PAGES[page]()
 
     # Logo subito dopo il menu pagine
     if LOGO_PATH.exists():
         st.sidebar.markdown("---")
         st.sidebar.image(str(LOGO_PATH), use_container_width=True)
+
+    # ---------- ROUTING ----------
+    # Usa il dizionario PAGES esistente
+    PAGES[page]()
 
 
 if __name__ == "__main__":
