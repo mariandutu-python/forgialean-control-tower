@@ -1,5 +1,6 @@
 from typing import Optional
-from datetime import date
+from datetime import date, datetime
+from sqlalchemy import Column, DateTime
 
 from sqlmodel import SQLModel, Field, create_engine, Session
 
@@ -128,6 +129,13 @@ class KpiEmployeeTimeseries(SQLModel, table=True):
     target: float
     unita: str
 
+class LoginEvent(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    username: str
+    channel: Optional[str] = None  # es: "Demo LinkedIn"
+    created_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True))
+    )
 
 # =========================
 # INIT & SESSION
