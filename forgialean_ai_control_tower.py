@@ -65,9 +65,11 @@ def export_all_to_excel(dfs: dict, filename: str):
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
 
-
-st.set_page_config(page_title=APP_NAME, layout="wide")
-
+st.set_page_config(
+    page_title=APP_NAME,
+    layout="wide",
+    initial_sidebar_state="collapsed",  # sidebar chiusa all'avvio
+)
 
 def page_presentation():
     st.title("ForgiaLean - quando l'OEE fa male")
