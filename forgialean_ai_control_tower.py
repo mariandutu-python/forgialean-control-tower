@@ -117,7 +117,7 @@ ForgiaLean - Crevalcore (BO)
 """)
 
     # =====================
-    # FORM: RICHIEDI REPORT OEE
+    # FORM: RICHIEDI REPORT OEE (visibile a tutti)
     # =====================
     st.markdown("---")
     st.subheader("Richiedi il tuo report OEE ForgiaLean")
@@ -142,6 +142,11 @@ ForgiaLean - Crevalcore (BO)
             max_value=200.0,
             step=1.0,
         )
+        valore_orario = st.number_input(
+            "Valore economico di 1 ora di produzione (€ / ora, stima)",
+            min_value=0.0,
+            step=10.0,
+        )
 
         submitted = st.form_submit_button("Richiedi report OEE")
 
@@ -151,10 +156,10 @@ ForgiaLean - Crevalcore (BO)
         else:
             try:
                 with get_session() as session:
-                    # 1) Crea il Client (ragione_sociale è obbligatorio)
+                    # 1) Crea il Client
                     new_client = Client(
                         ragione_sociale=azienda,
-                        email=email,  # <-- importantissimo
+                        email=email,
                         canale_acquisizione="Demo OEE LinkedIn",
                         segmento_cliente="PMI manifatturiera",
                         data_creazione=date.today(),
@@ -190,7 +195,92 @@ ForgiaLean - Crevalcore (BO)
                 st.error("Si è verificato un errore nel salvataggio del lead OEE.")
                 st.text(str(e))
 
-    
+    # =====================
+    # CALCOLATORE OEE & PERDITA € - SOLO ADMIN (uso interno)
+    # =====================
+    role = st.session_state.get("role", "user")
+    if role != "admin":
+        return  # il cliente vede solo landing + form
+
+    st.markdown("---")
+    st.subheader("Calcolatore rapido OEE e perdita economica (uso interno)")
+
+    with st.expander("Calcolatore interno ForgiaLean"):
+        col1, col2 = st.columns(2)
+        with col1:
+            ore_turno = st.number_input(
+                "Ore teoriche per turno",
+                min_value=0.0,
+                value=8.0,
+                step=0.5,
+                key="oee_ore_turno",
+            )
+            ore_fermi_calc = st.number_input(
+                "Ore di fermo per turno",
+                min_value=0.0,
+                value=ore_fermi,
+                step=0.5,
+                key="oee_ore_fermi",
+            )
+        with col2:
+            scarti_calc = st.number_input(
+                "Scarti / rilavorazioni (%)",
+                min_value=0.0,
+                max_value=100.0,
+                value=scarti,
+                step=0.5,
+                key="oee_scarti",
+            )
+            velocita_calc = st.number_input(
+                "Velocità reale vs nominale (%)",
+                min_value=0.0,
+                max_value=200.0,
+                value=velocita,
+                step=1.0,
+                key="oee_velocita",
+            )
+
+        valore_orario_calc = st.number_input(
+            "Valore economico 1 ora produzione (€ / ora)",
+            min_value=0.0,
+            value=valore_orario if "valore_orario" in locals() else 0.0,
+            step=10.0,
+            key="oee_valore_orario",
+        )
+
+        turni_anno = st.number_input(
+            "Turni/anno (stima)",
+            min_value=0,
+            value=250,
+            step=10,
+            key="oee_turni_anno",
+        )
+
+        if st.button("Calcola OEE e perdita in €", key="oee_calcola"):
+            if ore_turno <= 0 or valore_orario_calc <= 0:
+                st.warning("Imposta ore teoriche per turno e valore orario maggiori di zero.")
+            else:
+                availability = max(0.0, 1.0 - (ore_fermi_calc / ore_turno))
+                performance = velocita_calc / 100.0
+                quality = max(0.0, 1.0 - scarti_calc / 100.0)
+
+                oee = availability * performance * quality
+                oee_target = 0.85
+                gap_oee = max(0.0, oee_target - oee)
+
+                capacita_persa_turno = gap_oee * ore_turno
+                perdita_euro_turno = capacita_persa_turno * valore_orario_calc
+
+                st.write(f"OEE stimato: **{oee*100:.1f}%** (target {oee_target*100:.0f}%)")
+                st.write(f"Gap OEE: **{gap_oee*100:.1f} punti**")
+
+                st.write(f"Capacità persa per turno: **{capacita_persa_turno:.2f} ore equivalenti**")
+                st.write(f"Perdita economica per turno: **€ {perdita_euro_turno:,.0f}**")
+
+                if turni_anno > 0:
+                    perdita_annua = perdita_euro_turno * turni_anno
+                    st.write(f"Perdita economica stimata per anno: **€ {perdita_annua:,.0f}**")
+     
 # =========================
 # PAGINA: OVERVIEW
 # =========================
