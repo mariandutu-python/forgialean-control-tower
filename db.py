@@ -1,18 +1,25 @@
 from typing import Optional
 from datetime import date, datetime
-from sqlalchemy import Column, DateTime
+from pathlib import Path
 
+from sqlalchemy import Column, DateTime
 from sqlmodel import SQLModel, Field, create_engine, Session
 
-# File SQLite locale
-SQLITE_FILE_NAME = "forgialean.db"
+# =========================
+# PATH DB IN CARTELLA SCRIVIBILE
+# =========================
+
+BASE_DIR = Path(__file__).parent
+DATA_DIR = BASE_DIR / "data"
+DATA_DIR.mkdir(exist_ok=True)
+
+SQLITE_FILE_NAME = DATA_DIR / "forgialean.db"
 SQLITE_URL = f"sqlite:///{SQLITE_FILE_NAME}"
 
 engine = create_engine(SQLITE_URL, echo=False)
 
 # PULIZIA METADATA per evitare "Table ... is already defined"
 SQLModel.metadata.clear()
-
 
 # =========================
 # MODELLI
