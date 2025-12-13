@@ -10,6 +10,9 @@ from sqlmodel import SQLModel, Field, Session, select, delete
 
 from config import CACHE_TTL, PAGES_BY_ROLE, APP_NAME, LOGO_PATH
 from pathlib import Path
+from db import init_db
+
+init_db()
 
 LOGO_PATH = Path("forgialean_logo.png")
 
