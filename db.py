@@ -21,6 +21,7 @@ SQLModel.metadata.clear()
 class Client(SQLModel, table=True):
     client_id: Optional[int] = Field(default=None, primary_key=True)
     ragione_sociale: str
+    email: Optional[str] = None   # <--- NUOVO CAMPO
     piva: Optional[str] = None
     cod_fiscale: Optional[str] = None
     settore: Optional[str] = None
