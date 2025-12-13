@@ -1991,12 +1991,12 @@ def main():
 
     # Blocco login admin (semplice)
     if not st.session_state["authenticated"]:
-        st.sidebar.subheader("Area riservata (admin)")
-        username_input = st.sidebar.text_input("Username admin")
+        st.sidebar.subheader("Area riservata")
+        username_input = st.sidebar.text_input("Username")
         password_input = st.sidebar.text_input("Password", type="password")
         if st.sidebar.button("Login"):
             # Sostituisci con la tua logica reale o con st.secrets
-            if username_input == "marian" and password_input == "la_tua_password":
+            if username_input == "Marian Dutu" and password_input == "mariand":
                 st.session_state["authenticated"] = True
                 st.session_state["role"] = "admin"
                 st.session_state["username"] = username_input
