@@ -1943,7 +1943,7 @@ def main():
     if role == "admin":
         pages = list(PAGES.keys())
     else:
-        pages = ["Presentazione", "Overview", "Clienti", "CRM & Vendite", "People & Reparti"]
+        pages = ["Presentazione"]
 
     page = st.sidebar.radio("Pagina", pages)
     PAGES[page]()
