@@ -1960,7 +1960,7 @@ def check_login_sidebar():
                     st.session_state.username = username
                     st.session_state.role = "admin"
                     st.rerun()
-                elif username == "Demo User" and password == "demo":
+                elif username == "Demo User" and password == "demodemo":
                     st.session_state.logged_in = True
                     st.session_state.username = username
                     st.session_state.role = "user"
