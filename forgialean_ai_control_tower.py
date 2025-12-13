@@ -1986,6 +1986,7 @@ def main():
     if "authenticated" not in st.session_state:
         st.session_state["authenticated"] = False
         st.session_state["role"] = "anon"  # visitatore non loggato
+        st.session_state["username"] = ""
 
     # ---------- SIDEBAR ----------
     st.sidebar.title(APP_NAME)
@@ -2002,7 +2003,7 @@ def main():
                 st.session_state["authenticated"] = True
                 st.session_state["role"] = "admin"
                 st.session_state["username"] = username_input
-                st.experimental_rerun()
+               
             else:
                 st.sidebar.error("Credenziali non valide")
     else:
@@ -2011,8 +2012,7 @@ def main():
             st.session_state["authenticated"] = False
             st.session_state["role"] = "anon"
             st.session_state["username"] = ""
-            st.experimental_rerun()
-
+            
     # Menu pagine in base al ruolo
     role = st.session_state["role"]
     if role == "anon":
