@@ -6,3 +6,4 @@ plotly
 pdfplumber
 matplotlib
 python-dotenv
+xlsxwriter
