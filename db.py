@@ -151,22 +151,12 @@ class LoginEvent(SQLModel, table=True):
     created_at: datetime = Field(
         sa_column=Column(DateTime(timezone=True))
     )
-
 # =========================
 # INIT & SESSION
 # =========================
 
-from sqlalchemy import text
-
 def init_db():
-    # Sviluppo: reset completo delle tabelle
-    with engine.begin() as conn:
-        # ATTENZIONE: cancella tutte le tabelle esistenti
-        conn.exec_driver_sql("PRAGMA foreign_keys = OFF;")
-        # Elimina tutte le tabelle esistenti
-        for table in reversed(SQLModel.metadata.sorted_tables):
-            conn.execute(text(f"DROP TABLE IF EXISTS {table.name}"))
-        conn.exec_driver_sql("PRAGMA foreign_keys = ON;")
+    # Crea le tabelle solo se non esistono
     SQLModel.metadata.create_all(engine)
 
 def get_session() -> Session:
