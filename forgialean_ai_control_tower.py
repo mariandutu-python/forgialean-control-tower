@@ -362,10 +362,15 @@ def page_clients():
         with col1:
             ragione_sociale = st.text_input("Ragione sociale", "")
             piva = st.text_input("Partita IVA", "")
+            cod_fiscale = st.text_input("Codice fiscale", "")
             settore = st.text_input("Settore", "")
             paese = st.text_input("Paese", "Italia")
             segmento_cliente = st.text_input("Segmento cliente (es. A/B/C)", "")
         with col2:
+            indirizzo = st.text_input("Indirizzo (via e nr.)", "")
+            cap = st.text_input("CAP", "")
+            comune = st.text_input("Comune", "")
+            provincia = st.text_input("Provincia (es. BO)", "")
             canale_acquisizione = st.text_input("Canale acquisizione", "")
             stato_cliente = st.selectbox(
                 "Stato cliente",
@@ -373,6 +378,8 @@ def page_clients():
                 index=0,
             )
             data_creazione = st.date_input("Data creazione", value=date.today())
+            codice_destinatario = st.text_input("Codice destinatario (7 char)", "")
+            pec_fatturazione = st.text_input("PEC fatturazione", "")
 
         submitted = st.form_submit_button("Salva cliente")
 
@@ -390,6 +397,12 @@ def page_clients():
                     segmento_cliente=segmento_cliente.strip() or None,
                     data_creazione=data_creazione,
                     stato_cliente=stato_cliente,
+                    indirizzo=indirizzo.strip() or None,
+                    cap=cap.strip() or None,
+                    comune=comune.strip() or None,
+                    provincia=provincia.strip() or None,
+                    codice_destinatario=codice_destinatario.strip() or None,
+                    pec_fatturazione=pec_fatturazione.strip() or None,
                 )
                 session.add(new_client)
                 session.commit()
