@@ -72,6 +72,26 @@ class Invoice(SQLModel, table=True):
     stato_pagamento: Optional[str] = None  # emessa, incassata, scaduta
     data_incasso: Optional[date] = None
 
+    # relazione con i pagamenti
+    payments: list["Payment"] = Relationship(back_populates="invoice")
+
+    @property
+    def amount_paid(self) -> float:
+        return sum(p.amount for p in (self.payments or []))
+
+    @property
+    def amount_open(self) -> float:
+        return (self.importo_totale or 0.0) - self.amount_paid
+
+class Payment(SQLModel, table=True):
+    payment_id: Optional[int] = Field(default=None, primary_key=True)
+    invoice_id: int = Field(foreign_key="invoice.invoice_id")
+    payment_date: date
+    amount: float
+    method: str  # es. bonifico, contanti, carta
+    note: Optional[str] = None
+
+    invoice: Optional[Invoice] = Relationship(back_populates="payments")
 
 class ProjectCommessa(SQLModel, table=True):
     commessa_id: Optional[int] = Field(default=None, primary_key=True)
@@ -154,6 +174,46 @@ class LoginEvent(SQLModel, table=True):
         sa_column=Column(DateTime(timezone=True))
     )
 
+class TaxConfig(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    year: int
+    regime: str  # "forfettario", "ordinario"
+    aliquota_imposta: float  # es. 0.15
+    aliquota_inps: float     # es. 0.26
+    redditivita_forfettario: Optional[float] = None  # es. 0.78
+
+
+class InpsContribution(SQLModel, table=True):
+    contribution_id: Optional[int] = Field(default=None, primary_key=True)
+    year: int
+    due_date: date
+    amount_due: float
+    amount_paid: float = 0.0
+    payment_date: Optional[date] = None
+    description: str
+    status: str = "planned"  # planned / paid / partial
+
+
+class TaxDeadline(SQLModel, table=True):
+    deadline_id: Optional[int] = Field(default=None, primary_key=True)
+    year: int
+    due_date: date
+    type: str  # "saldo imposta", "acconto 1 imposta", "CU", ecc.
+    estimated_amount: float = 0.0
+    amount_paid: float = 0.0
+    payment_date: Optional[date] = None
+    status: str = "planned"  # planned / paid / partial
+    note: Optional[str] = None
+
+
+class InvoiceTransmission(SQLModel, table=True):
+    transmission_id: Optional[int] = Field(default=None, primary_key=True)
+    invoice_id: int = Field(foreign_key="invoice.invoice_id")
+    xml_file_name: str
+    upload_date: date
+    sdi_status: str      # uploaded / sent / delivered / rejected
+    sdi_message: Optional[str] = None
+    sdi_protocol: Optional[str] = None
 
 # =========================
 # INIT & SESSION

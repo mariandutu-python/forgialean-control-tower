@@ -98,6 +98,9 @@ PAGES_BY_ROLE = {
         "Clienti",
         "CRM & Vendite",
         "Finanza / Fatture",
+        "Incassi / Scadenze",    # nuova pagina incassi
+        "Fatture → AE",          # tracciamento invio AE
+        "Fisco & INPS",          # modulo fiscale
         "Operations / Commesse",
         "People & Reparti",
     ],
