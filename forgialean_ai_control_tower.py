@@ -391,6 +391,7 @@ def page_clients():
                 new_client = Client(
                     ragione_sociale=ragione_sociale.strip(),
                     piva=piva.strip() or None,
+                    cod_fiscale=cod_fiscale.strip() or None,
                     settore=settore.strip() or None,
                     paese=paese.strip() or None,
                     canale_acquisizione=canale_acquisizione.strip() or None,
