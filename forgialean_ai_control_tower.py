@@ -1773,24 +1773,52 @@ def page_people_departments():
     st.markdown("---")
 
     # =========================
-    # VISTA REPARTI E PERSONE
+    # VISTA REPARTI E PERSONE + KPI
     # =========================
     st.subheader("📂 Elenco reparti e persone")
 
-        # =========================
+    with get_session() as session:
+        departments_all = session.exec(select(Department)).all()
+        employees_all = session.exec(select(Employee)).all()
+        kpi_dept = session.exec(select(KpiDepartmentTimeseries)).all()
+        kpi_emp = session.exec(select(KpiEmployeeTimeseries)).all()
+
+    df_dept_all = pd.DataFrame([d.__dict__ for d in departments_all]) if departments_all else pd.DataFrame()
+    df_emp_all = pd.DataFrame([e.__dict__ for e in employees_all]) if employees_all else pd.DataFrame()
+    df_kpi_dept = pd.DataFrame([k.__dict__ for k in kpi_dept]) if kpi_dept else pd.DataFrame()
+    df_kpi_emp = pd.DataFrame([k.__dict__ for k in kpi_emp]) if kpi_emp else pd.DataFrame()
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown("#### Reparti")
+        if df_dept_all.empty:
+            st.info("Nessun reparto registrato.")
+        else:
+            st.dataframe(df_dept_all)
+
+    with col2:
+        st.markdown("#### Persone")
+        if df_emp_all.empty:
+            st.info("Nessuna persona registrata.")
+        else:
+            st.dataframe(df_emp_all)
+
+    st.markdown("---")
+    st.subheader("📅 Filtro periodo KPI")
+
+    col_k1, col_k2 = st.columns(2)
+    with col_k1:
+        kpi_da = st.date_input("Da data KPI", value=None, key="kpi_da")
+    with col_k2:
+        kpi_a = st.date_input("A data KPI", value=None, key="kpi_a")
+
+    # =========================
     # INSERIMENTO KPI REPARTO (DATI REALI)
     # =========================
     st.markdown("### ➕ Aggiungi KPI reparto (dati reali)")
 
-    with get_session() as session:
-        departments_all = session.exec(select(Department)).all()
-
-    if not departments_all:
-        st.info("Prima crea almeno un reparto per registrare KPI reparto.")
-    else:
-        df_dept_all = pd.DataFrame([d.__dict__ for d in departments_all])
+    if not df_dept_all.empty:
         df_dept_all["label"] = df_dept_all["department_id"].astype(str) + " - " + df_dept_all["nome_reparto"]
-
         with st.form("new_kpi_dept"):
             col1, col2 = st.columns(2)
             with col1:
@@ -1819,19 +1847,14 @@ def page_people_departments():
                 session.commit()
             st.success("KPI reparto salvato.")
             st.rerun()
+    else:
+        st.info("Prima crea almeno un reparto per registrare KPI reparto.")
 
-        st.markdown("---")
+    st.markdown("---")
     st.markdown("### ➕ Aggiungi KPI persona (dati reali)")
 
-    with get_session() as session:
-        employees_all = session.exec(select(Employee)).all()
-
-    if not employees_all:
-        st.info("Prima crea almeno una persona per registrare KPI persona.")
-    else:
-        df_emp_all = pd.DataFrame([e.__dict__ for e in employees_all])
+    if not df_emp_all.empty:
         df_emp_all["nome_completo"] = df_emp_all["employee_id"].astype(str) + " - " + df_emp_all["nome"] + " " + df_emp_all["cognome"]
-
         with st.form("new_kpi_emp"):
             col1, col2 = st.columns(2)
             with col1:
@@ -1860,43 +1883,10 @@ def page_people_departments():
                 session.commit()
             st.success("KPI persona salvato.")
             st.rerun()
+    else:
+        st.info("Prima crea almeno una persona per registrare KPI persona.")
 
-
-    with get_session() as session:
-        departments_all = session.exec(select(Department)).all()
-        employees_all = session.exec(select(Employee)).all()
-        kpi_dept = session.exec(select(KpiDepartmentTimeseries)).all()
-        kpi_emp = session.exec(select(KpiEmployeeTimeseries)).all()
-
-    df_dept_all = pd.DataFrame([d.__dict__ for d in departments_all]) if departments_all else pd.DataFrame()
-    df_emp_all = pd.DataFrame([e.__dict__ for e in employees_all]) if employees_all else pd.DataFrame()
-    df_kpi_dept = pd.DataFrame([k.__dict__ for k in kpi_dept]) if kpi_dept else pd.DataFrame()
-    df_kpi_emp = pd.DataFrame([k.__dict__ for k in kpi_emp]) if kpi_emp else pd.DataFrame()
-
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown("#### Reparti")
-        if df_dept_all.empty:
-            st.info("Nessun reparto registrato.")
-        else:
-            st.dataframe(df_dept_all)
-
-    with col2:
-        st.markdown("#### Persone")
-        if df_emp_all.empty:
-            st.info("Nessuna persona registrata.")
-        else:
-            st.dataframe(df_emp_all)
-
-        st.markdown("---")
-    st.subheader("📅 Filtro periodo KPI")
-
-    col_k1, col_k2 = st.columns(2)
-    with col_k1:
-        kpi_da = st.date_input("Da data KPI", value=None, key="kpi_da")
-    with col_k2:
-        kpi_a = st.date_input("A data KPI", value=None, key="kpi_a")
-
+    # Filtro e grafici KPI reparto
     if not df_kpi_dept.empty:
         df_kpi_dept["data"] = pd.to_datetime(df_kpi_dept["data"], errors="coerce")
 
@@ -1969,7 +1959,7 @@ def page_people_departments():
     else:
         st.info("Nessun KPI persona registrato.")
 
-        # =========================
+    # =========================
     # SEZIONE EDIT / DELETE (SOLO ADMIN)
     # =========================
     role = st.session_state.get("role", "user")
@@ -2088,37 +2078,17 @@ def page_people_departments():
 
 
 # =========================
-# ROUTER
-# =========================
-
-PAGES = {
-    "Presentazione": page_presentation,
-    "Overview": page_overview,
-    "Clienti": page_clients,
-    "CRM & Vendite": page_crm_sales,
-    "Finanza / Fatture": page_finance_invoices,
-    "Incassi / Scadenze": page_finance_payments,      # nuova pagina
-    "Fatture → AE": page_invoice_transmission,         # nuova pagina
-    "Fisco & INPS": page_tax_inps,                     # nuova pagina
-    "Operations / Commesse": page_operations,
-    "People & Reparti": page_people_departments,
-}
-
-# =========================
 # PAGINE FINANZA AVANZATE
 # =========================
 
 def page_finance_payments():
     st.title("Incassi / Scadenze clienti")
-
     with get_session() as session:
         invoices = session.exec(select(Invoice)).all()
         clients = {c.client_id: c.ragione_sociale for c in session.exec(select(Client)).all()}
-
     if not invoices:
         st.info("Nessuna fattura presente.")
         return
-
     df = pd.DataFrame(
         [
             {
@@ -2135,7 +2105,6 @@ def page_finance_payments():
             for inv in invoices
         ]
     )
-
     st.subheader("Stato incassi")
     st.dataframe(df)
 
@@ -2157,14 +2126,12 @@ def page_finance_payments():
                 note=note or None,
             )
             session.add(pay)
-
             inv = session.get(Invoice, invoice_id_sel)
             session.refresh(inv)
             if inv.amount_open <= 0:
                 inv.stato_pagamento = "incassata"
                 inv.data_incasso = payment_date
                 session.add(inv)
-
             session.commit()
         st.success("Pagamento registrato. Ricarica la pagina per aggiornare i totali.")
 
@@ -2320,6 +2287,7 @@ PAGES = {
     "Operations / Commesse": page_operations,
     "People & Reparti": page_people_departments,
 }
+
 
 # =========================
 # LOGIN & MAIN
