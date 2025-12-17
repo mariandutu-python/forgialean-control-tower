@@ -1094,14 +1094,97 @@ def page_finance_invoices():
         st.success("Fattura eliminata.")
         st.rerun()
 
-    if export_xml_clicked:
-        # ⚠️ Bozza minimale: qui in futuro agganci fatturapa-python o costruisci l'XML completo
-        # Per ora generiamo un XML di esempio con i dati base della fattura
+        if export_xml_clicked:
         inv = inv_obj
+
+        # Carica dati cliente dal DB
+        with get_session() as session:
+            client_xml = session.get(Client, inv.client_id)
+
+        my = MY_COMPANY_DATA
+
+        # Cedente/prestatore (tu)
+        ced_den = my["denominazione"]
+        ced_piva = my["piva"]
+        ced_cf = my["codice_fiscale"]
+        ced_addr = my["indirizzo"]
+        ced_cap = my["cap"]
+        ced_comune = my["comune"]
+        ced_prov = my["provincia"]
+        ced_paese = my["nazione"]
+        ced_regime = my.get("regime_fiscale", "RF19")
+        id_paese_trasm = my.get("id_paese_trasmittente", "IT")
+        id_codice_trasm = my.get("id_codice_trasmittente", ced_cf)
+        formato_trasm = my.get("formato_trasmissione", "FPR12")
+
+        # Cessionario/committente (cliente)
+        cli_den = client_xml.ragione_sociale or ""
+        cli_piva = (client_xml.piva or "").strip() or ced_piva
+        cli_cf = (client_xml.cod_fiscale or "").strip() or cli_piva
+        cli_addr = client_xml.indirizzo or ""
+        cli_cap = client_xml.cap or ""
+        cli_comune = client_xml.comune or ""
+        cli_prov = client_xml.provincia or ""
+        cli_paese = client_xml.paese or "IT"
+        cli_cod_dest = client_xml.codice_destinatario or "0000000"
+        cli_pec = client_xml.pec_fatturazione or my.get("pec_mittente", "")
+
+        # Progressivo invio
+        prefisso = my.get("progressivo_invio_prefisso", "FL")
+        progressivo_invio = f"{prefisso}_{(inv.num_fattura or '1').replace('/', '_')}"
+
         xml_content = f"""<?xml version="1.0" encoding="UTF-8"?>
-<FatturaElettronica versione="FPR12">
+<FatturaElettronica versione="{formato_trasm}">
   <FatturaElettronicaHeader>
-    <!-- TODO: dati cedente/prestatore (tu) e cessionario/committente (cliente) -->
+    <DatiTrasmissione>
+      <IdTrasmittente>
+        <IdPaese>{id_paese_trasm}</IdPaese>
+        <IdCodice>{id_codice_trasm}</IdCodice>
+      </IdTrasmittente>
+      <ProgressivoInvio>{progressivo_invio}</ProgressivoInvio>
+      <FormatoTrasmissione>{formato_trasm}</FormatoTrasmissione>
+      <CodiceDestinatario>{cli_cod_dest}</CodiceDestinatario>
+      {"<PECDestinatario>" + cli_pec + "</PECDestinatario>" if cli_cod_dest == "0000000" and cli_pec else ""}
+    </DatiTrasmissione>
+    <CedentePrestatore>
+      <DatiAnagrafici>
+        <IdFiscaleIVA>
+          <IdPaese>{ced_paese}</IdPaese>
+          <IdCodice>{ced_piva}</IdCodice>
+        </IdFiscaleIVA>
+        <CodiceFiscale>{ced_cf}</CodiceFiscale>
+        <Anagrafica>
+          <Denominazione>{ced_den}</Denominazione>
+        </Anagrafica>
+        <RegimeFiscale>{ced_regime}</RegimeFiscale>
+      </DatiAnagrafici>
+      <Sede>
+        <Indirizzo>{ced_addr}</Indirizzo>
+        <CAP>{ced_cap}</CAP>
+        <Comune>{ced_comune}</Comune>
+        <Provincia>{ced_prov}</Provincia>
+        <Nazione>{ced_paese}</Nazione>
+      </Sede>
+    </CedentePrestatore>
+    <CessionarioCommittente>
+      <DatiAnagrafici>
+        <IdFiscaleIVA>
+          <IdPaese>{cli_paese}</IdPaese>
+          <IdCodice>{cli_piva}</IdCodice>
+        </IdFiscaleIVA>
+        <CodiceFiscale>{cli_cf}</CodiceFiscale>
+        <Anagrafica>
+          <Denominazione>{cli_den}</Denominazione>
+        </Anagrafica>
+      </DatiAnagrafici>
+      <Sede>
+        <Indirizzo>{cli_addr}</Indirizzo>
+        <CAP>{cli_cap}</CAP>
+        <Comune>{cli_comune}</Comune>
+        <Provincia>{cli_prov}</Provincia>
+        <Nazione>{cli_paese}</Nazione>
+      </Sede>
+    </CessionarioCommittente>
   </FatturaElettronicaHeader>
   <FatturaElettronicaBody>
     <DatiGenerali>
@@ -1126,6 +1209,7 @@ def page_finance_invoices():
   </FatturaElettronicaBody>
 </FatturaElettronica>
 """
+
         b = io.BytesIO(xml_content.encode("utf-8"))
         st.download_button(
             label="⬇️ Scarica XML FatturaPA (bozza)",
@@ -1134,8 +1218,7 @@ def page_finance_invoices():
             mime="application/xml",
             key=f"download_xml_{inv.invoice_id}",
         )
-        st.info("XML FatturaPA di bozza generato. Controlla e caricalo su un servizio esterno per l'invio allo SdI.")
-
+        st.info("XML FatturaPA di bozza generato. Verifica con un validatore/gestionale prima dell'invio allo SdI.")
 
 def page_operations():
     st.title("🏭 Operations / Commesse (SQLite)")
