@@ -3,7 +3,7 @@ from datetime import date, datetime
 from pathlib import Path
 
 from sqlalchemy import Column, DateTime
-from sqlmodel import SQLModel, Field, create_engine, Session
+from sqlmodel import SQLModel, Field, Relationship, create_engine, Session
 
 # =========================
 # PATH DB IN CARTELLA SCRIVIBILE
