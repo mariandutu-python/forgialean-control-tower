@@ -156,9 +156,18 @@ class LoginEvent(SQLModel, table=True):
 # INIT & SESSION
 # =========================
 
-def init_db():
-    SQLModel.metadata.create_all(engine)
+from sqlalchemy import text
 
+def init_db():
+    # Sviluppo: reset completo delle tabelle
+    with engine.begin() as conn:
+        # ATTENZIONE: cancella tutte le tabelle esistenti
+        conn.exec_driver_sql("PRAGMA foreign_keys = OFF;")
+        # Elimina tutte le tabelle esistenti
+        for table in reversed(SQLModel.metadata.sorted_tables):
+            conn.execute(text(f"DROP TABLE IF EXISTS {table.name}"))
+        conn.exec_driver_sql("PRAGMA foreign_keys = ON;")
+    SQLModel.metadata.create_all(engine)
 
 def get_session() -> Session:
     return Session(engine)
