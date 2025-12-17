@@ -28,7 +28,7 @@ SQLModel.metadata.clear()
 class Client(SQLModel, table=True):
     client_id: Optional[int] = Field(default=None, primary_key=True)
     ragione_sociale: str
-    email: Optional[str] = None   # <--- NUOVO CAMPO
+    email: Optional[str] = None
     piva: Optional[str] = None
     cod_fiscale: Optional[str] = None
     settore: Optional[str] = None
@@ -38,6 +38,13 @@ class Client(SQLModel, table=True):
     data_creazione: Optional[date] = None
     stato_cliente: Optional[str] = None  # attivo, prospect, perso
 
+    # ▼ NUOVI CAMPI PER FATTURAZIONE ELETTRONICA ▼
+    indirizzo: Optional[str] = None       # Via e numero civico
+    cap: Optional[str] = None
+    comune: Optional[str] = None
+    provincia: Optional[str] = None       # es. "BO"
+    codice_destinatario: Optional[str] = None
+    pec_fatturazione: Optional[str] = None
 
 class Opportunity(SQLModel, table=True):
     opportunity_id: Optional[int] = Field(default=None, primary_key=True)
