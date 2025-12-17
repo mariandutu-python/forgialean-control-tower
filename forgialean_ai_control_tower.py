@@ -383,14 +383,12 @@ def page_clients():
 
         submitted = st.form_submit_button("Salva cliente")
 
-        if submitted:
-            st.write("DEBUG: submit cliccato")  # debug frontend
-
+    # ⬇️ TUTTA LA LOGICA DI SALVATAGGIO DOPO IL FORM
+    if submitted:
         if not ragione_sociale.strip():
             st.warning("La ragione sociale è obbligatoria.")
         else:
             try:
-                st.write("DEBUG: entro in try salvataggio Client")  # debug frontend
                 with get_session() as session:
                     new_client = Client(
                         ragione_sociale=ragione_sociale.strip(),
@@ -415,7 +413,6 @@ def page_clients():
                     session.refresh(new_client)
 
                 st.success(f"Cliente creato con ID {new_client.client_id}")
-                st.write("DEBUG: salvataggio completato, prima di rerun")  # debug
                 st.rerun()
             except Exception as e:
                 st.error("Errore nel salvataggio del cliente.")
