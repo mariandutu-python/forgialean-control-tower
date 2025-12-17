@@ -1094,7 +1094,7 @@ def page_finance_invoices():
         st.success("Fattura eliminata.")
         st.rerun()
 
-        if export_xml_clicked:
+    if export_xml_clicked:
         inv = inv_obj
 
         # Carica dati cliente dal DB
