@@ -46,6 +46,7 @@ class Client(SQLModel, table=True):
     codice_destinatario: Optional[str] = None
     pec_fatturazione: Optional[str] = None
 
+
 class Opportunity(SQLModel, table=True):
     opportunity_id: Optional[int] = Field(default=None, primary_key=True)
     client_id: int = Field(foreign_key="client.client_id")
@@ -144,6 +145,7 @@ class KpiEmployeeTimeseries(SQLModel, table=True):
     target: float
     unita: str
 
+
 class LoginEvent(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     username: str
@@ -151,12 +153,14 @@ class LoginEvent(SQLModel, table=True):
     created_at: datetime = Field(
         sa_column=Column(DateTime(timezone=True))
     )
+
+
 # =========================
 # INIT & SESSION
 # =========================
 
 def init_db():
-    # Crea le tabelle solo se non esistono
+    # Crea le tabelle solo se non esistono (come nel comportamento originale)
     SQLModel.metadata.create_all(engine)
 
 def get_session() -> Session:
