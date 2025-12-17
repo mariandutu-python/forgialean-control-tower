@@ -828,28 +828,25 @@ def page_finance_invoices():
                 text_pages = [page.extract_text() or "" for page in pdf.pages]
             full_text = "\n".join(text_pages)
 
-            # QUI: parsing minimale demo (regex / euristiche da migliorare)
             import re
 
-            # Numero fattura: cerca stringhe tipo "Fattura n. 123" o "Fattura 123"
+            # Numero fattura
             m_num = re.search(r"[Ff]attura\s*(n\.|nr\.|numero)?\s*([A-Za-z0-9\-\/]+)", full_text)
             if m_num:
                 parsed_data["num_fattura"] = m_num.group(2).strip()
 
-            # Data fattura (pattern gg/mm/aaaa o gg-mm-aaaa)
+            # Data fattura
             m_date = re.search(r"(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})", full_text)
             if m_date:
-                try:
-                    parsed_data["data_fattura"] = datetime.strptime(m_date.group(1), "%d/%m/%Y").date()
-                except ValueError:
+                for fmt in ("%d/%m/%Y", "%d-%m-%Y"):
                     try:
-                        parsed_data["data_fattura"] = datetime.strptime(m_date.group(1), "%d-%m-%Y").date()
+                        parsed_data["data_fattura"] = datetime.strptime(m_date.group(1), fmt).date()
+                        break
                     except ValueError:
-                        pass
+                        continue
 
-            # Imponibile e totale (prende numeri con virgola o punto, ultima occorrenza)
+            # Imponibile e totale (euristica)
             numbers = re.findall(r"(\d{1,3}(?:[\.\,]\d{3})*(?:[\.\,]\d{2}))", full_text)
-            # euristica: penultima = imponibile, ultima = totale
             if len(numbers) >= 2:
                 def to_float(s):
                     s = s.replace(".", "").replace(",", ".")
@@ -963,16 +960,15 @@ def page_finance_invoices():
         st.markdown("#### Totale fatturato per anno")
         st.bar_chart(kpi_year.set_index("anno")["importo_totale"])
 
-    st.markdown("---")
-
     # =========================
-    # 4) MODIFICA / ELIMINA FATTURA (SOLO ADMIN)
+    # 4) MODIFICA / ELIMINA FATTURA (SOLO ADMIN) + EXPORT XML
     # =========================
     if role != "admin":
-        st.info("Modifica ed eliminazione fatture disponibili solo per ruolo 'admin'.")
+        st.info("Modifica, eliminazione ed export XML disponibili solo per ruolo 'admin'.")
         return
 
-    st.subheader("✏️ Modifica / elimina fattura (solo admin)")
+    st.markdown("---")
+    st.subheader("✏️ Modifica / elimina / esporta fattura (solo admin)")
 
     inv_ids = df_inv["invoice_id"].tolist()
     inv_id_sel = st.selectbox("Seleziona ID fattura", inv_ids)
@@ -1037,11 +1033,13 @@ def page_finance_invoices():
                 value=inv_obj.data_incasso or date.today(),
             )
 
-        col_b1, col_b2 = st.columns(2)
+        col_b1, col_b2, col_b3 = st.columns(3)
         with col_b1:
             update_clicked = st.form_submit_button("💾 Aggiorna fattura")
         with col_b2:
             delete_clicked = st.form_submit_button("🗑 Elimina fattura")
+        with col_b3:
+            export_xml_clicked = st.form_submit_button("📤 Esporta XML FatturaPA (bozza)")
 
     if update_clicked:
         if not num_fattura_e.strip():
@@ -1074,6 +1072,48 @@ def page_finance_invoices():
                 session.commit()
         st.success("Fattura eliminata.")
         st.rerun()
+
+    if export_xml_clicked:
+        # ⚠️ Bozza minimale: qui in futuro agganci fatturapa-python o costruisci l'XML completo
+        # Per ora generiamo un XML di esempio con i dati base della fattura
+        inv = inv_obj
+        xml_content = f"""<?xml version="1.0" encoding="UTF-8"?>
+<FatturaElettronica versione="FPR12">
+  <FatturaElettronicaHeader>
+    <!-- TODO: dati cedente/prestatore (tu) e cessionario/committente (cliente) -->
+  </FatturaElettronicaHeader>
+  <FatturaElettronicaBody>
+    <DatiGenerali>
+      <DatiGeneraliDocumento>
+        <TipoDocumento>TD01</TipoDocumento>
+        <Divisa>EUR</Divisa>
+        <Data>{inv.data_fattura}</Data>
+        <Numero>{inv.num_fattura}</Numero>
+        <ImportoTotaleDocumento>{inv.importo_totale:.2f}</ImportoTotaleDocumento>
+      </DatiGeneraliDocumento>
+    </DatiGenerali>
+    <DatiBeniServizi>
+      <DettaglioLinee>
+        <NumeroLinea>1</NumeroLinea>
+        <Descrizione>Servizi di consulenza ForgiaLean</Descrizione>
+        <Quantita>1.00</Quantita>
+        <PrezzoUnitario>{inv.importo_imponibile:.2f}</PrezzoUnitario>
+        <PrezzoTotale>{inv.importo_imponibile:.2f}</PrezzoTotale>
+        <AliquotaIVA>{(inv.iva / inv.importo_imponibile * 100) if inv.importo_imponibile else 22:.2f}</AliquotaIVA>
+      </DettaglioLinee>
+    </DatiBeniServizi>
+  </FatturaElettronicaBody>
+</FatturaElettronica>
+"""
+        b = io.BytesIO(xml_content.encode("utf-8"))
+        st.download_button(
+            label="⬇️ Scarica XML FatturaPA (bozza)",
+            data=b,
+            file_name=f"fattura_{inv.num_fattura}.xml",
+            mime="application/xml",
+            key=f"download_xml_{inv.invoice_id}",
+        )
+        st.info("XML FatturaPA di bozza generato. Controlla e caricalo su un servizio esterno per l'invio allo SdI.")
 
 
 def page_operations():
