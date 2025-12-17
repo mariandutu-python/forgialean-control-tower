@@ -2305,6 +2305,23 @@ def page_tax_inps():
 
 
 # =========================
+# ROUTER
+# =========================
+
+PAGES = {
+    "Presentazione": page_presentation,
+    "Overview": page_overview,
+    "Clienti": page_clients,
+    "CRM & Vendite": page_crm_sales,
+    "Finanza / Fatture": page_finance_invoices,
+    "Incassi / Scadenze": page_finance_payments,      # nuova pagina
+    "Fatture → AE": page_invoice_transmission,         # nuova pagina
+    "Fisco & INPS": page_tax_inps,                     # nuova pagina
+    "Operations / Commesse": page_operations,
+    "People & Reparti": page_people_departments,
+}
+
+# =========================
 # LOGIN & MAIN
 # =========================
 
