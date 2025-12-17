@@ -9,12 +9,27 @@ import pdfplumber
 from sqlmodel import SQLModel, Field, Session, select, delete
 
 from config import CACHE_TTL, PAGES_BY_ROLE, APP_NAME, LOGO_PATH, MY_COMPANY_DATA
-from pathlib import Path
-from db import init_db
 
-init_db()
-
-LOGO_PATH = Path("forgialean_logo.png")
+from db import (
+    init_db,
+    get_session,
+    Client,
+    Opportunity,
+    Invoice,
+    Payment,
+    ProjectCommessa,
+    TaskFase,
+    TimeEntry,
+    Department,
+    Employee,
+    KpiDepartmentTimeseries,
+    KpiEmployeeTimeseries,
+    LoginEvent,
+    TaxConfig,
+    InpsContribution,
+    TaxDeadline,
+    InvoiceTransmission,
+)
 
 from cache_functions import (
     get_all_clients,
@@ -35,20 +50,10 @@ from cache_functions import (
 
 from tracking import track_ga4_event, track_facebook_event
 
-from db import (
-    get_session,
-    Client,
-    Opportunity,
-    Invoice,
-    ProjectCommessa,
-    TaskFase,
-    Department,
-    Employee,
-    KpiDepartmentTimeseries,
-    KpiEmployeeTimeseries,
-    TimeEntry,
-    LoginEvent,  # <--- aggiungi qui
-)
+init_db()
+
+LOGO_PATH = Path("forgialean_logo.png")
+
 
 def export_all_to_excel(dfs: dict, filename: str):
     buffer = io.BytesIO()
@@ -68,7 +73,7 @@ def export_all_to_excel(dfs: dict, filename: str):
 st.set_page_config(
     page_title=APP_NAME,
     layout="wide",
-    initial_sidebar_state="collapsed",  # sidebar chiusa all'avvio
+    initial_sidebar_state="collapsed",
 )
 
 def page_presentation():
@@ -2085,9 +2090,6 @@ def page_people_departments():
 # =========================
 # ROUTER
 # =========================
-# =========================
-# ROUTER
-# =========================
 
 PAGES = {
     "Presentazione": page_presentation,
@@ -2095,10 +2097,216 @@ PAGES = {
     "Clienti": page_clients,
     "CRM & Vendite": page_crm_sales,
     "Finanza / Fatture": page_finance_invoices,
+    "Incassi / Scadenze": page_finance_payments,      # nuova pagina
+    "Fatture → AE": page_invoice_transmission,         # nuova pagina
+    "Fisco & INPS": page_tax_inps,                     # nuova pagina
     "Operations / Commesse": page_operations,
     "People & Reparti": page_people_departments,
 }
 
+# =========================
+# PAGINE FINANZA AVANZATE
+# =========================
+
+def page_finance_payments():
+    st.title("Incassi / Scadenze clienti")
+
+    with get_session() as session:
+        invoices = session.exec(select(Invoice)).all()
+        clients = {c.client_id: c.ragione_sociale for c in session.exec(select(Client)).all()}
+
+    if not invoices:
+        st.info("Nessuna fattura presente.")
+        return
+
+    df = pd.DataFrame(
+        [
+            {
+                "ID": inv.invoice_id,
+                "Numero": inv.num_fattura,
+                "Cliente": clients.get(inv.client_id, inv.client_id),
+                "Data": inv.data_fattura,
+                "Scadenza": inv.data_scadenza,
+                "Totale": inv.importo_totale,
+                "Pagato": inv.amount_paid,
+                "Da incassare": inv.amount_open,
+                "Stato pagamento": inv.stato_pagamento,
+            }
+            for inv in invoices
+        ]
+    )
+
+    st.subheader("Stato incassi")
+    st.dataframe(df)
+
+    st.subheader("Registra un pagamento")
+    invoice_ids = [inv.invoice_id for inv in invoices]
+    invoice_id_sel = st.selectbox("Fattura", invoice_ids)
+    payment_date = st.date_input("Data pagamento", value=date.today())
+    amount = st.number_input("Importo incassato", min_value=0.0, step=10.0)
+    method = st.selectbox("Metodo", ["bonifico", "contanti", "carta", "altro"])
+    note = st.text_input("Note", "")
+
+    if st.button("💰 Registra pagamento"):
+        with get_session() as session:
+            pay = Payment(
+                invoice_id=invoice_id_sel,
+                payment_date=payment_date,
+                amount=amount,
+                method=method,
+                note=note or None,
+            )
+            session.add(pay)
+
+            inv = session.get(Invoice, invoice_id_sel)
+            session.refresh(inv)
+            if inv.amount_open <= 0:
+                inv.stato_pagamento = "incassata"
+                inv.data_incasso = payment_date
+                session.add(inv)
+
+            session.commit()
+        st.success("Pagamento registrato. Ricarica la pagina per aggiornare i totali.")
+
+
+def page_invoice_transmission():
+    st.title("Fatture → Agenzia Entrate (tracciamento manuale)")
+
+    with get_session() as session:
+        invoices = session.exec(select(Invoice)).all()
+        clients = {c.client_id: c.ragione_sociale for c in session.exec(select(Client)).all()}
+        transmissions = session.exec(select(InvoiceTransmission)).all()
+        trans_by_inv = {t.invoice_id: t for t in transmissions}
+
+    if not invoices:
+        st.info("Nessuna fattura presente.")
+        return
+
+    data_rows = []
+    for inv in invoices:
+        t = trans_by_inv.get(inv.invoice_id)
+        data_rows.append({
+            "ID": inv.invoice_id,
+            "Numero": inv.num_fattura,
+            "Cliente": clients.get(inv.client_id, inv.client_id),
+            "Data": inv.data_fattura,
+            "Totale": inv.importo_totale,
+            "Stato SdI": t.sdi_status if t else "non inviato",
+            "Data upload": t.upload_date if t else None,
+        })
+    df = pd.DataFrame(data_rows)
+
+    st.subheader("Stato trasmissione fatture")
+    st.dataframe(df)
+
+    st.subheader("Aggiorna stato trasmissione")
+    invoice_ids = [inv.invoice_id for inv in invoices]
+    invoice_id_sel = st.selectbox("Fattura", invoice_ids)
+    xml_name = st.text_input("Nome file XML caricato sul portale", "")
+    upload_date = st.date_input("Data upload su portale AE", value=date.today())
+    sdi_status = st.selectbox("Stato SdI", ["uploaded", "sent", "delivered", "rejected"])
+    sdi_message = st.text_area("Messaggio / errore SdI", "")
+    sdi_protocol = st.text_input("Protocollo AE (se presente)", "")
+
+    if st.button("💾 Salva/aggiorna stato"):
+        with get_session() as session:
+            t = session.exec(
+                select(InvoiceTransmission).where(InvoiceTransmission.invoice_id == invoice_id_sel)
+            ).first()
+            if not t:
+                t = InvoiceTransmission(invoice_id=invoice_id_sel)
+            t.xml_file_name = xml_name
+            t.upload_date = upload_date
+            t.sdi_status = sdi_status
+            t.sdi_message = sdi_message or None
+            t.sdi_protocol = sdi_protocol or None
+            session.add(t)
+            session.commit()
+        st.success("Stato trasmissione aggiornato.")
+
+
+def page_tax_inps():
+    st.title("Fisco & INPS")
+
+    current_year = date.today().year
+
+    with get_session() as session:
+        cfg = session.exec(select(TaxConfig).where(TaxConfig.year == current_year)).first()
+        fatture = session.exec(
+            select(Invoice).where(
+                Invoice.data_fattura.between(date(current_year, 1, 1), date(current_year, 12, 31))
+            )
+        ).all()
+
+    fatturato = sum(inv.importo_totale or 0 for inv in (fatture or []))
+
+    st.subheader("Configurazione fiscale anno in corso")
+    regime_options = ["forfettario", "ordinario"]
+    default_regime_idx = 0 if not cfg else regime_options.index(cfg.regime)
+    regime = st.selectbox("Regime", regime_options, index=default_regime_idx)
+    aliquota_imposta = st.number_input(
+        "Aliquota imposta (es. 0.15)",
+        value=cfg.aliquota_imposta if cfg else 0.15,
+        min_value=0.0,
+        max_value=1.0,
+        step=0.01,
+    )
+    aliquota_inps = st.number_input(
+        "Aliquota INPS (es. 0.26)",
+        value=cfg.aliquota_inps if cfg else 0.26,
+        min_value=0.0,
+        max_value=1.0,
+        step=0.01,
+    )
+    redditivita = st.number_input(
+        "Redditività forfettario (es. 0.78)",
+        value=(cfg.redditivita_forfettario if cfg and cfg.redditivita_forfettario is not None else 0.78),
+        min_value=0.0,
+        max_value=1.0,
+        step=0.01,
+    )
+
+    if st.button("💾 Salva configurazione fiscale"):
+        with get_session() as session:
+            cfg_db = session.exec(select(TaxConfig).where(TaxConfig.year == current_year)).first()
+            if cfg_db:
+                cfg_db.regime = regime
+                cfg_db.aliquota_imposta = aliquota_imposta
+                cfg_db.aliquota_inps = aliquota_inps
+                cfg_db.redditivita_forfettario = redditivita
+            else:
+                cfg_db = TaxConfig(
+                    year=current_year,
+                    regime=regime,
+                    aliquota_imposta=aliquota_imposta,
+                    aliquota_inps=aliquota_inps,
+                    redditivita_forfettario=redditivita,
+                )
+            session.add(cfg_db)
+            session.commit()
+        st.success("Configurazione fiscale salvata.")
+
+    st.subheader("Stima imposte e contributi anno in corso")
+    st.write(f"Fatturato {current_year}: {fatturato:.2f} €")
+    if fatture:
+        if regime == "forfettario":
+            base_imponibile = fatturato * redditivita
+        else:
+            base_imponibile = fatturato
+
+        imposta = base_imponibile * aliquota_imposta
+        inps = base_imponibile * aliquota_inps
+
+        st.write(f"Base imponibile stimata: {base_imponibile:.2f} €")
+        st.write(f"Imposta stimata: {imposta:.2f} €")
+        st.write(f"Contributi INPS stimati: {inps:.2f} €")
+    else:
+        st.info("Nessuna fattura emessa nell'anno corrente.")
+
+
+# =========================
+# LOGIN & MAIN
+# =========================
 
 def check_login_sidebar():
     if "logged_in" not in st.session_state:
@@ -2156,12 +2364,10 @@ def main():
         username_input = st.sidebar.text_input("Username")
         password_input = st.sidebar.text_input("Password", type="password")
         if st.sidebar.button("Login"):
-            # Sostituisci con la tua logica reale o con st.secrets
             if username_input == "Marian Dutu" and password_input == "mariand":
                 st.session_state["authenticated"] = True
                 st.session_state["role"] = "admin"
                 st.session_state["username"] = username_input
-               
             else:
                 st.sidebar.error("Credenziali non valide")
     else:
@@ -2170,26 +2376,20 @@ def main():
             st.session_state["authenticated"] = False
             st.session_state["role"] = "anon"
             st.session_state["username"] = ""
-            
+
     # Menu pagine in base al ruolo
     role = st.session_state["role"]
     if role == "anon":
-        # Visitatori: solo Presentazione (landing aperta)
         pages = ["Presentazione"]
     else:
-        # Admin: tutte le pagine definite in PAGES_BY_ROLE o PAGES
-        # Se hai già PAGES_BY_ROLE puoi usarlo, altrimenti prendi le chiavi da PAGES
         pages = list(PAGES.keys())
 
     page = st.sidebar.radio("Pagina", pages)
 
-    # Logo subito dopo il menu pagine
     if LOGO_PATH.exists():
         st.sidebar.markdown("---")
         st.sidebar.image(str(LOGO_PATH), use_container_width=True)
 
-    # ---------- ROUTING ----------
-    # Usa il dizionario PAGES esistente
     PAGES[page]()
 
 
