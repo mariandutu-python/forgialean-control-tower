@@ -60,6 +60,27 @@ APP_NAME = "ForgiaLean Control Tower"
 APP_VERSION = "1.0.0"
 LOGO_PATH = "forgialean_logo.png"
 
+# ========================
+# DATI AZIENDALI (CEDENTE/PRESTATORE)
+# ========================
+MY_COMPANY_DATA = {
+    "denominazione": "FORGIALEAN DI LICA MARIAN DUTU",
+    "piva": "04336611209",
+    "codice_fiscale": "DTULMR78B02Z129K",
+    "indirizzo": "VIA MEZZO PONENTE 520 INT 02",
+    "cap": "40014",
+    "comune": "CREVALCORE",
+    "provincia": "BO",
+    "nazione": "IT",
+    # Regime fiscale da confermare con AE/commercialista
+    "regime_fiscale": "RF19",
+    "id_paese_trasmittente": "IT",
+    "id_codice_trasmittente": "DTULMR78B02Z129K",
+    "progressivo_invio_prefisso": "FL",
+    "formato_trasmissione": "FPR12",
+    "pec_mittente": "mariandutu@pec.it",
+}
+
 # Ruoli utenti (per access control)
 VALID_ROLES = ["admin", "user"]
 ADMIN_USERS = {

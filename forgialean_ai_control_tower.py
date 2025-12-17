@@ -8,7 +8,7 @@ import plotly.express as px
 import pdfplumber
 from sqlmodel import SQLModel, Field, Session, select, delete
 
-from config import CACHE_TTL, PAGES_BY_ROLE, APP_NAME, LOGO_PATH
+from config import CACHE_TTL, PAGES_BY_ROLE, APP_NAME, LOGO_PATH, MY_COMPANY_DATA
 from pathlib import Path
 from db import init_db
 
