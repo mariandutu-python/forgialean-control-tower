@@ -383,33 +383,43 @@ def page_clients():
 
         submitted = st.form_submit_button("Salva cliente")
 
-    if submitted:
+        if submitted:
+            st.write("DEBUG: submit cliccato")  # debug frontend
+
         if not ragione_sociale.strip():
             st.warning("La ragione sociale è obbligatoria.")
         else:
-            with get_session() as session:
-                new_client = Client(
-                    ragione_sociale=ragione_sociale.strip(),
-                    piva=piva.strip() or None,
-                    cod_fiscale=cod_fiscale.strip() or None,
-                    settore=settore.strip() or None,
-                    paese=paese.strip() or None,
-                    canale_acquisizione=canale_acquisizione.strip() or None,
-                    segmento_cliente=segmento_cliente.strip() or None,
-                    data_creazione=data_creazione,
-                    stato_cliente=stato_cliente,
-                    indirizzo=indirizzo.strip() or None,
-                    cap=cap.strip() or None,
-                    comune=comune.strip() or None,
-                    provincia=provincia.strip() or None,
-                    codice_destinatario=codice_destinatario.strip() or None,
-                    pec_fatturazione=pec_fatturazione.strip() or None,
-                )
-                session.add(new_client)
-                session.commit()
-                session.refresh(new_client)
-            st.success(f"Cliente creato con ID {new_client.client_id}")
-            st.rerun()
+            try:
+                st.write("DEBUG: entro in try salvataggio Client")  # debug frontend
+                with get_session() as session:
+                    new_client = Client(
+                        ragione_sociale=ragione_sociale.strip(),
+                        email=None,
+                        piva=piva.strip() or None,
+                        cod_fiscale=cod_fiscale.strip() or None,
+                        settore=settore.strip() or None,
+                        paese=paese.strip() or None,
+                        canale_acquisizione=canale_acquisizione.strip() or None,
+                        segmento_cliente=segmento_cliente.strip() or None,
+                        data_creazione=data_creazione,
+                        stato_cliente=stato_cliente,
+                        indirizzo=indirizzo.strip() or None,
+                        cap=cap.strip() or None,
+                        comune=comune.strip() or None,
+                        provincia=provincia.strip() or None,
+                        codice_destinatario=codice_destinatario.strip() or None,
+                        pec_fatturazione=pec_fatturazione.strip() or None,
+                    )
+                    session.add(new_client)
+                    session.commit()
+                    session.refresh(new_client)
+
+                st.success(f"Cliente creato con ID {new_client.client_id}")
+                st.write("DEBUG: salvataggio completato, prima di rerun")  # debug
+                st.rerun()
+            except Exception as e:
+                st.error("Errore nel salvataggio del cliente.")
+                st.write(f"DEBUG EXCEPTION: {e}")
 
     st.markdown("---")
     st.subheader("📋 Elenco clienti")
