@@ -1094,7 +1094,7 @@ def page_finance_invoices():
         st.success("Fattura eliminata.")
         st.rerun()
 
-    if export_xml_clicked:
+        if export_xml_clicked:
         inv = inv_obj
 
         # Carica dati cliente dal DB
@@ -1121,17 +1121,25 @@ def page_finance_invoices():
         cli_den = client_xml.ragione_sociale or ""
         cli_piva = (client_xml.piva or "").strip() or ced_piva
         cli_cf = (client_xml.cod_fiscale or "").strip() or cli_piva
+
+        raw_paese = (client_xml.paese or "IT").strip()
+        if raw_paese.lower() in ("italia", "it"):
+            cli_paese = "IT"
+        else:
+            cli_paese = raw_paese.upper()[:2]
+
         cli_addr = client_xml.indirizzo or ""
         cli_cap = client_xml.cap or ""
         cli_comune = client_xml.comune or ""
         cli_prov = client_xml.provincia or ""
-        cli_paese = client_xml.paese or "IT"
         cli_cod_dest = client_xml.codice_destinatario or "0000000"
         cli_pec = client_xml.pec_fatturazione or my.get("pec_mittente", "")
 
         # Progressivo invio
         prefisso = my.get("progressivo_invio_prefisso", "FL")
         progressivo_invio = f"{prefisso}_{(inv.num_fattura or '1').replace('/', '_')}"
+
+        aliquota_iva = (inv.iva / inv.importo_imponibile * 100) if inv.importo_imponibile else 22.0
 
         xml_content = f"""<?xml version="1.0" encoding="UTF-8"?>
 <FatturaElettronica versione="{formato_trasm}">
@@ -1203,8 +1211,14 @@ def page_finance_invoices():
         <Quantita>1.00</Quantita>
         <PrezzoUnitario>{inv.importo_imponibile:.2f}</PrezzoUnitario>
         <PrezzoTotale>{inv.importo_imponibile:.2f}</PrezzoTotale>
-        <AliquotaIVA>{(inv.iva / inv.importo_imponibile * 100) if inv.importo_imponibile else 22:.2f}</AliquotaIVA>
+        <AliquotaIVA>{aliquota_iva:.2f}</AliquotaIVA>
       </DettaglioLinee>
+      <DatiRiepilogo>
+        <AliquotaIVA>{aliquota_iva:.2f}</AliquotaIVA>
+        <ImponibileImporto>{inv.importo_imponibile:.2f}</ImponibileImporto>
+        <Imposta>{inv.iva:.2f}</Imposta>
+        <EsigibilitaIVA>I</EsigibilitaIVA>
+      </DatiRiepilogo>
     </DatiBeniServizi>
   </FatturaElettronicaBody>
 </FatturaElettronica>
