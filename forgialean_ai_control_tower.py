@@ -2197,6 +2197,9 @@ def page_tax_inps():
 
     current_year = date.today().year
 
+    # =========================
+    # CONFIGURAZIONE FISCALE
+    # =========================
     with get_session() as session:
         cfg = session.exec(select(TaxConfig).where(TaxConfig.year == current_year)).first()
         fatture = session.exec(
@@ -2219,7 +2222,7 @@ def page_tax_inps():
         step=0.01,
     )
     aliquota_inps = st.number_input(
-        "Aliquota INPS (es. 0.26)",
+        "Aliquota INPS Gestione Separata (es. 0.26)",
         value=cfg.aliquota_inps if cfg else 0.26,
         min_value=0.0,
         max_value=1.0,
@@ -2253,6 +2256,9 @@ def page_tax_inps():
             session.commit()
         st.success("Configurazione fiscale salvata.")
 
+    # =========================
+    # STIMA IMPOSTE & CONTRIBUTI
+    # =========================
     st.subheader("Stima imposte e contributi anno in corso")
     st.write(f"Fatturato {current_year}: {fatturato:.2f} €")
     if fatture:
@@ -2265,11 +2271,105 @@ def page_tax_inps():
         inps = base_imponibile * aliquota_inps
 
         st.write(f"Base imponibile stimata: {base_imponibile:.2f} €")
-        st.write(f"Imposta stimata: {imposta:.2f} €")
-        st.write(f"Contributi INPS stimati: {inps:.2f} €")
+        st.write(f"Imposta stimata (IRPEF/Imposta sostitutiva): {imposta:.2f} €")
+        st.write(f"Contributi INPS Gestione Separata stimati: {inps:.2f} €")
     else:
         st.info("Nessuna fattura emessa nell'anno corrente.")
 
+    st.markdown("---")
+
+    # =========================
+    # SCADENZE FISCALI & INPS (TaxDeadline)
+    # =========================
+    st.subheader(f"Scadenze fiscali & INPS {current_year}")
+
+    with get_session() as session:
+        deadlines = session.exec(
+            select(TaxDeadline).where(TaxDeadline.year == current_year)
+        ).all()
+
+    df_dead = pd.DataFrame(
+        [
+            {
+                "ID": d.deadline_id,
+                "Data scadenza": d.due_date,
+                "Tipo": d.type,
+                "Importo stimato": d.estimated_amount,
+                "Importo pagato": d.amount_paid,
+                "Data pagamento": d.payment_date,
+                "Stato": d.status,
+                "Note": d.note,
+            }
+            for d in (deadlines or [])
+        ]
+    )
+
+    if df_dead.empty:
+        st.info("Nessuna scadenza registrata per l'anno corrente.")
+    else:
+        st.dataframe(df_dead)
+
+    st.markdown("### ➕ Aggiungi / modifica scadenza")
+
+    # Tipologie suggerite: puoi aggiungerne altre a piacere
+    tipo_opzioni = [
+        "Saldo imposta",
+        "Acconto 1 imposta",
+        "Acconto 2 imposta",
+        "Saldo INPS Gestione Separata",
+        "Acconto 1 INPS Gestione Separata",
+        "Acconto 2 INPS Gestione Separata",
+        "Altro",
+    ]
+
+    with st.form("tax_deadline_form"):
+        col1, col2 = st.columns(2)
+        with col1:
+            # Se vuoi modificare una scadenza esistente, seleziona ID; 0 = nuova
+            existing_ids = [0] + [d.deadline_id for d in (deadlines or [])]
+            selected_id = st.selectbox("ID scadenza (0 = nuova)", existing_ids)
+            type_sel = st.selectbox("Tipo scadenza", tipo_opzioni)
+            due_date = st.date_input("Data scadenza", value=date(current_year, 6, 30))
+        with col2:
+            estimated_amount = st.number_input("Importo stimato", min_value=0.0, step=50.0)
+            amount_paid = st.number_input("Importo pagato", min_value=0.0, step=50.0)
+            payment_date = st.date_input("Data pagamento", value=date.today())
+            status = st.selectbox("Stato", ["planned", "paid", "partial"])
+        note = st.text_input("Note (opzionali)", "")
+
+        submit_deadline = st.form_submit_button("💾 Salva scadenza")
+
+    if submit_deadline:
+        with get_session() as session:
+            if selected_id == 0:
+                # nuova scadenza
+                d = TaxDeadline(
+                    year=current_year,
+                    due_date=due_date,
+                    type=type_sel,
+                    estimated_amount=estimated_amount,
+                    amount_paid=amount_paid,
+                    payment_date=payment_date if amount_paid > 0 else None,
+                    status=status,
+                    note=note or None,
+                )
+                session.add(d)
+            else:
+                # aggiorna esistente
+                d = session.get(TaxDeadline, selected_id)
+                if d:
+                    d.year = current_year
+                    d.due_date = due_date
+                    d.type = type_sel
+                    d.estimated_amount = estimated_amount
+                    d.amount_paid = amount_paid
+                    d.payment_date = payment_date if amount_paid > 0 else None
+                    d.status = status
+                    d.note = note or None
+                    session.add(d)
+            session.commit()
+        st.success("Scadenza salvata.")
+        st.rerun()
 
 # =========================
 # ROUTER
