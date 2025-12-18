@@ -2083,33 +2083,41 @@ def page_people_departments():
 
 def page_finance_payments():
     st.title("Incassi / Scadenze clienti")
+
+    # Carico fatture e calcolo pagato/da incassare mentre la sessione è aperta
     with get_session() as session:
         invoices = session.exec(select(Invoice)).all()
         clients = {c.client_id: c.ragione_sociale for c in session.exec(select(Client)).all()}
-    if not invoices:
+
+        data_rows = []
+        for inv in invoices:
+            amount_paid = inv.amount_paid      # usa la property finché la sessione è attiva
+            amount_open = inv.amount_open
+            data_rows.append(
+                {
+                    "ID": inv.invoice_id,
+                    "Numero": inv.num_fattura,
+                    "Cliente": clients.get(inv.client_id, inv.client_id),
+                    "Data": inv.data_fattura,
+                    "Scadenza": inv.data_scadenza,
+                    "Totale": inv.importo_totale,
+                    "Pagato": amount_paid,
+                    "Da incassare": amount_open,
+                    "Stato pagamento": inv.stato_pagamento,
+                }
+            )
+
+    if not data_rows:
         st.info("Nessuna fattura presente.")
         return
-    df = pd.DataFrame(
-        [
-            {
-                "ID": inv.invoice_id,
-                "Numero": inv.num_fattura,
-                "Cliente": clients.get(inv.client_id, inv.client_id),
-                "Data": inv.data_fattura,
-                "Scadenza": inv.data_scadenza,
-                "Totale": inv.importo_totale,
-                "Pagato": inv.amount_paid,
-                "Da incassare": inv.amount_open,
-                "Stato pagamento": inv.stato_pagamento,
-            }
-            for inv in invoices
-        ]
-    )
+
+    df = pd.DataFrame(data_rows)
+
     st.subheader("Stato incassi")
     st.dataframe(df)
 
     st.subheader("Registra un pagamento")
-    invoice_ids = [inv.invoice_id for inv in invoices]
+    invoice_ids = [row["ID"] for row in data_rows]
     invoice_id_sel = st.selectbox("Fattura", invoice_ids)
     payment_date = st.date_input("Data pagamento", value=date.today())
     amount = st.number_input("Importo incassato", min_value=0.0, step=10.0)
@@ -2126,15 +2134,16 @@ def page_finance_payments():
                 note=note or None,
             )
             session.add(pay)
+
             inv = session.get(Invoice, invoice_id_sel)
             session.refresh(inv)
             if inv.amount_open <= 0:
                 inv.stato_pagamento = "incassata"
                 inv.data_incasso = payment_date
                 session.add(inv)
+
             session.commit()
         st.success("Pagamento registrato. Ricarica la pagina per aggiornare i totali.")
-
 
 def page_invoice_transmission():
     st.title("Fatture → Agenzia Entrate (tracciamento manuale)")
