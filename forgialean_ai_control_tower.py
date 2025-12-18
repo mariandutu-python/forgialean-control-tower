@@ -772,6 +772,339 @@ def page_finance_invoices():
     st.title("💵 Finanza / Fatture (SQLite)")
     role = st.session_state.get("role", "user")
 
+    # =========================
+    # 1) INSERIMENTO MANUALE FATTURA
+    # =========================
+    st.subheader("➕ Inserisci nuova fattura (manuale)")
+
+    with get_session() as session:
+        clients = session.exec(select(Client)).all()
+
+    if not clients:
+        st.info("Prima registra almeno un cliente nella sezione Clienti.")
+    else:
+        df_clients = pd.DataFrame([c.__dict__ for c in clients])
+        df_clients["label"] = df_clients["client_id"].astype(str) + " - " + df_clients["ragione_sociale"]
+
+        with st.form("new_invoice_manual"):
+            col1, col2 = st.columns(2)
+            with col1:
+                client_label = st.selectbox("Cliente", df_clients["label"].tolist())
+                num_fattura = st.text_input("Numero fattura", "")
+                data_fattura = st.date_input("Data fattura", value=date.today())
+                data_scadenza = st.date_input("Data scadenza", value=date.today())
+            with col2:
+                importo_imponibile = st.number_input("Imponibile (€)", min_value=0.0, step=100.0)
+                iva_perc = st.number_input("Aliquota IVA (%)", min_value=0.0, step=1.0, value=22.0)
+                stato_pagamento = st.selectbox(
+                    "Stato pagamento",
+                    ["emessa", "incassata", "scaduta"],
+                    index=0,
+                )
+                data_incasso = st.date_input("Data incasso (se incassata)", value=date.today())
+
+            submitted_manual = st.form_submit_button("Salva fattura manuale")
+
+        if submitted_manual:
+            if not num_fattura.strip():
+                st.warning("Il numero fattura è obbligatorio.")
+            else:
+                client_id_sel = int(client_label.split(" - ")[0])
+                iva_val = importo_imponibile * iva_perc / 100.0
+                totale = importo_imponibile + iva_val
+
+                with get_session() as session:
+                    new_inv = Invoice(
+                        client_id=client_id_sel,
+                        num_fattura=num_fattura.strip(),
+                        data_fattura=data_fattura,
+                        data_scadenza=data_scadenza,
+                        importo_imponibile=importo_imponibile,
+                        iva=iva_val,
+                        importo_totale=totale,
+                        stato_pagamento=stato_pagamento,
+                        data_incasso=data_incasso if stato_pagamento == "incassata" else None,
+                    )
+                    session.add(new_inv)
+                    session.commit()
+                    session.refresh(new_inv)
+                st.success(f"Fattura {new_inv.num_fattura} registrata.")
+                st.rerun()
+
+    st.markdown("---")
+
+    # =========================
+    # 2) UPLOAD PDF FATTURA + PRECOMPILAZIONE
+    # =========================
+    st.subheader("📎 Carica fattura PDF e precompila")
+
+    uploaded_file = st.file_uploader("Carica file PDF fattura", type=["pdf"])
+
+    parsed_data = {
+        "num_fattura": "",
+        "data_fattura": date.today(),
+        "data_scadenza": date.today(),
+        "imponibile": 0.0,
+        "iva_perc": 22.0,
+    }
+
+    if uploaded_file is not None:
+        try:
+            with pdfplumber.open(uploaded_file) as pdf:
+                text_pages = [page.extract_text() or "" for page in pdf.pages]
+            full_text = "\n".join(text_pages)
+
+            import re
+
+            # Numero fattura
+            m_num = re.search(r"[Ff]attura\s*(n\.|nr\.|numero)?\s*([A-Za-z0-9\-\/]+)", full_text)
+            if m_num:
+                parsed_data["num_fattura"] = m_num.group(2).strip()
+
+            # Data fattura
+            m_date = re.search(r"(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})", full_text)
+            if m_date:
+                for fmt in ("%d/%m/%Y", "%d-%m-%Y"):
+                    try:
+                        parsed_data["data_fattura"] = datetime.strptime(m_date.group(1), fmt).date()
+                        break
+                    except ValueError:
+                        continue
+
+            # Imponibile e totale (euristica)
+            numbers = re.findall(r"(\d{1,3}(?:[\.\,]\d{3})*(?:[\.\,]\d{2}))", full_text)
+            if len(numbers) >= 2:
+                def to_float(s):
+                    s = s.replace(".", "").replace(",", ".")
+                    return float(s)
+                parsed_data["imponibile"] = to_float(numbers[-2])
+                totale_pdf = to_float(numbers[-1])
+                if parsed_data["imponibile"] > 0:
+                    parsed_data["iva_perc"] = round((totale_pdf / parsed_data["imponibile"] - 1) * 100, 2)
+
+            st.success("PDF letto, controlla e conferma i dati sotto.")
+
+        except Exception as e:
+            st.error(f"Errore lettura PDF: {e}")
+
+    if uploaded_file is not None and clients:
+        df_clients = pd.DataFrame([c.__dict__ for c in clients])
+        df_clients["label"] = df_clients["client_id"].astype(str) + " - " + df_clients["ragione_sociale"]
+
+        with st.form("new_invoice_from_pdf"):
+            st.markdown("#### Dati fattura precompilati")
+
+            col1, col2 = st.columns(2)
+            with col1:
+                client_label_pdf = st.selectbox("Cliente", df_clients["label"].tolist())
+                num_fattura_pdf = st.text_input("Numero fattura", parsed_data["num_fattura"])
+                data_fattura_pdf = st.date_input("Data fattura", value=parsed_data["data_fattura"])
+                data_scadenza_pdf = st.date_input("Data scadenza", value=parsed_data["data_fattura"])
+            with col2:
+                imponibile_pdf = st.number_input(
+                    "Imponibile (€)",
+                    min_value=0.0,
+                    step=100.0,
+                    value=float(parsed_data["imponibile"]),
+                )
+                iva_perc_pdf = st.number_input(
+                    "Aliquota IVA (%)",
+                    min_value=0.0,
+                    step=1.0,
+                    value=float(parsed_data["iva_perc"]),
+                )
+                stato_pagamento_pdf = st.selectbox(
+                    "Stato pagamento",
+                    ["emessa", "incassata", "scaduta"],
+                    index=0,
+                )
+                data_incasso_pdf = st.date_input("Data incasso (se incassata)", value=date.today())
+
+            submitted_pdf = st.form_submit_button("Salva fattura da PDF")
+
+        if submitted_pdf:
+            if not num_fattura_pdf.strip():
+                st.warning("Il numero fattura è obbligatorio.")
+            else:
+                client_id_sel_pdf = int(client_label_pdf.split(" - ")[0])
+                iva_val_pdf = imponibile_pdf * iva_perc_pdf / 100.0
+                totale_pdf = imponibile_pdf + iva_val_pdf
+
+                with get_session() as session:
+                    new_inv_pdf = Invoice(
+                        client_id=client_id_sel_pdf,
+                        num_fattura=num_fattura_pdf.strip(),
+                        data_fattura=data_fattura_pdf,
+                        data_scadenza=data_scadenza_pdf,
+                        importo_imponibile=imponibile_pdf,
+                        iva=iva_val_pdf,
+                        importo_totale=totale_pdf,
+                        stato_pagamento=stato_pagamento_pdf,
+                        data_incasso=data_incasso_pdf if stato_pagamento_pdf == "incassata" else None,
+                    )
+                    session.add(new_inv_pdf)
+                    session.commit()
+                    session.refresh(new_inv_pdf)
+                st.success(f"Fattura {new_inv_pdf.num_fattura} (da PDF) registrata.")
+                st.rerun()
+
+    st.markdown("---")
+
+    # =========================
+    # 3) ELENCO FATTURE + KPI
+    # =========================
+    st.subheader("📊 Elenco fatture")
+
+    col_f1, col_f2 = st.columns(2)
+    with col_f1:
+        data_da = st.date_input("Da data (fattura)", value=None)
+    with col_f2:
+        data_a = st.date_input("A data (fattura)", value=None)
+
+    with get_session() as session:
+        invoices = session.exec(select(Invoice)).all()
+
+    if not invoices:
+        st.info("Nessuna fattura registrata.")
+        return
+
+    df_inv = pd.DataFrame([i.__dict__ for i in invoices])
+    df_inv["data_fattura"] = pd.to_datetime(df_inv["data_fattura"], errors="coerce")
+
+    if data_da:
+        df_inv = df_inv[df_inv["data_fattura"] >= pd.to_datetime(data_da)]
+    if data_a:
+        df_inv = df_inv[df_inv["data_fattura"] <= pd.to_datetime(data_a)]
+
+    st.dataframe(df_inv)
+
+    if {"data_fattura", "importo_totale"}.issubset(df_inv.columns):
+        df_inv["data_fattura"] = pd.to_datetime(df_inv["data_fattura"], errors="coerce")
+        df_inv["anno"] = df_inv["data_fattura"].dt.year
+        kpi_year = df_inv.groupby("anno")["importo_totale"].sum().reset_index()
+        st.markdown("#### Totale fatturato per anno")
+        st.bar_chart(kpi_year.set_index("anno")["importo_totale"])
+
+    # =========================
+    # 4) MODIFICA / ELIMINA FATTURA (SOLO ADMIN) + EXPORT XML
+    # =========================
+    if role != "admin":
+        st.info("Modifica, eliminazione ed export XML disponibili solo per ruolo 'admin'.")
+        return
+
+    st.markdown("---")
+    st.subheader("✏️ Modifica / elimina / esporta fattura (solo admin)")
+
+    inv_ids = df_inv["invoice_id"].tolist()
+    inv_id_sel = st.selectbox("Seleziona ID fattura", inv_ids)
+
+    with get_session() as session:
+        inv_obj = session.get(Invoice, inv_id_sel)
+        clients_all = session.exec(select(Client)).all()
+
+    if not inv_obj:
+        st.warning("Fattura non trovata.")
+        return
+
+    df_clients_all = pd.DataFrame([c.__dict__ for c in clients_all]) if clients_all else pd.DataFrame()
+    if not df_clients_all.empty:
+        df_clients_all["label"] = df_clients_all["client_id"].astype(str) + " - " + df_clients_all["ragione_sociale"]
+        try:
+            current_client_label = df_clients_all[
+                df_clients_all["client_id"] == inv_obj.client_id
+            ]["label"].iloc[0]
+        except IndexError:
+            current_client_label = df_clients_all["label"].iloc[0]
+    else:
+        current_client_label = ""
+
+    with st.form("edit_invoice"):
+        col1, col2 = st.columns(2)
+        with col1:
+            client_label_e = st.selectbox(
+                "Cliente",
+                df_clients_all["label"].tolist() if not df_clients_all.empty else [],
+                index=df_clients_all["label"].tolist().index(current_client_label) if current_client_label else 0,
+            ) if not df_clients_all.empty else ("",)
+            num_fattura_e = st.text_input("Numero fattura", inv_obj.num_fattura or "")
+            data_fattura_e = st.date_input(
+                "Data fattura",
+                value=inv_obj.data_fattura or date.today(),
+            )
+            data_scadenza_e = st.date_input(
+                "Data scadenza",
+                value=inv_obj.data_scadenza or date.today(),
+            )
+        with col2:
+            importo_imponibile_e = st.number_input(
+                "Imponibile (€)",
+                min_value=0.0,
+                step=100.0,
+                value=float(inv_obj.importo_imponibile or 0.0),
+            )
+            iva_e = st.number_input(
+                "IVA (€)",
+                min_value=0.0,
+                step=100.0,
+                value=float(inv_obj.iva or 0.0),
+            )
+            stato_pagamento_e = st.selectbox(
+                "Stato pagamento",
+                ["emessa", "incassata", "scaduta"],
+                index=["emessa", "incassata", "scaduta"].index(inv_obj.stato_pagamento or "emessa"),
+            )
+            data_incasso_e = st.date_input(
+                "Data incasso",
+                value=inv_obj.data_incasso or date.today(),
+            )
+
+        col_b1, col_b2, col_b3 = st.columns(3)
+        with col_b1:
+            update_clicked = st.form_submit_button("💾 Aggiorna fattura")
+        with col_b2:
+            delete_clicked = st.form_submit_button("🗑 Elimina fattura")
+        with col_b3:
+            export_xml_clicked = st.form_submit_button("📤 Esporta XML FatturaPA (bozza)")
+
+    if update_clicked:
+        if not num_fattura_e.strip():
+            st.warning("Il numero fattura è obbligatorio.")
+        else:
+            with get_session() as session:
+                obj = session.get(Invoice, inv_id_sel)
+                if obj:
+                    if not df_clients_all.empty:
+                        client_id_e = int(client_label_e.split(" - ")[0])
+                        obj.client_id = client_id_e
+                    obj.num_fattura = num_fattura_e.strip()
+                    obj.data_fattura = data_fattura_e
+                    obj.data_scadenza = data_scadenza_e
+                    obj.importo_imponibile = importo_imponibile_e
+                    obj.iva = iva_e
+                    obj.importo_totale = importo_imponibile_e + iva_e
+                    obj.stato_pagamento = stato_pagamento_e
+                    obj.data_incasso = data_incasso_e if stato_pagamento_e == "incassata" else None
+                    session.add(obj)
+                    session.commit()
+            st.success("Fattura aggiornata.")
+            st.rerun()
+
+    if delete_clicked:
+        with get_session() as session:
+            obj = session.get(Invoice, inv_id_sel)
+            if obj:
+                session.delete(obj)
+                session.commit()
+        st.success("Fattura eliminata.")
+        st.rerun()
+
+    if export_xml_clicked:
+        inv = inv_obj
+
+        with get_session() as session:
+            client_xml = session.get(Client, inv.client_id)
+
+     
 def page_payments():
     st.title("💶 Incassi / Scadenze")
     role = st.session_state.get("role", "user")
