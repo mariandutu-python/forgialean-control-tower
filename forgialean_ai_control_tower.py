@@ -3142,6 +3142,69 @@ def page_finance_dashboard():
     else:
         st.info("Nessuna uscita nel periodo selezionato per analisi per conto.")
 
+    # ---------- Sintesi per anno ----------
+    st.markdown("---")
+    st.subheader("📅 Sintesi Entrate / Uscite / Margine per anno")
+
+    # Ricalcolo versioni non filtrate per anno (su tutto il DB)
+    with get_session() as session:
+        invoices_all = session.exec(select(Invoice)).all()
+        expenses_all = session.exec(select(Expense)).all()
+
+    df_inv_all = pd.DataFrame([i.__dict__ for i in (invoices_all or [])])
+    df_exp_all = pd.DataFrame([e.__dict__ for e in (expenses_all or [])])
+
+    if df_inv_all.empty and df_exp_all.empty:
+        st.info("Nessun dato storico disponibile per la sintesi per anno.")
+    else:
+        # Entrate per anno
+        if not df_inv_all.empty:
+            df_inv_all["data_riferimento"] = df_inv_all["data_incasso"].fillna(df_inv_all["data_fattura"])
+            df_inv_all["data_riferimento"] = pd.to_datetime(df_inv_all["data_riferimento"], errors="coerce")
+            df_inv_all = df_inv_all.dropna(subset=["data_riferimento"])
+            df_inv_all["anno"] = df_inv_all["data_riferimento"].dt.year
+            entrate_anno = (
+                df_inv_all.groupby("anno")["importo_totale"]
+                .sum()
+                .reset_index()
+                .rename(columns={"importo_totale": "Entrate"})
+            )
+        else:
+            entrate_anno = pd.DataFrame(columns=["anno", "Entrate"])
+
+        # Uscite per anno
+        if not df_exp_all.empty:
+            df_exp_all["data"] = pd.to_datetime(df_exp_all["data"], errors="coerce")
+            df_exp_all = df_exp_all.dropna(subset=["data"])
+            df_exp_all["anno"] = df_exp_all["data"].dt.year
+            uscite_anno = (
+                df_exp_all.groupby("anno")["importo_totale"]
+                .sum()
+                .reset_index()
+                .rename(columns={"importo_totale": "Uscite"})
+            )
+        else:
+            uscite_anno = pd.DataFrame(columns=["anno", "Uscite"])
+
+        # Merge e calcolo margine per anno
+        df_year = pd.merge(entrate_anno, uscite_anno, on="anno", how="outer").fillna(0.0)
+        if df_year.empty:
+            st.info("Nessun dato aggregato per anno disponibile.")
+        else:
+            df_year["Margine"] = df_year["Entrate"] - df_year["Uscite"]
+            df_year = df_year.sort_values("anno")
+
+            st.dataframe(df_year)
+
+            fig_year = px.bar(
+                df_year,
+                x="anno",
+                y=["Entrate", "Uscite", "Margine"],
+                barmode="group",
+                title="Entrate, Uscite e Margine per anno",
+            )
+            st.plotly_chart(fig_year, use_container_width=True)
+
     # ---------- 2) CATEGORIE & CONTI ----------
     st.subheader("📂 Categorie costi & Conti")
 
