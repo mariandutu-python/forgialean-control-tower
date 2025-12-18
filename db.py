@@ -215,6 +215,61 @@ class InvoiceTransmission(SQLModel, table=True):
     sdi_message: Optional[str] = None
     sdi_protocol: Optional[str] = None
 
+class Vendor(SQLModel, table=True):
+    """Fornitori (contabilità passiva)"""
+    vendor_id: Optional[int] = Field(default=None, primary_key=True)
+    ragione_sociale: str
+    email: Optional[str] = None
+    piva: Optional[str] = None
+    cod_fiscale: Optional[str] = None
+    settore: Optional[str] = None
+    paese: Optional[str] = None
+    indirizzo: Optional[str] = None
+    cap: Optional[str] = None
+    comune: Optional[str] = None
+    provincia: Optional[str] = None
+    note: Optional[str] = None
+
+
+class ExpenseCategory(SQLModel, table=True):
+    """Categorie di costo (es. software, viaggi, formazione, affitti, ecc.)"""
+    category_id: Optional[int] = Field(default=None, primary_key=True)
+    nome: str                # es. "Software", "Viaggi", "Formazione"
+    descrizione: Optional[str] = None
+    deducibilita_perc: Optional[float] = 1.0  # 1.0 = 100% deducibile
+
+
+class Account(SQLModel, table=True):
+    """Conti finanziari (conto corrente, carta, cassa, ecc.)"""
+    account_id: Optional[int] = Field(default=None, primary_key=True)
+    nome: str                    # es. "Conto corrente Intesa", "Carta credito"
+    tipo: str                    # "bank", "card", "cash", "paypal", ...
+    saldo_iniziale: float = 0.0
+    valuta: str = "EUR"
+    note: Optional[str] = None
+
+
+class Expense(SQLModel, table=True):
+    """Spese / contabilità passiva light"""
+    expense_id: Optional[int] = Field(default=None, primary_key=True)
+    data: date
+    vendor_id: Optional[int] = Field(default=None, foreign_key="vendor.vendor_id")
+    category_id: Optional[int] = Field(default=None, foreign_key="expensecategory.category_id")
+    account_id: Optional[int] = Field(default=None, foreign_key="account.account_id")
+
+    descrizione: Optional[str] = None
+    importo_imponibile: float = 0.0
+    iva: float = 0.0
+    importo_totale: float = 0.0
+
+    # collegamento facoltativo a commessa per analisi costi per progetto
+    commessa_id: Optional[int] = Field(default=None, foreign_key="projectcommessa.commessa_id")
+
+    document_ref: Optional[str] = None   # n° fattura fornitore / ricevuta
+    pagata: bool = True                  # per default la considero già pagata
+    data_pagamento: Optional[date] = None
+    note: Optional[str] = None
+
 # =========================
 # INIT & SESSION
 # =========================

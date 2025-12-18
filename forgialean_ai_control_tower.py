@@ -29,6 +29,10 @@ from db import (
     InpsContribution,
     TaxDeadline,
     InvoiceTransmission,
+    Vendor,
+    ExpenseCategory,
+    Account,
+    Expense,
 )
 
 from cache_functions import (
@@ -2772,6 +2776,234 @@ def page_tax_inps():
         st.success("Scadenza salvata.")
         st.rerun()
 
+
+def page_expenses():
+    st.title("💸 Costi & Fornitori")
+
+    # ---------- CARICAMENTI BASE ----------
+    with get_session() as session:
+        vendors = session.exec(select(Vendor)).all()
+        categories = session.exec(select(ExpenseCategory)).all()
+        accounts = session.exec(select(Account)).all()
+        commesse = session.exec(select(ProjectCommessa)).all()
+        expenses = session.exec(select(Expense)).all()
+
+    # ---------- 1) FORNITORI ----------
+    st.subheader("🏢 Fornitori")
+
+    with st.form("new_vendor"):
+        col1, col2 = st.columns(2)
+        with col1:
+            ragione_sociale_v = st.text_input("Ragione sociale fornitore", "")
+            email_v = st.text_input("Email", "")
+            piva_v = st.text_input("Partita IVA", "")
+            cod_fiscale_v = st.text_input("Codice fiscale", "")
+        with col2:
+            settore_v = st.text_input("Settore (software, viaggi, ecc.)", "")
+            paese_v = st.text_input("Paese", "IT")
+            indirizzo_v = st.text_input("Indirizzo", "")
+            comune_v = st.text_input("Comune", "")
+        col3, col4 = st.columns(2)
+        with col3:
+            cap_v = st.text_input("CAP", "")
+            provincia_v = st.text_input("Provincia", "")
+        with col4:
+            note_v = st.text_input("Note", "")
+
+        submitted_vendor = st.form_submit_button("Salva fornitore")
+
+    if submitted_vendor:
+        if not ragione_sociale_v.strip():
+            st.warning("La ragione sociale è obbligatoria.")
+        else:
+            with get_session() as session:
+                new_v = Vendor(
+                    ragione_sociale=ragione_sociale_v.strip(),
+                    email=email_v.strip() or None,
+                    piva=piva_v.strip() or None,
+                    cod_fiscale=cod_fiscale_v.strip() or None,
+                    settore=settore_v.strip() or None,
+                    paese=paese_v.strip() or None,
+                    indirizzo=indirizzo_v.strip() or None,
+                    comune=comune_v.strip() or None,
+                    cap=cap_v.strip() or None,
+                    provincia=provincia_v.strip() or None,
+                    note=note_v.strip() or None,
+                )
+                session.add(new_v)
+                session.commit()
+            st.success("Fornitore salvato.")
+            st.rerun()
+
+    if vendors:
+        df_v = pd.DataFrame([v.__dict__ for v in vendors])
+        st.dataframe(df_v)
+    else:
+        st.info("Nessun fornitore registrato.")
+
+    st.markdown("---")
+
+    # ---------- 2) CATEGORIE & CONTI ----------
+    st.subheader("📂 Categorie costi & Conti")
+
+    colc1, colc2 = st.columns(2)
+
+    with colc1:
+        st.markdown("#### Categoria costo")
+        with st.form("new_expense_category"):
+            nome_cat = st.text_input("Nome categoria", "Software")
+            descr_cat = st.text_input("Descrizione", "")
+            ded_perc = st.number_input("Deducibilità (%)", min_value=0.0, max_value=100.0, value=100.0, step=5.0)
+            submitted_cat = st.form_submit_button("Salva categoria")
+        if submitted_cat:
+            with get_session() as session:
+                new_c = ExpenseCategory(
+                    nome=nome_cat.strip(),
+                    descrizione=descr_cat.strip() or None,
+                    deducibilita_perc=ded_perc / 100.0,
+                )
+                session.add(new_c)
+                session.commit()
+            st.success("Categoria salvata.")
+            st.rerun()
+
+        if categories:
+            df_cat = pd.DataFrame([c.__dict__ for c in categories])
+            st.dataframe(df_cat)
+        else:
+            st.info("Nessuna categoria registrata.")
+
+    with colc2:
+        st.markdown("#### Conto finanziario")
+        with st.form("new_account"):
+            nome_acc = st.text_input("Nome conto", "Conto corrente principale")
+            tipo_acc = st.selectbox("Tipo", ["bank", "card", "cash", "paypal"])
+            saldo_init = st.number_input("Saldo iniziale", value=0.0, step=100.0)
+            valuta_acc = st.text_input("Valuta", "EUR")
+            note_acc = st.text_input("Note", "")
+            submitted_acc = st.form_submit_button("Salva conto")
+        if submitted_acc:
+            with get_session() as session:
+                new_a = Account(
+                    nome=nome_acc.strip(),
+                    tipo=tipo_acc,
+                    saldo_iniziale=saldo_init,
+                    valuta=valuta_acc.strip() or "EUR",
+                    note=note_acc.strip() or None,
+                )
+                session.add(new_a)
+                session.commit()
+            st.success("Conto salvato.")
+            st.rerun()
+
+        if accounts:
+            df_acc = pd.DataFrame([a.__dict__ for a in accounts])
+            st.dataframe(df_acc)
+        else:
+            st.info("Nessun conto registrato.")
+
+    st.markdown("---")
+
+    # ---------- 3) NUOVA SPESA ----------
+    st.subheader("🧾 Registra nuova spesa")
+
+    if not categories or not accounts:
+        st.info("Per registrare una spesa serve almeno una categoria e un conto.")
+        return
+
+    df_cat = pd.DataFrame([c.__dict__ for c in categories])
+    df_cat["label"] = df_cat["category_id"].astype(str) + " - " + df_cat["nome"]
+
+    df_acc = pd.DataFrame([a.__dict__ for a in accounts])
+    df_acc["label"] = df_acc["account_id"].astype(str) + " - " + df_acc["nome"]
+
+    df_vend = pd.DataFrame([v.__dict__ for v in (vendors or [])]) if vendors else pd.DataFrame()
+    if not df_vend.empty:
+        df_vend["label"] = df_vend["vendor_id"].astype(str) + " - " + df_vend["ragione_sociale"]
+
+    df_comm = pd.DataFrame([c.__dict__ for c in (commesse or [])]) if commesse else pd.DataFrame()
+    if not df_comm.empty:
+        df_comm["label"] = df_comm["commessa_id"].astype(str) + " - " + df_comm["cod_commessa"]
+
+    with st.form("new_expense"):
+        col1, col2 = st.columns(2)
+        with col1:
+            data_e = st.date_input("Data spesa", value=date.today())
+            descr_e = st.text_input("Descrizione", "")
+            cat_label = st.selectbox("Categoria costo", df_cat["label"].tolist())
+            acc_label = st.selectbox("Conto", df_acc["label"].tolist())
+        with col2:
+            vendor_label = st.selectbox(
+                "Fornitore (opzionale)",
+                df_vend["label"].tolist() if not df_vend.empty else ["Nessun fornitore"],
+            )
+            comm_label = st.selectbox(
+                "Commessa (opzionale)",
+                df_comm["label"].tolist() if not df_comm.empty else ["Nessuna commessa"],
+            )
+            importo_imp = st.number_input("Imponibile (€)", min_value=0.0, step=50.0)
+            iva_perc = st.number_input("Aliquota IVA (%)", min_value=0.0, max_value=50.0, value=22.0, step=1.0)
+
+        col3, col4 = st.columns(2)
+        with col3:
+            document_ref = st.text_input("Rif. documento (fattura fornitore, ricevuta...)", "")
+        with col4:
+            pagata = st.checkbox("Pagata", value=True)
+            data_pag = st.date_input("Data pagamento", value=date.today())
+
+        submit_exp = st.form_submit_button("Salva spesa")
+
+    if submit_exp:
+        if importo_imp <= 0:
+            st.warning("L'imponibile deve essere maggiore di zero.")
+        else:
+            cat_id = int(cat_label.split(" - ")[0])
+            acc_id = int(acc_label.split(" - ")[0])
+
+            vendor_id = None
+            if not df_vend.empty and vendor_label in df_vend["label"].tolist():
+                vendor_id = int(vendor_label.split(" - ")[0])
+
+            commessa_id = None
+            if not df_comm.empty and comm_label in df_comm["label"].tolist():
+                commessa_id = int(comm_label.split(" - ")[0])
+
+            iva_val = importo_imp * iva_perc / 100.0
+            totale_val = importo_imp + iva_val
+
+            with get_session() as session:
+                new_exp = Expense(
+                    data=data_e,
+                    vendor_id=vendor_id,
+                    category_id=cat_id,
+                    account_id=acc_id,
+                    descrizione=descr_e.strip() or None,
+                    importo_imponibile=importo_imp,
+                    iva=iva_val,
+                    importo_totale=totale_val,
+                    commessa_id=commessa_id,
+                    document_ref=document_ref.strip() or None,
+                    pagata=pagata,
+                    data_pagamento=data_pag if pagata else None,
+                    note=None,
+                )
+                session.add(new_exp)
+                session.commit()
+            st.success("Spesa salvata.")
+            st.rerun()
+
+    st.markdown("---")
+
+    # ---------- 4) ELENCO SPESE ----------
+    st.subheader("📋 Elenco spese")
+
+    if not expenses:
+        st.info("Nessuna spesa registrata.")
+        return
+
+    df_exp = pd.DataFrame([e.__dict__ for e in expenses])
+    st.dataframe(df_exp)
+
 # =========================
 # ROUTER
 # =========================
@@ -2783,6 +3015,7 @@ PAGES = {
     "CRM & Vendite": page_crm_sales,
     "Finanza / Fatture": page_finance_invoices,
     "Incassi / Scadenze": page_finance_payments,      # nuova pagina
+    "Costi & Fornitori": page_expenses,      # <--- aggiungi questa
     "Fatture → AE": page_invoice_transmission,         # nuova pagina
     "Fisco & INPS": page_tax_inps,                     # nuova pagina
     "Operations / Commesse": page_operations,
