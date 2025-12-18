@@ -2668,10 +2668,12 @@ def page_tax_inps():
 
         imposta = base_imponibile * aliquota_imposta
         inps = base_imponibile * aliquota_inps
+        netto = fatturato - imposta - inps  # nuovo calcolo
 
         st.write(f"Base imponibile stimata: {base_imponibile:.2f} €")
         st.write(f"Imposta stimata (IRPEF/Imposta sostitutiva): {imposta:.2f} €")
         st.write(f"Contributi INPS Gestione Separata stimati: {inps:.2f} €")
+        st.write(f"**Netto stimato dopo imposte e contributi:** {netto:.2f} €")
     else:
         st.info("Nessuna fattura emessa nell'anno corrente.")
 
