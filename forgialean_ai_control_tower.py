@@ -3022,6 +3022,126 @@ def page_finance_dashboard():
     else:
         st.info("Nessuna uscita nel periodo selezionato per analisi per categoria.")
 
+    # ---------- Margine per commessa ----------
+    st.markdown("---")
+    st.subheader("📦 Margine per commessa (periodo)")
+
+    # Servono commesse e almeno qualche fattura/spesa collegata
+    if not df_inv.empty or not df_exp.empty:
+        with get_session() as session:
+            commesse_map = {
+                c.commessa_id: c.cod_commessa
+                for c in session.exec(select(ProjectCommessa)).all()
+            }
+
+        # Entrate per commessa (dalle fatture)
+        if not df_inv.empty and "commessa_id" in df_inv.columns:
+            df_inv_comm = df_inv.copy()
+            df_inv_comm["Commessa"] = df_inv_comm["commessa_id"].map(commesse_map).fillna("Senza commessa")
+            entrate_commessa = (
+                df_inv_comm.groupby(["commessa_id", "Commessa"])["importo_totale"]
+                .sum()
+                .reset_index()
+                .rename(columns={"importo_totale": "Entrate_commessa"})
+            )
+        else:
+            entrate_commessa = pd.DataFrame(columns=["commessa_id", "Commessa", "Entrate_commessa"])
+
+        # Uscite per commessa (dalle spese)
+        if not df_exp.empty and "commessa_id" in df_exp.columns:
+            df_exp_comm = df_exp.copy()
+            df_exp_comm["Commessa"] = df_exp_comm["commessa_id"].map(commesse_map).fillna("Senza commessa")
+            uscite_commessa = (
+                df_exp_comm.groupby(["commessa_id", "Commessa"])["importo_totale"]
+                .sum()
+                .reset_index()
+                .rename(columns={"importo_totale": "Uscite_commessa"})
+            )
+        else:
+            uscite_commessa = pd.DataFrame(columns=["commessa_id", "Commessa", "Uscite_commessa"])
+
+        # Merge entrate/uscite per commessa
+        if not entrate_commessa.empty or not uscite_commessa.empty:
+            df_comm = pd.merge(
+                entrate_commessa,
+                uscite_commessa,
+                on=["commessa_id", "Commessa"],
+                how="outer",
+            ).fillna(0.0)
+
+            df_comm["Margine_commessa"] = df_comm["Entrate_commessa"] - df_comm["Uscite_commessa"]
+
+            # Ordina per margine decrescente
+            df_comm = df_comm.sort_values("Margine_commessa", ascending=False)
+
+            st.dataframe(
+                df_comm[
+                    ["Commessa", "Entrate_commessa", "Uscite_commessa", "Margine_commessa"]
+                ].rename(
+                    columns={
+                        "Entrate_commessa": "Entrate €",
+                        "Uscite_commessa": "Uscite €",
+                        "Margine_commessa": "Margine €",
+                    }
+                )
+            )
+
+            # Grafico barre margine per commessa
+            fig_comm = px.bar(
+                df_comm,
+                x="Commessa",
+                y="Margine_commessa",
+                title="Margine per commessa",
+            )
+            st.plotly_chart(fig_comm, use_container_width=True)
+        else:
+            st.info("Nessuna entrata o uscita collegata a commesse nel periodo selezionato.")
+    else:
+        st.info("Nessuna entrata o uscita disponibile per calcolare il margine per commessa.")
+
+    # ---------- Uscite per conto finanziario ----------
+    st.markdown("---")
+    st.subheader("🏦 Uscite per conto finanziario (periodo)")
+
+    if not df_exp.empty:
+        with get_session() as session:
+            accounts_map = {
+                a.account_id: a.nome for a in session.exec(select(Account)).all()
+            }
+
+        df_acc_exp = df_exp.copy()
+        df_acc_exp["Conto"] = df_acc_exp["account_id"].map(accounts_map).fillna("Senza conto")
+        uscite_conto = (
+            df_acc_exp.groupby("Conto")["importo_totale"]
+            .sum()
+            .reset_index()
+            .sort_values("importo_totale", ascending=False)
+        )
+
+        top_n_acc = st.slider(
+            "Numero conti da mostrare",
+            min_value=3,
+            max_value=20,
+            value=10,
+            step=1,
+            key="top_acc",
+        )
+        uscite_conto_top = uscite_conto.head(top_n_acc)
+
+        col_ua1, col_ua2 = st.columns(2)
+        with col_ua1:
+            st.dataframe(uscite_conto_top.rename(columns={"importo_totale": "Uscite €"}))
+        with col_ua2:
+            fig_acc = px.pie(
+                uscite_conto_top,
+                names="Conto",
+                values="importo_totale",
+                title="Distribuzione uscite per conto",
+            )
+            st.plotly_chart(fig_acc, use_container_width=True)
+    else:
+        st.info("Nessuna uscita nel periodo selezionato per analisi per conto.")
+
     # ---------- 2) CATEGORIE & CONTI ----------
     st.subheader("📂 Categorie costi & Conti")
 
