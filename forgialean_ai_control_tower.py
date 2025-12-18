@@ -2843,6 +2843,108 @@ def page_expenses():
 
     st.markdown("---")
 
+def page_finance_dashboard():
+    st.title("📊 Cruscotto Finanza")
+
+    # Filtro periodo
+    st.subheader("Filtro periodo")
+    col_f1, col_f2 = st.columns(2)
+    with col_f1:
+        data_da = st.date_input("Da data", value=date(date.today().year, 1, 1))
+    with col_f2:
+        data_a = st.date_input("A data", value=date.today())
+
+    with get_session() as session:
+        invoices = session.exec(select(Invoice)).all()
+        expenses = session.exec(select(Expense)).all()
+
+    df_inv = pd.DataFrame([i.__dict__ for i in (invoices or [])])
+    df_exp = pd.DataFrame([e.__dict__ for e in (expenses or [])])
+
+    if df_inv.empty and df_exp.empty:
+        st.info("Nessun dato di entrate o uscite nel sistema.")
+        return
+
+    # ---------- ENTRATE (Fatture incassate) ----------
+    if not df_inv.empty:
+        df_inv["data_riferimento"] = df_inv["data_incasso"].fillna(df_inv["data_fattura"])
+        df_inv["data_riferimento"] = pd.to_datetime(df_inv["data_riferimento"], errors="coerce")
+        df_inv = df_inv.dropna(subset=["data_riferimento"])
+        df_inv = df_inv[
+            (df_inv["data_riferimento"] >= pd.to_datetime(data_da)) &
+            (df_inv["data_riferimento"] <= pd.to_datetime(data_a))
+        ]
+        df_inv["mese"] = df_inv["data_riferimento"].dt.to_period("M").dt.to_timestamp()
+        entrate_mensili = (
+            df_inv.groupby("mese")["importo_totale"].sum().rename("Entrate").reset_index()
+        )
+        totale_entrate = df_inv["importo_totale"].sum()
+    else:
+        entrate_mensili = pd.DataFrame(columns=["mese", "Entrate"])
+        totale_entrate = 0.0
+
+    # ---------- USCITE (Spese) ----------
+    if not df_exp.empty:
+        df_exp["data"] = pd.to_datetime(df_exp["data"], errors="coerce")
+        df_exp = df_exp.dropna(subset=["data"])
+        df_exp = df_exp[
+            (df_exp["data"] >= pd.to_datetime(data_da)) &
+            (df_exp["data"] <= pd.to_datetime(data_a))
+        ]
+        df_exp["mese"] = df_exp["data"].dt.to_period("M").dt.to_timestamp()
+        uscite_mensili = (
+            df_exp.groupby("mese")["importo_totale"].sum().rename("Uscite").reset_index()
+        )
+        totale_uscite = df_exp["importo_totale"].sum()
+    else:
+        uscite_mensili = pd.DataFrame(columns=["mese", "Uscite"])
+        totale_uscite = 0.0
+
+    # Merge Entrate/Uscite
+    df_kpi = pd.merge(
+        entrate_mensili,
+        uscite_mensili,
+        on="mese",
+        how="outer",
+    ).fillna(0.0)
+    df_kpi["Margine"] = df_kpi["Entrate"] - df_kpi["Uscite"]
+
+    # ---------- KPI sintetici ----------
+    st.subheader("KPI periodo selezionato")
+    col_k1, col_k2, col_k3 = st.columns(3)
+    with col_k1:
+        st.metric("Entrate totali", f"{totale_entrate:,.2f} €".replace(",", " "))
+    with col_k2:
+        st.metric("Uscite totali", f"{totale_uscite:,.2f} €".replace(",", " "))
+    with col_k3:
+        st.metric("Margine", f"{(totale_entrate - totale_uscite):,.2f} €".replace(",", " "))
+
+    # ---------- Grafici ----------
+    if not df_kpi.empty:
+        st.subheader("Entrate vs Uscite per mese")
+        fig_eu = px.bar(
+            df_kpi,
+            x="mese",
+            y=["Entrate", "Uscite"],
+            barmode="group",
+            title="Entrate vs Uscite per mese",
+        )
+        st.plotly_chart(fig_eu, use_container_width=True)
+
+        st.subheader("Margine per mese")
+        fig_m = px.line(
+            df_kpi,
+            x="mese",
+            y="Margine",
+            markers=True,
+            title="Margine mensile",
+        )
+        st.plotly_chart(fig_m, use_container_width=True)
+
+        st.dataframe(df_kpi)
+    else:
+        st.info("Nessun dato nel periodo selezionato.")
+
     # ---------- 2) CATEGORIE & CONTI ----------
     st.subheader("📂 Categorie costi & Conti")
 
