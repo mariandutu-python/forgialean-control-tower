@@ -772,6 +772,63 @@ def page_finance_invoices():
     st.title("💵 Finanza / Fatture (SQLite)")
     role = st.session_state.get("role", "user")
 
+def page_payments():
+    st.title("💶 Incassi / Scadenze")
+    role = st.session_state.get("role", "user")
+
+    # Carico fatture
+    with get_session() as session:
+        invoices = session.exec(select(Invoice)).all()
+
+    if not invoices:
+        st.info("Nessuna fattura registrata.")
+        return
+
+    df_inv = pd.DataFrame([i.__dict__ for i in invoices])
+    df_inv["label"] = df_inv["invoice_id"].astype(str) + " - " + df_inv["num_fattura"]
+
+    st.subheader("➕ Registra nuovo incasso")
+
+    with st.form("new_payment"):
+        invoice_label = st.selectbox("Fattura", df_inv["label"].tolist())
+        payment_date = st.date_input("Data pagamento", value=date.today())
+        amount = st.number_input("Importo incassato (€)", min_value=0.0, step=50.0)
+        method = st.text_input("Metodo (bonifico, carta, contanti...)", "bonifico")
+        note = st.text_area("Note", "")
+
+        submitted_pay = st.form_submit_button("Salva incasso")
+
+    if submitted_pay:
+        if amount <= 0:
+            st.warning("L'importo deve essere maggiore di zero.")
+        else:
+            invoice_id_sel = int(invoice_label.split(" - ")[0])
+            with get_session() as session:
+                new_pay = Payment(
+                    invoice_id=invoice_id_sel,
+                    payment_date=payment_date,
+                    amount=amount,
+                    method=method.strip() or "bonifico",
+                    note=note.strip() or None,
+                )
+                session.add(new_pay)
+                session.commit()
+            st.success("Incasso registrato.")
+            st.rerun()
+
+    st.markdown("---")
+    st.subheader("📋 Pagamenti registrati")
+
+    with get_session() as session:
+        pays = session.exec(select(Payment)).all()
+
+    if not pays:
+        st.info("Nessun pagamento registrato.")
+        return
+
+    df_pay = pd.DataFrame([p.__dict__ for p in pays])
+    st.dataframe(df_pay)
+
     # =========================
     # 1) INSERIMENTO MANUALE FATTURA
     # =========================
