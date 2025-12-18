@@ -2945,6 +2945,83 @@ def page_finance_dashboard():
     else:
         st.info("Nessun dato nel periodo selezionato.")
 
+    # ---------- Breakdown entrate per cliente ----------
+    st.markdown("---")
+    st.subheader("🏆 Top clienti per entrate (periodo)")
+
+    if not df_inv.empty:
+        with get_session() as session:
+            clients = {c.client_id: c.ragione_sociale for c in session.exec(select(Client)).all()}
+
+        df_cli = df_inv.copy()
+        df_cli["Cliente"] = df_cli["client_id"].map(clients).fillna(df_cli["client_id"])
+        entrate_cliente = (
+            df_cli.groupby("Cliente")["importo_totale"]
+            .sum()
+            .reset_index()
+            .sort_values("importo_totale", ascending=False)
+        )
+
+        top_n = st.slider("Numero di clienti da mostrare", min_value=3, max_value=20, value=10, step=1)
+        entrate_cliente_top = entrate_cliente.head(top_n)
+
+        col_ec1, col_ec2 = st.columns(2)
+        with col_ec1:
+            st.dataframe(entrate_cliente_top.rename(columns={"importo_totale": "Entrate €"}))
+        with col_ec2:
+            fig_cli = px.pie(
+                entrate_cliente_top,
+                names="Cliente",
+                values="importo_totale",
+                title="Distribuzione entrate per cliente",
+            )
+            st.plotly_chart(fig_cli, use_container_width=True)
+    else:
+        st.info("Nessuna entrata nel periodo selezionato per analisi per cliente.")
+
+    # ---------- Breakdown uscite per categoria ----------
+    st.markdown("---")
+    st.subheader("📂 Uscite per categoria costo (periodo)")
+
+    if not df_exp.empty:
+        with get_session() as session:
+            categories_map = {
+                c.category_id: c.nome for c in session.exec(select(ExpenseCategory)).all()
+            }
+
+        df_cat_exp = df_exp.copy()
+        df_cat_exp["Categoria"] = df_cat_exp["category_id"].map(categories_map).fillna("Senza categoria")
+        uscite_categoria = (
+            df_cat_exp.groupby("Categoria")["importo_totale"]
+            .sum()
+            .reset_index()
+            .sort_values("importo_totale", ascending=False)
+        )
+
+        top_n_cat = st.slider(
+            "Numero categorie da mostrare",
+            min_value=3,
+            max_value=20,
+            value=10,
+            step=1,
+            key="top_cat",
+        )
+        uscite_categoria_top = uscite_categoria.head(top_n_cat)
+
+        col_uc1, col_uc2 = st.columns(2)
+        with col_uc1:
+            st.dataframe(uscite_categoria_top.rename(columns={"importo_totale": "Uscite €"}))
+        with col_uc2:
+            fig_cat = px.pie(
+                uscite_categoria_top,
+                names="Categoria",
+                values="importo_totale",
+                title="Distribuzione uscite per categoria",
+            )
+            st.plotly_chart(fig_cat, use_container_width=True)
+    else:
+        st.info("Nessuna uscita nel periodo selezionato per analisi per categoria.")
+
     # ---------- 2) CATEGORIE & CONTI ----------
     st.subheader("📂 Categorie costi & Conti")
 
