@@ -3118,6 +3118,7 @@ PAGES = {
     "Finanza / Fatture": page_finance_invoices,
     "Incassi / Scadenze": page_finance_payments,      # nuova pagina
     "Costi & Fornitori": page_expenses,      # <--- aggiungi questa
+    "Cruscotto Finanza": page_finance_dashboard,  # <-- nuova voce
     "Fatture → AE": page_invoice_transmission,         # nuova pagina
     "Fisco & INPS": page_tax_inps,                     # nuova pagina
     "Operations / Commesse": page_operations,
