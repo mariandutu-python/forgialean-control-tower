@@ -624,7 +624,7 @@ def page_crm_sales():
     # =========================
     # VISTA / FILTRI OPPORTUNITÀ
     # =========================
-    st.subheader("🎯 Funnel Opportunità")
+    st.subheader("🎯 Funnel Opportunità", divider="blue")
 
     with get_session() as session:
         opps = session.exec(select(Opportunity)).all()
@@ -640,7 +640,9 @@ def page_crm_sales():
         fase_opt = ["Tutte"] + sorted(df_opps["fase_pipeline"].dropna().unique().tolist())
         f_fase = st.selectbox("Filtro fase pipeline", fase_opt)
     with col2:
-        owner_opt = ["Tutti"] + sorted(df_opps["owner"].dropna().unique().tolist()) if "owner" in df_opps.columns else ["Tutti"]
+        owner_opt = ["Tutti"]
+        if "owner" in df_opps.columns:
+            owner_opt += sorted(df_opps["owner"].dropna().unique().tolist())
         f_owner = st.selectbox("Filtro owner", owner_opt)
 
     df_f = df_opps.copy()
@@ -650,14 +652,69 @@ def page_crm_sales():
         df_f = df_f[df_f["owner"] == f_owner]
 
     st.subheader("📂 Opportunità filtrate")
-    st.dataframe(df_f)
 
-    if "fase_pipeline" in df_f.columns and "valore_stimato" in df_f.columns and not df_f.empty:
+    if df_f.empty:
+        st.warning("Nessuna opportunità trovata con i filtri selezionati.")
+    else:
+        cols_candidati = [
+            "opportunity_id",
+            "nome_opportunita",
+            "fase_pipeline",
+            "owner",
+            "valore_stimato",
+            "probabilita",
+            "data_apertura",
+            "data_chiusura_prevista",
+            "stato_opportunita",
+        ]
+        cols_show = [c for c in cols_candidati if c in df_f.columns]
+
+        df_view = df_f.copy()
+        if cols_show:
+            df_view = df_view[cols_show]
+
+        if "valore_stimato" in df_view.columns:
+            st.dataframe(
+                df_view.style.format({
+                    "valore_stimato": "{:,.2f} €".format,
+                    "probabilita": "{:.0f} %".format,
+                })
+            )
+        else:
+            st.dataframe(df_view)
+
+    if (
+        "fase_pipeline" in df_f.columns
+        and "valore_stimato" in df_f.columns
+        and not df_f.empty
+    ):
         st.subheader("📈 Valore opportunità per fase")
-        pivot = df_f.groupby("fase_pipeline")["valore_stimato"].sum().reset_index()
-        st.bar_chart(pivot.set_index("fase_pipeline"))
 
-        # =========================
+        pivot = (
+            df_f.groupby("fase_pipeline")["valore_stimato"]
+            .sum()
+            .reset_index()
+            .sort_values("valore_stimato", ascending=False)
+        )
+
+        fig_funnel = px.bar(
+            pivot,
+            x="fase_pipeline",
+            y="valore_stimato",
+            title="Valore opportunità per fase pipeline",
+            color="fase_pipeline",
+            color_discrete_sequence=px.colors.qualitative.Set2,
+        )
+        fig_funnel.update_traces(
+            hovertemplate="Fase=%{x}<br>Valore=%{y:,.2f} €<extra></extra>"
+        )
+        fig_funnel.update_layout(
+            xaxis_title="Fase pipeline",
+            yaxis_title="Valore opportunità €",
+            showlegend=False,
+        )
+        st.plotly_chart(fig_funnel, use_container_width=True)
+
     # SEZIONE EDIT / DELETE (SOLO ADMIN)
     # =========================
     if role != "admin":
@@ -3049,6 +3106,12 @@ def page_finance_dashboard():
         else:
             st.metric("Giorni medi incasso", "n.d.")
 
+    # Alert margine negativo / basso
+    if margine_assoluto < 0:
+        st.error("⚠️ Margine del periodo **NEGATIVO**. Verifica entrate e uscite nel range selezionato.")
+    elif margine_percentuale < 10:
+        st.warning("⚠️ Margine percentuale del periodo sotto il 10%.")
+
     # ---------- Grafici ----------
     if not df_kpi.empty:
         st.subheader("📊 Entrate vs Uscite per mese")
@@ -3187,6 +3250,10 @@ def page_finance_dashboard():
             df_future = pd.DataFrame({"mese": future_mesi})
             df_future["t"] = range(len(df_cf_sorted) + 1, len(df_cf_sorted) + mesi_forecast + 1)
             df_future["Cash_flow_forecast"] = beta0 + beta1 * df_future["t"]
+
+            # Alert se uno o più mesi futuri hanno cash flow previsto negativo
+            if (df_future["Cash_flow_forecast"] < 0).any():
+                st.error("⚠️ Attenzione: uno o più mesi futuri hanno cash flow previsto **negativo**.")
 
             df_forecast_plot = pd.DataFrame({
                 "mese": df_cf_sorted["mese"],
