@@ -3085,7 +3085,7 @@ def page_finance_dashboard():
 
     # ---------- Grafici ----------
     if not df_kpi.empty:
-          st.subheader("Entrate vs Uscite per mese")
+        st.subheader("Entrate vs Uscite per mese")
         fig_eu = px.bar(
             df_kpi,
             x="mese",
