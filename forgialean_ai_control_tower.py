@@ -1775,6 +1775,14 @@ def page_payments():
         <EsigibilitaIVA>I</EsigibilitaIVA>
       </DatiRiepilogo>
     </DatiBeniServizi>
+    <DatiPagamento>
+      <CondizioniPagamento>TP02</CondizioniPagamento>
+      <DettaglioPagamento>
+        <ModalitaPagamento>MP01</ModalitaPagamento>
+        <DataScadenzaPagamento>{inv.data_scadenza or inv.data_fattura}</DataScadenzaPagamento>
+        <ImportoPagamento>{inv.importo_totale:.2f}</ImportoPagamento>
+      </DettaglioPagamento>
+    </DatiPagamento>
   </FatturaElettronicaBody>
 </FatturaElettronica>
 """
