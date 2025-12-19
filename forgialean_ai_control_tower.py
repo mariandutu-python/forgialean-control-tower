@@ -2854,6 +2854,7 @@ def page_finance_dashboard():
     with col_f2:
         data_a = st.date_input("A data", value=date.today())
 
+    # Carico dati base entrate/uscite
     with get_session() as session:
         invoices = session.exec(select(Invoice)).all()
         expenses = session.exec(select(Expense)).all()
@@ -2861,8 +2862,88 @@ def page_finance_dashboard():
     df_inv = pd.DataFrame([i.__dict__ for i in (invoices or [])])
     df_exp = pd.DataFrame([e.__dict__ for e in (expenses or [])])
 
+    # ========= FILTRI AVANZATI =========
+    st.markdown("### Filtri avanzati")
+
+    # Carico anagrafiche per i filtri
+    with get_session() as session:
+        clients_all = session.exec(select(Client)).all()
+        commesse_all = session.exec(select(ProjectCommessa)).all()
+        categories_all = session.exec(select(ExpenseCategory)).all()
+        accounts_all = session.exec(select(Account)).all()
+
+    df_clients = pd.DataFrame([c.__dict__ for c in (clients_all or [])])
+    df_commesse = pd.DataFrame([c.__dict__ for c in (commesse_all or [])])
+    df_categories = pd.DataFrame([c.__dict__ for c in (categories_all or [])])
+    df_accounts = pd.DataFrame([a.__dict__ for a in (accounts_all or [])])
+
+    col_fa1, col_fa2 = st.columns(2)
+    with col_fa1:
+        # Filtro cliente (fatture)
+        if not df_clients.empty and "ragione_sociale" in df_clients.columns:
+            client_opt = ["Tutti"] + df_clients["ragione_sociale"].dropna().unique().tolist()
+        else:
+            client_opt = ["Tutti"]
+        sel_client = st.selectbox("Cliente", client_opt)
+
+        # Filtro commessa (fatture + spese)
+        if not df_commesse.empty and "cod_commessa" in df_commesse.columns:
+            comm_opt = ["Tutte"] + df_commesse["cod_commessa"].dropna().unique().tolist()
+        else:
+            comm_opt = ["Tutte"]
+        sel_commessa = st.selectbox("Commessa", comm_opt)
+    with col_fa2:
+        # Filtro categoria costo (spese)
+        if not df_categories.empty and "nome" in df_categories.columns:
+            cat_opt = ["Tutte"] + df_categories["nome"].dropna().unique().tolist()
+        else:
+            cat_opt = ["Tutte"]
+        sel_cat = st.selectbox("Categoria costo", cat_opt)
+
+        # Filtro conto (spese)
+        if not df_accounts.empty and "nome" in df_accounts.columns:
+            acc_opt = ["Tutti"] + df_accounts["nome"].dropna().unique().tolist()
+        else:
+            acc_opt = ["Tutti"]
+        sel_acc = st.selectbox("Conto finanziario", acc_opt)
+
+    # Applico filtri avanzati a df_inv e df_exp
+
+    # Filtro fatture per cliente
+    if not df_inv.empty and sel_client != "Tutti" and not df_clients.empty:
+        row_cli = df_clients[df_clients["ragione_sociale"] == sel_client]
+        if not row_cli.empty:
+            client_id_sel = row_cli.iloc[0]["client_id"]
+            df_inv = df_inv[df_inv["client_id"] == client_id_sel]
+
+    # Filtro fatture e spese per commessa
+    if sel_commessa != "Tutte" and not df_commesse.empty:
+        row_comm = df_commesse[df_commesse["cod_commessa"] == sel_commessa]
+        if not row_comm.empty:
+            comm_id_sel = row_comm.iloc[0]["commessa_id"]
+            if not df_inv.empty and "commessa_id" in df_inv.columns:
+                df_inv = df_inv[df_inv["commessa_id"] == comm_id_sel]
+            if not df_exp.empty and "commessa_id" in df_exp.columns:
+                df_exp = df_exp[df_exp["commessa_id"] == comm_id_sel]
+
+    # Filtro spese per categoria
+    if not df_exp.empty and sel_cat != "Tutte" and not df_categories.empty:
+        row_cat = df_categories[df_categories["nome"] == sel_cat]
+        if not row_cat.empty:
+            cat_id_sel = row_cat.iloc[0]["category_id"]
+            df_exp = df_exp[df_exp["category_id"] == cat_id_sel]
+
+    # Filtro spese per conto
+    if not df_exp.empty and sel_acc != "Tutti" and not df_accounts.empty:
+        row_acc = df_accounts[df_accounts["nome"] == sel_acc]
+        if not row_acc.empty:
+            acc_id_sel = row_acc.iloc[0]["account_id"]
+            df_exp = df_exp[df_exp["account_id"] == acc_id_sel]
+
+    # ========= LOGICA KPI & GRAFICI (usa df_inv/df_exp filtrati) =========
+
     if df_inv.empty and df_exp.empty:
-        st.info("Nessun dato di entrate o uscite nel sistema.")
+        st.info("Nessun dato di entrate o uscite nel sistema (o con i filtri selezionati).")
         return
 
     # ---------- ENTRATE (Fatture incassate) ----------
@@ -3026,7 +3107,6 @@ def page_finance_dashboard():
     st.markdown("---")
     st.subheader("📦 Margine per commessa (periodo)")
 
-    # Servono commesse e almeno qualche fattura/spesa collegata
     if not df_inv.empty or not df_exp.empty:
         with get_session() as session:
             commesse_map = {
@@ -3034,7 +3114,6 @@ def page_finance_dashboard():
                 for c in session.exec(select(ProjectCommessa)).all()
             }
 
-        # Entrate per commessa (dalle fatture)
         if not df_inv.empty and "commessa_id" in df_inv.columns:
             df_inv_comm = df_inv.copy()
             df_inv_comm["Commessa"] = df_inv_comm["commessa_id"].map(commesse_map).fillna("Senza commessa")
@@ -3047,7 +3126,6 @@ def page_finance_dashboard():
         else:
             entrate_commessa = pd.DataFrame(columns=["commessa_id", "Commessa", "Entrate_commessa"])
 
-        # Uscite per commessa (dalle spese)
         if not df_exp.empty and "commessa_id" in df_exp.columns:
             df_exp_comm = df_exp.copy()
             df_exp_comm["Commessa"] = df_exp_comm["commessa_id"].map(commesse_map).fillna("Senza commessa")
@@ -3060,7 +3138,6 @@ def page_finance_dashboard():
         else:
             uscite_commessa = pd.DataFrame(columns=["commessa_id", "Commessa", "Uscite_commessa"])
 
-        # Merge entrate/uscite per commessa
         if not entrate_commessa.empty or not uscite_commessa.empty:
             df_comm = pd.merge(
                 entrate_commessa,
@@ -3070,8 +3147,6 @@ def page_finance_dashboard():
             ).fillna(0.0)
 
             df_comm["Margine_commessa"] = df_comm["Entrate_commessa"] - df_comm["Uscite_commessa"]
-
-            # Ordina per margine decrescente
             df_comm = df_comm.sort_values("Margine_commessa", ascending=False)
 
             st.dataframe(
@@ -3086,7 +3161,6 @@ def page_finance_dashboard():
                 )
             )
 
-            # Grafico barre margine per commessa
             fig_comm = px.bar(
                 df_comm,
                 x="Commessa",
@@ -3146,7 +3220,6 @@ def page_finance_dashboard():
     st.markdown("---")
     st.subheader("📅 Sintesi Entrate / Uscite / Margine per anno")
 
-    # Ricalcolo versioni non filtrate per anno (su tutto il DB)
     with get_session() as session:
         invoices_all = session.exec(select(Invoice)).all()
         expenses_all = session.exec(select(Expense)).all()
@@ -3157,7 +3230,6 @@ def page_finance_dashboard():
     if df_inv_all.empty and df_exp_all.empty:
         st.info("Nessun dato storico disponibile per la sintesi per anno.")
     else:
-        # Entrate per anno
         if not df_inv_all.empty:
             df_inv_all["data_riferimento"] = df_inv_all["data_incasso"].fillna(df_inv_all["data_fattura"])
             df_inv_all["data_riferimento"] = pd.to_datetime(df_inv_all["data_riferimento"], errors="coerce")
@@ -3172,7 +3244,6 @@ def page_finance_dashboard():
         else:
             entrate_anno = pd.DataFrame(columns=["anno", "Entrate"])
 
-        # Uscite per anno
         if not df_exp_all.empty:
             df_exp_all["data"] = pd.to_datetime(df_exp_all["data"], errors="coerce")
             df_exp_all = df_exp_all.dropna(subset=["data"])
@@ -3186,8 +3257,7 @@ def page_finance_dashboard():
         else:
             uscite_anno = pd.DataFrame(columns=["anno", "Uscite"])
 
-        # Merge e calcolo margine per anno
-        df_year = pd.merge(entrate_anno, uscite_anno, on="anno", how="outer").fillna(0.0)
+        df_year = pd.merge(entrate_anno, uscite_anno, on("anno"), how="outer").fillna(0.0)
         if df_year.empty:
             st.info("Nessun dato aggregato per anno disponibile.")
         else:
@@ -3363,8 +3433,8 @@ def page_finance_dashboard():
         st.info("Nessuna spesa registrata.")
         return
 
-    df_exp = pd.DataFrame([e.__dict__ for e in expenses])
-    st.dataframe(df_exp)
+    df_exp_list = pd.DataFrame([e.__dict__ for e in expenses])
+    st.dataframe(df_exp_list)
 
 # =========================
 # ROUTER
