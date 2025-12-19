@@ -81,85 +81,109 @@ st.set_page_config(
 )
 
 def page_presentation():
-    st.title("ForgiaLean - quando l'OEE fa male")
+    # HERO: chi sei e che beneficio dai
+    st.title("🏭 Turni lunghi, OEE basso e margini sotto pressione?")
 
-    st.subheader("Domanda iniziale")
     st.markdown("""
-- OEE medio della tua linea principale è:
-  - superiore all'85%?
-  - tra 80% e 85%?
-  - tra 70% e 80%?
-  - sotto il 70%?
+**Da qui inizia il tuo check OEE in 3 minuti.**
 
-Se non conosci il valore, questo è già un primo campanello d'allarme.
+Se gestisci **impianti o linee automatiche** (elettronica, metalmeccanico, packaging, food, ecc.)
+e vedi che produzione e margini non tornano, probabilmente ti ritrovi in almeno uno di questi punti:
+- L'OEE reale delle tue linee è tra **60% e 80%**, oppure nessuno sa dirti il valore.
+- Fermi, cambi formato/setup, lotti urgenti e scarti stanno mangiando capacità ogni giorno.
+- Straordinari continui, ma clienti comunque insoddisfatti e margini sotto pressione.
 """)
 
-    st.subheader("Segnali che l'OEE sta facendo male")
+    # PAIN: rendere esplicito il dolore quotidiano
+    st.subheader("Il problema reale: sprechi invisibili e margini erosi")
+
     st.markdown("""
-- Fermi impianto ricorrenti, ma senza una visione chiara delle cause principali.
-- Scarti di qualità che aumentano, gestiti solo a consuntivo.
-- Performance macchina lontana dai valori di targa, senza un monitoraggio continuo.
-- Report e file Excel che richiedono molto tempo, ma danno poche risposte operative.
+- Fermi macchina ricorrenti che equivalgono anche a **4 ore/giorno perse**.
+- Cambi setup che bloccano le linee e generano ritardi a catena.
+- Lotti urgenti che mandano in caos il piano e fanno salire gli scarti (anche **8–10%**).
+- Excel, riunioni e report che richiedono tempo ma non dicono chiaramente **dove** intervenire.
+
+Risultato: impianti da **centinaia di migliaia di euro** che lavorano sotto il 70–75% di OEE e margini che si assottigliano.
 """)
 
-    st.subheader("Perché l'OEE è il KPI centrale")
+    # SOLUZIONE: cosa fa ForgiaLean
+    st.subheader("La nostra proposta: +16% OEE in 90 giorni")
+
     st.markdown("""
-- Combina disponibilità, performance e qualità in un unico indicatore.
-- Un OEE inferiore all'80% indica un importante potenziale di recupero capacità.
-- Lavorare sull'OEE significa agire contemporaneamente su fermi, velocità e scarti.
+ForgiaLean unisce **Black Belt Lean Six Sigma**, **Operations Management** e **dashboard real‑time Industry 4.0** per:
+
+- Rendere visibili le perdite principali (fermi, velocità, scarti) per linea e per turno.
+- Tradurre l'OEE in **€/giorno di spreco** comprensibili per il management.
+- Costruire un piano d'azione mirato per recuperare capacità, ridurre straordinari e migliorare il livello di servizio.
+
+**Caso reale – elettronica (EMS):**
+- OEE da **68% → 86%**.
+- Fermi **-82%**.
+- Circa **28.000 €/anno** di capacità recuperata, scarti dal 9% al 2%.
 """)
 
-    st.subheader("Cosa offre ForgiaLean")
+    # DIFFERENZIAZIONE: perché voi
+    st.subheader("Perché scegliere ForgiaLean rispetto ad altre soluzioni")
+
     st.markdown("""
-- Supporto a PMI manifatturiere con OEE inferiore all'80%.
-- Analisi dei dati esistenti (Excel, sistemi di produzione, report interni).
-- Costruzione di dashboard chiare per rendere visibili le perdite principali.
-- Definizione di azioni concrete di miglioramento su disponibilità, performance e qualità.
+- **Non è solo software**: integriamo analisi dati, miglioramento continuo e coaching operativo in reparto.
+- **Parliamo la lingua degli impianti**: lavoriamo su fermi, setup, scarti e flussi reali, non solo su KPI teorici.
+- **Focus su risultati misurabili**: OEE, capacità recuperata e margine in € sono il centro del progetto.
+- **Rischio ribaltato**: obiettivo tipico **+16% OEE in 90 giorni**; se il progetto non genera valore, lo mettiamo nero su bianco.
 """)
 
-    st.subheader("Come procedere")
+    # OFFERTA: lead magnet
+    st.subheader("Mini‑report OEE gratuito in 3 minuti")
+
     st.markdown("""
-1. Raccogli il valore di OEE medio degli ultimi mesi (in %).
-2. Descrivi brevemente la tipologia di linea/impianto.
-3. Contatta ForgiaLean per un primo check senza impegno.
+Compilando il form qui sotto riceverai via email un **mini‑report OEE** con:
+- Una stima del tuo **OEE reale** sulla tua linea o macchina principale.
+- Una quantificazione in **€/giorno** della capacità che stai perdendo **per una macchina/linea**.
+- Una stima dell'impatto se hai **più macchine/linee simili** (es. 3 linee = circa 3× perdita €/giorno).
+- **3 leve di miglioramento immediate** su cui iniziare a lavorare.
 
-ForgiaLean - Crevalcore (BO) 
-
+Questo è il primo passo: se i numeri confermano il pain, potrai prenotare un **Audit 30 minuti + piano personalizzato**.
 """)
 
     # =====================
     # FORM: RICHIEDI REPORT OEE (visibile a tutti)
     # =====================
     st.markdown("---")
-    st.subheader("Richiedi il tuo report OEE ForgiaLean")
+    st.subheader("Richiedi il tuo mini‑report OEE ForgiaLean")
 
     with st.form("lead_oee_form"):
         nome = st.text_input("Nome e cognome")
         azienda = st.text_input("Azienda")
         email = st.text_input("Email aziendale")
         descrizione = st.text_area("Descrizione impianto / linea principale")
-        ore_fermi = st.number_input(
-            "Ore di fermo macchina per turno (stima)", min_value=0.0, step=0.5
-        )
-        scarti = st.number_input(
-            "Percentuale scarti / rilavorazioni (%)",
-            min_value=0.0,
-            max_value=100.0,
-            step=0.5,
-        )
-        velocita = st.number_input(
-            "Velocità reale vs nominale (%)",
-            min_value=0.0,
-            max_value=200.0,
-            step=1.0,
-        )
-        valore_orario = st.number_input(
-            "Valore economico di 1 ora di produzione (€ / ora, stima)",
-            min_value=0.0,
-            step=10.0,
-        )
 
-        submitted = st.form_submit_button("Richiedi report OEE")
+        col_f1, col_f2 = st.columns(2)
+        with col_f1:
+            ore_fermi = st.number_input(
+                "Ore di fermo macchina per turno (stima)",
+                min_value=0.0,
+                step=0.5,
+            )
+            scarti = st.number_input(
+                "Percentuale scarti / rilavorazioni (%)",
+                min_value=0.0,
+                max_value=100.0,
+                step=0.5,
+            )
+        with col_f2:
+            velocita = st.number_input(
+                "Velocità reale vs nominale (%)",
+                min_value=0.0,
+                max_value=200.0,
+                step=1.0,
+            )
+            valore_orario = st.number_input(
+                "Valore economico di 1 ora di produzione (€ / ora, stima)",
+                min_value=0.0,
+                step=10.0,
+            )
+
+        submitted = st.form_submit_button("Ottieni il mini‑report OEE")
 
     if submitted:
         if not (nome and azienda and email):
@@ -171,7 +195,7 @@ ForgiaLean - Crevalcore (BO)
                     new_client = Client(
                         ragione_sociale=azienda,
                         email=email,
-                        canale_acquisizione="Demo OEE LinkedIn",
+                        canale_acquisizione="Landing OEE",
                         segmento_cliente="PMI manifatturiera",
                         data_creazione=date.today(),
                         stato_cliente="prospect",
@@ -200,7 +224,8 @@ ForgiaLean - Crevalcore (BO)
                     session.commit()
 
                 st.success(
-                    "Richiesta ricevuta. Ti contatterò via email per condividere il report OEE e approfondire i risultati."
+                    "Richiesta ricevuta. Riceverai via email il mini‑report OEE con la stima degli sprechi €/giorno per una macchina/linea, "
+                    "una proiezione per più asset simili e 3 leve di azione prioritarie."
                 )
             except Exception as e:
                 st.error("Si è verificato un errore nel salvataggio del lead OEE.")
@@ -211,7 +236,14 @@ ForgiaLean - Crevalcore (BO)
     # =====================
     role = st.session_state.get("role", "user")
     if role != "admin":
-        return  # il cliente vede solo landing + form
+        # Il cliente vede solo landing + form
+        st.markdown("""
+Se hai linee o impianti che lavorano sotto l'80% di OEE, **continuare così è la scelta più costosa**.
+
+Compila il form qui sopra per il mini‑report OEE gratuito: sarà la base per valutare
+se un progetto ForgiaLean può portarti **+16% OEE e più margine**, senza perdere altro tempo in riunioni sterili.
+""")
+        return
 
     st.markdown("---")
     st.subheader("Calcolatore rapido OEE e perdita economica (uso interno)")
@@ -285,12 +317,18 @@ ForgiaLean - Crevalcore (BO)
                 st.write(f"OEE stimato: **{oee*100:.1f}%** (target {oee_target*100:.0f}%)")
                 st.write(f"Gap OEE: **{gap_oee*100:.1f} punti**")
 
-                st.write(f"Capacità persa per turno: **{capacita_persa_turno:.2f} ore equivalenti**")
-                st.write(f"Perdita economica per turno: **€ {perdita_euro_turno:,.0f}**")
+                st.write(f"Capacità persa per turno (1 macchina/linea): **{capacita_persa_turno:.2f} ore equivalenti**")
+                st.write(f"Perdita economica per turno (1 macchina/linea): **€ {perdita_euro_turno:,.0f}**")
+
+                st.write(
+                    "⚠️ Nota: questi calcoli si riferiscono a **una macchina/linea**. "
+                    "Se hai N macchine/linee simili, l'impatto potenziale è circa N× queste cifre."
+                )
 
                 if turni_anno > 0:
                     perdita_annua = perdita_euro_turno * turni_anno
-                    st.write(f"Perdita economica stimata per anno: **€ {perdita_annua:,.0f}**")
+                    st.write(f"Perdita economica stimata per anno (1 macchina/linea): **€ {perdita_annua:,.0f}**")
+                    st.write("Per più macchine/linee simili moltiplica questa stima per il numero di asset.")
      
 # =========================
 # PAGINA: OVERVIEW
