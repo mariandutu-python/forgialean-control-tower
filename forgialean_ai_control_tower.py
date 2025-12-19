@@ -298,7 +298,30 @@ ForgiaLean - Crevalcore (BO)
 
 def page_overview():
     st.title(f"🏢 {APP_NAME} Overview")
-    
+    # KPI sintetici
+    st.subheader("📊 KPI sintetici")
+
+    # Esempi di calcolo (adatta alle tue colonne reali)
+    margine_tot = df_invoices["importo"].sum() if not df_invoices.empty else 0
+
+    val_pipeline = df_opps["valore"].sum() if not df_opps.empty else 0
+    val_atteso = (df_opps["valore"] * df_opps["probabilita"]).sum() if not df_opps.empty else 0
+
+    if not df_commesse.empty and "ore_previste" in df_commesse and "ore_consumate" in df_commesse:
+        df_commesse["ratio"] = df_commesse["ore_consumate"] / df_commesse["ore_previste"]
+        avanz_commesse = df_commesse["ratio"].mean()
+    else:
+        avanz_commesse = None
+
+    col_a, col_b, col_c = st.columns(3)
+    with col_a:
+        st.metric("Margine periodo", f"{margine_tot:,.0f} €")
+    with col_b:
+        st.metric("Pipeline totale / attesa", f"{val_pipeline:,.0f} €", f"{val_atteso:,.0f} €")
+    with col_c:
+        st.metric("Avanzamento medio commesse", 
+                  f"{avanz_commesse:.0%}" if avanz_commesse is not None else "—")
+   
     # ✅ USA LE FUNZIONI CACHED
     clients = get_all_clients()
     opps = get_all_opportunities()
