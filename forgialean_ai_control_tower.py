@@ -1269,23 +1269,69 @@ def page_payments():
     st.title("💶 Incassi / Scadenze")
     role = st.session_state.get("role", "user")
 
-    # Carico fatture
+    # =========================
+    # CARICO FATTURE E COSTRUISCO LABEL
+    # =========================
     with get_session() as session:
         invoices = session.exec(select(Invoice)).all()
 
     if not invoices:
-        st.info("Nessuna fattura registrata.")
+        st.info("Nessuna fattura registrata. Prima inserisci almeno una fattura nella pagina Finanza / Fatture.")
         return
 
     df_inv = pd.DataFrame([i.__dict__ for i in invoices])
-    df_inv["label"] = df_inv["invoice_id"].astype(str) + " - " + df_inv["num_fattura"]
 
+    # Etichetta: ID - Numero fattura - Cliente - Totale - Stato
+    with get_session() as session:
+        clients = session.exec(select(Client)).all()
+    df_clients = pd.DataFrame([c.__dict__ for c in clients]) if clients else pd.DataFrame()
+
+    df_inv["label"] = df_inv["invoice_id"].astype(str) + " - " + df_inv["num_fattura"].astype(str)
+
+    if not df_clients.empty:
+        df_clients = df_clients.rename(columns={"client_id": "client_id"})
+        df_inv = df_inv.merge(
+            df_clients[["client_id", "ragione_sociale"]],
+            how="left",
+            on="client_id",
+        )
+        df_inv["label"] = (
+            df_inv["invoice_id"].astype(str)
+            + " - "
+            + df_inv["num_fattura"].astype(str)
+            + " - "
+            + df_inv["ragione_sociale"].fillna("")
+        )
+
+    df_inv["label"] = df_inv["label"] + " - " + df_inv["importo_totale"].fillna(0).astype(float).map(lambda x: f"€ {x:,.2f}")
+    df_inv["label"] = df_inv["label"] + " - " + df_inv["stato_pagamento"].fillna("emessa")
+
+    # =========================
+    # NUOVO INCASSO (con precompilazione dalla fattura)
+    # =========================
     st.subheader("➕ Registra nuovo incasso")
 
     with st.form("new_payment"):
         invoice_label = st.selectbox("Fattura", df_inv["label"].tolist())
+        invoice_id_sel = int(invoice_label.split(" - ")[0])
+
+        fattura_sel = df_inv[df_inv["invoice_id"] == invoice_id_sel].iloc[0]
+        importo_totale_fattura = float(fattura_sel["importo_totale"] or 0.0)
+
+        with get_session() as session:
+            pays_existing = session.exec(
+                select(Payment).where(Payment.invoice_id == invoice_id_sel)
+            ).all()
+        totale_gia_incassato = sum(p.amount for p in pays_existing) if pays_existing else 0.0
+        residuo = importo_totale_fattura - totale_gia_incassato
+
+        st.write(f"Totale fattura: € {importo_totale_fattura:,.2f}")
+        st.write(f"Già incassato: € {totale_gia_incassato:,.2f}")
+        st.write(f"Residuo: € {residuo:,.2f}")
+
         payment_date = st.date_input("Data pagamento", value=date.today())
-        amount = st.number_input("Importo incassato (€)", min_value=0.0, step=50.0)
+        default_amount = max(residuo, 0.0) if residuo > 0 else 0.0
+        amount = st.number_input("Importo incassato (€)", min_value=0.0, step=50.0, value=default_amount)
         method = st.text_input("Metodo (bonifico, carta, contanti...)", "bonifico")
         note = st.text_area("Note", "")
 
@@ -1295,7 +1341,6 @@ def page_payments():
         if amount <= 0:
             st.warning("L'importo deve essere maggiore di zero.")
         else:
-            invoice_id_sel = int(invoice_label.split(" - ")[0])
             with get_session() as session:
                 new_pay = Payment(
                     invoice_id=invoice_id_sel,
@@ -1305,8 +1350,20 @@ def page_payments():
                     note=note.strip() or None,
                 )
                 session.add(new_pay)
+
+                inv_obj = session.get(Invoice, invoice_id_sel)
+                if inv_obj:
+                    pays_all = session.exec(
+                        select(Payment).where(Payment.invoice_id == invoice_id_sel)
+                    ).all()
+                    totale_incassato = sum(p.amount for p in pays_all)
+                    if totale_incassato >= inv_obj.importo_totale:
+                        inv_obj.stato_pagamento = "incassata"
+                        inv_obj.data_incasso = payment_date
+                    session.add(inv_obj)
+
                 session.commit()
-            st.success("Incasso registrato.")
+            st.success("Incasso registrato e stato fattura aggiornato (se completamente incassata).")
             st.rerun()
 
     st.markdown("---")
@@ -1320,6 +1377,14 @@ def page_payments():
         return
 
     df_pay = pd.DataFrame([p.__dict__ for p in pays])
+
+    df_pay = df_pay.merge(
+        df_inv[["invoice_id", "num_fattura", "ragione_sociale"]] if "ragione_sociale" in df_inv.columns else df_inv[["invoice_id", "num_fattura"]],
+        how="left",
+        left_on="invoice_id",
+        right_on="invoice_id",
+    )
+
     st.dataframe(df_pay)
 
     # =========================
