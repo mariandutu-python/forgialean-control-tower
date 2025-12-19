@@ -2940,6 +2940,8 @@ def page_finance_dashboard():
             acc_id_sel = row_acc.iloc[0]["account_id"]
             df_exp = df_exp[df_exp["account_id"] == acc_id_sel]
 
+
+ 
     # ========= LOGICA KPI & GRAFICI (usa df_inv/df_exp filtrati) =========
 
     if df_inv.empty and df_exp.empty:
@@ -2948,21 +2950,48 @@ def page_finance_dashboard():
 
     # ---------- ENTRATE (Fatture incassate) ----------
     if not df_inv.empty:
-        df_inv["data_riferimento"] = df_inv["data_incasso"].fillna(df_inv["data_fattura"])
-        df_inv["data_riferimento"] = pd.to_datetime(df_inv["data_riferimento"], errors="coerce")
-        df_inv = df_inv.dropna(subset=["data_riferimento"])
-        df_inv = df_inv[
-            (df_inv["data_riferimento"] >= pd.to_datetime(data_da)) &
-            (df_inv["data_riferimento"] <= pd.to_datetime(data_a))
-        ]
-        df_inv["mese"] = df_inv["data_riferimento"].dt.to_period("M").dt.to_timestamp()
-        entrate_mensili = (
-            df_inv.groupby("mese")["importo_totale"].sum().rename("Entrate").reset_index()
-        )
-        totale_entrate = df_inv["importo_totale"].sum()
+
+        # Filtro per stato fattura
+        if filtro_stato != "Tutti":
+            if "stato_fattura" in df_inv.columns:
+                df_inv = df_inv[df_inv["stato_fattura"] == filtro_stato]
+
+        # Se dopo il filtro non resta nulla
+        if df_inv.empty:
+            entrate_mensili = pd.DataFrame(columns=["mese", "Entrate"])
+            totale_entrate = 0.0
+            giorni_medi_incasso = None
+        else:
+            # Logica esistente
+            df_inv["data_riferimento"] = df_inv["data_incasso"].fillna(df_inv["data_fattura"])
+            df_inv["data_riferimento"] = pd.to_datetime(df_inv["data_riferimento"], errors="coerce")
+            df_inv = df_inv.dropna(subset=["data_riferimento"])
+            df_inv = df_inv[
+                (df_inv["data_riferimento"] >= pd.to_datetime(data_da)) &
+                (df_inv["data_riferimento"] <= pd.to_datetime(data_a))
+            ]
+            df_inv["mese"] = df_inv["data_riferimento"].dt.to_period("M").dt.to_timestamp()
+            entrate_mensili = (
+                df_inv.groupby("mese")["importo_totale"].sum().rename("Entrate").reset_index()
+            )
+            totale_entrate = df_inv["importo_totale"].sum()
+
+            # Giorni incasso per fatture incassate (data_incasso non nulla)
+            df_incassate = df_inv.dropna(subset=["data_incasso", "data_fattura"]).copy()
+            if not df_incassate.empty:
+                df_incassate["data_incasso"] = pd.to_datetime(df_incassate["data_incasso"], errors="coerce")
+                df_incassate["data_fattura"] = pd.to_datetime(df_incassate["data_fattura"], errors="coerce")
+                df_incassate = df_incassate.dropna(subset=["data_incasso", "data_fattura"])
+                df_incassate["giorni_incasso"] = (
+                    df_incassate["data_incasso"] - df_incassate["data_fattura"]
+                ).dt.days
+                giorni_medi_incasso = df_incassate["giorni_incasso"].mean()
+            else:
+                giorni_medi_incasso = None
     else:
         entrate_mensili = pd.DataFrame(columns=["mese", "Entrate"])
         totale_entrate = 0.0
+        giorni_medi_incasso = None
 
     # ---------- USCITE (Spese) ----------
     if not df_exp.empty:
@@ -2990,29 +3019,61 @@ def page_finance_dashboard():
     ).fillna(0.0)
     df_kpi["Margine"] = df_kpi["Entrate"] - df_kpi["Uscite"]
 
+    # KPI di periodo
+    margine_assoluto = totale_entrate - totale_uscite
+    margine_percentuale = (margine_assoluto / totale_entrate * 100) if totale_entrate != 0 else 0
+
+    # KPI medi mensili
+    num_mesi = len(df_kpi)
+    cash_flow_medio_mensile = (margine_assoluto / num_mesi) if num_mesi > 0 else 0
+    margine_medio_mensile = df_kpi["Margine"].mean() if num_mesi > 0 else 0
+
     # ---------- KPI sintetici ----------
-    st.subheader("KPI periodo selezionato")
+    st.subheader("📊 KPI Finanza – periodo selezionato", divider="blue")
     col_k1, col_k2, col_k3 = st.columns(3)
     with col_k1:
         st.metric("Entrate totali", f"{totale_entrate:,.2f} €".replace(",", " "))
     with col_k2:
         st.metric("Uscite totali", f"{totale_uscite:,.2f} €".replace(",", " "))
     with col_k3:
-        st.metric("Margine", f"{(totale_entrate - totale_uscite):,.2f} €".replace(",", " "))
+        st.metric("Margine", f"{margine_assoluto:,.2f} €".replace(",", " "))
+
+    col_k4, col_k5, col_k6 = st.columns(3)
+    with col_k4:
+        st.metric("Margine % periodo", f"{margine_percentuale:,.1f} %".replace(",", " "))
+    with col_k5:
+        st.metric("Cash flow medio mensile", f"{cash_flow_medio_mensile:,.2f} €".replace(",", " "))
+    with col_k6:
+        if giorni_medi_incasso is not None:
+            st.metric("Giorni medi incasso", f"{giorni_medi_incasso:.1f} gg")
+        else:
+            st.metric("Giorni medi incasso", "n.d.")
 
     # ---------- Grafici ----------
     if not df_kpi.empty:
-        st.subheader("Entrate vs Uscite per mese")
+        st.subheader("📊 Entrate vs Uscite per mese")
         fig_eu = px.bar(
             df_kpi,
             x="mese",
             y=["Entrate", "Uscite"],
             barmode="group",
             title="Entrate vs Uscite per mese",
+            color_discrete_map={
+                "Entrate": "#1b9e77",  # verde
+                "Uscite": "#d95f02",   # arancione/rosso
+            },
+        )
+        fig_eu.update_traces(
+            hovertemplate="Mese=%{x|%Y-%m}<br>Valore=%{y:,.2f} €<extra></extra>"
+        )
+        fig_eu.update_layout(
+            xaxis_title="Mese",
+            yaxis_title="Importo €",
+            legend_title="Voce",
         )
         st.plotly_chart(fig_eu, use_container_width=True)
 
-        st.subheader("Margine per mese")
+        st.subheader("📈 Margine per mese")
         fig_m = px.line(
             df_kpi,
             x="mese",
@@ -3020,7 +3081,50 @@ def page_finance_dashboard():
             markers=True,
             title="Margine mensile",
         )
+        fig_m.update_traces(
+            line_color="#7570b3",
+            hovertemplate="Mese=%{x|%Y-%m}<br>Margine=%{y:,.2f} €<extra></extra>",
+        )
+        fig_m.update_layout(
+            xaxis_title="Mese",
+            yaxis_title="Margine €",
+        )
         st.plotly_chart(fig_m, use_container_width=True)
+
+        # ---------- Export KPI & forecast ----------
+        st.subheader("⬇️ Export KPI Finanza")
+
+        # Preparo df_kpi per export
+        df_kpi_export = df_kpi.copy()
+        df_kpi_export["mese"] = pd.to_datetime(df_kpi_export["mese"]).dt.strftime("%Y-%m")
+
+        # Provo ad aggiungere anche il forecast, se calcolato
+        try:
+            df_forecast_export = df_future[["mese", "Cash_flow_forecast"]].copy()
+            df_forecast_export["mese"] = pd.to_datetime(df_forecast_export["mese"]).dt.strftime("%Y-%m")
+            df_forecast_export = df_forecast_export.rename(
+                columns={"Cash_flow_forecast": "Cash flow forecast €"}
+            )
+        except Exception:
+            df_forecast_export = None
+
+        # Costruisco un unico CSV “semplice”
+        buffers = []
+
+        buffers.append("=== KPI mensili (Entrate/Uscite/Margine) ===\n")
+        buffers.append(df_kpi_export.to_csv(index=False))
+        if df_forecast_export is not None and not df_forecast_export.empty:
+            buffers.append("\n\n=== Forecast cash flow mensile ===\n")
+            buffers.append(df_forecast_export.to_csv(index=False))
+
+        csv_kpi_all = "".join(buffers).encode("utf-8")
+
+        st.download_button(
+            "⬇️ Scarica KPI & Forecast (CSV)",
+            data=csv_kpi_all,
+            file_name="kpi_finanza_forecast.csv",
+            mime="text/csv",
+        )
 
         # ---------- Cash flow cumulato ----------
         st.subheader("💧 Cash flow cumulato (periodo)")
@@ -3036,9 +3140,163 @@ def page_finance_dashboard():
             markers=True,
             title="Cash flow cumulato nel periodo",
         )
+        fig_cf.update_traces(
+            line_color="#1b9e77",
+            hovertemplate="Mese=%{x|%Y-%m}<br>Cash flow cumulato=%{y:,.2f} €<extra></extra>",
+        )
+        fig_cf.update_layout(
+            xaxis_title="Mese",
+            yaxis_title="Cash flow cumulato €",
+        )
         st.plotly_chart(fig_cf, use_container_width=True)
 
-        st.dataframe(df_kpi)
+        # ---------- Forecast cash flow mensile ----------
+        st.subheader("🔮 Forecast cash flow mensile")
+
+        if len(df_cf) >= 3:
+            df_cf_sorted = df_cf.sort_values("mese").copy()
+            df_cf_sorted["Cash_flow"] = df_cf_sorted["Entrate"] - df_cf_sorted["Uscite"]
+            df_cf_sorted["t"] = range(1, len(df_cf_sorted) + 1)
+
+            x = df_cf_sorted["t"]
+            y = df_cf_sorted["Cash_flow"]
+
+            x_mean = x.mean()
+            y_mean = y.mean()
+            cov_xy = ((x - x_mean) * (y - y_mean)).sum()
+            var_x = ((x - x_mean) ** 2).sum()
+            beta1 = cov_xy / var_x if var_x != 0 else 0
+            beta0 = y_mean - beta1 * x_mean
+
+            mesi_forecast = st.slider(
+                "Mesi futuri da proiettare",
+                min_value=1,
+                max_value=12,
+                value=6,
+                step=1,
+                key="mesi_forecast_cf",
+            )
+
+            last_mese = df_cf_sorted["mese"].max()
+            future_mesi = pd.date_range(
+                start=last_mese + pd.offsets.MonthBegin(1),
+                periods=mesi_forecast,
+                freq="MS",
+            )
+
+            df_future = pd.DataFrame({"mese": future_mesi})
+            df_future["t"] = range(len(df_cf_sorted) + 1, len(df_cf_sorted) + mesi_forecast + 1)
+            df_future["Cash_flow_forecast"] = beta0 + beta1 * df_future["t"]
+
+            df_forecast_plot = pd.DataFrame({
+                "mese": df_cf_sorted["mese"],
+                "Cash_flow": df_cf_sorted["Cash_flow"],
+                "Tipo": "Storico",
+            })
+            df_future_plot = pd.DataFrame({
+                "mese": df_future["mese"],
+                "Cash_flow": df_future["Cash_flow_forecast"],
+                "Tipo": "Forecast",
+            })
+            df_cf_all = pd.concat([df_forecast_plot, df_future_plot], ignore_index=True)
+
+            fig_cf_forecast = px.line(
+                df_cf_all,
+                x="mese",
+                y="Cash_flow",
+                color="Tipo",
+                markers=True,
+                title="Cash flow mensile: storico vs forecast",
+                color_discrete_map={
+                    "Storico": "#1b9e77",
+                    "Forecast": "#7570b3",
+                },
+            )
+            fig_cf_forecast.update_traces(
+                hovertemplate="Mese=%{x|%Y-%m}<br>Cash flow=%{y:,.2f} €<extra>%{legendgroup}</extra>",
+            )
+            fig_cf_forecast.update_layout(
+                xaxis_title="Mese",
+                yaxis_title="Cash flow €",
+                legend_title="Serie",
+            )
+            st.plotly_chart(fig_cf_forecast, use_container_width=True)
+
+            st.dataframe(
+                df_future[["mese", "Cash_flow_forecast"]]
+                .rename(columns={"mese": "Mese", "Cash_flow_forecast": "Cash flow previsto €"})
+            )
+        else:
+            st.info("Dati storici insufficienti per calcolare un forecast (minimo 3 mesi).")
+
+        # ---------- Elenco fatture filtrate ----------
+        st.subheader("📄 Elenco fatture (filtrate)")
+
+        if not df_inv.empty:
+            df_fatture_view = df_inv.copy()
+            cols_candidati = [
+                "numero_fattura",
+                "data_fattura",
+                "data_incasso",
+                "importo_totale",
+                "client_id",
+                "commessa_id",
+                "stato_fattura",
+            ]
+            cols_show = [c for c in cols_candidati if c in df_fatture_view.columns]
+            if cols_show:
+                df_fatture_view = df_fatture_view[cols_show]
+
+            st.dataframe(df_fatture_view)
+
+            csv_fatture = df_fatture_view.to_csv(index=False).encode("utf-8")
+            st.download_button(
+                "⬇️ Scarica elenco fatture (CSV)",
+                data=csv_fatture,
+                file_name="fatture_filtrate.csv",
+                mime="text/csv",
+            )
+        else:
+            st.info("Nessuna fattura da mostrare con i filtri attuali.")
+
+        st.dataframe(
+            df_kpi.style.format({
+                "Entrate": "{:,.2f} €".format,
+                "Uscite": "{:,.2f} €".format,
+                "Margine": "{:,.2f} €".format,
+            })
+        )
+
+        # ---------- Export KPI & forecast ----------
+        st.subheader("⬇️ Export KPI Finanza")
+
+        df_kpi_export = df_kpi.copy()
+        df_kpi_export["mese"] = pd.to_datetime(df_kpi_export["mese"]).dt.strftime("%Y-%m")
+
+        try:
+            df_forecast_export = df_future[["mese", "Cash_flow_forecast"]].copy()
+            df_forecast_export["mese"] = pd.to_datetime(df_forecast_export["mese"]).dt.strftime("%Y-%m")
+            df_forecast_export = df_forecast_export.rename(
+                columns={"Cash_flow_forecast": "Cash flow forecast €"}
+            )
+        except Exception:
+            df_forecast_export = None
+
+        buffers = []
+        buffers.append("=== KPI mensili (Entrate/Uscite/Margine) ===\n")
+        buffers.append(df_kpi_export.to_csv(index=False))
+        if df_forecast_export is not None and not df_forecast_export.empty:
+            buffers.append("\n\n=== Forecast cash flow mensile ===\n")
+            buffers.append(df_forecast_export.to_csv(index=False))
+
+        csv_kpi_all = "".join(buffers).encode("utf-8")
+
+        st.download_button(
+            "⬇️ Scarica KPI & Forecast (CSV)",
+            data=csv_kpi_all,
+            file_name="kpi_finanza_forecast.csv",
+            mime="text/csv",
+        )
     else:
         st.info("Nessun dato nel periodo selezionato.")
     
