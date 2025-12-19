@@ -2029,7 +2029,76 @@ def page_operations():
     else:
         st.info("Nessuna riga di timesheet registrata.")
 
-        # =========================
+    st.markdown("---")
+    st.subheader("📊 KPI commesse e ore lavorate")
+
+    with get_session() as session:
+        commesse_all_kpi = session.exec(select(ProjectCommessa)).all()
+        time_all_kpi = session.exec(select(TimeEntry)).all()
+
+    if not commesse_all_kpi or not time_all_kpi:
+        st.info("Per i KPI servono almeno una commessa e qualche registrazione ore.")
+    else:
+        df_comm_all = pd.DataFrame([c.__dict__ for c in commesse_all_kpi])
+        df_time_all = pd.DataFrame([t.__dict__ for t in time_all_kpi])
+
+        # KPI sintetici
+        ore_totali = df_time_all["ore"].sum()
+        n_commesse_aperte = df_comm_all[
+            df_comm_all["stato_commessa"].isin(["aperta", "in corso"])
+        ].shape[0]
+        ore_previste_tot = df_comm_all["ore_previste"].sum()
+        utilizzo_ore = (ore_totali / ore_previste_tot * 100.0) if ore_previste_tot > 0 else 0.0
+
+        col_k1, col_k2, col_k3 = st.columns(3)
+        with col_k1:
+            st.metric("Ore totali lavorate (tutte le commesse)", f"{ore_totali:.1f} h")
+        with col_k2:
+            st.metric("N. commesse aperte / in corso", int(n_commesse_aperte))
+        with col_k3:
+            st.metric("Utilizzo ore vs previste", f"{utilizzo_ore:.1f} %")
+
+        st.markdown("---")
+        st.subheader("📦 Avanzamento commesse")
+
+        # Avanzamento per commessa: ore_consumate vs ore_previste
+        df_comm_all["Avanzamento_ore_%"] = df_comm_all.apply(
+            lambda r: (r["ore_consumate"] / r["ore_previste"] * 100.0) if r["ore_previste"] > 0 else 0.0,
+            axis=1,
+        )
+
+        st.dataframe(
+            df_comm_all[
+                ["cod_commessa", "stato_commessa", "ore_previste", "ore_consumate", "Avanzamento_ore_%"]
+            ].rename(
+                columns={
+                    "cod_commessa": "Commessa",
+                    "stato_commessa": "Stato",
+                    "ore_previste": "Ore previste",
+                    "ore_consumate": "Ore consumate",
+                    "Avanzamento_ore_%": "Avanzamento ore (%)",
+                }
+            )
+        )
+
+        fig_comm_av = px.bar(
+            df_comm_all,
+            x="cod_commessa",
+            y="Avanzamento_ore_%",
+            color="stato_commessa",
+            title="Avanzamento ore per commessa",
+            labels={
+                "cod_commessa": "Commessa",
+                "Avanzamento_ore_%": "Avanzamento ore (%)",
+                "stato_commessa": "Stato",
+            },
+            range_y=[0, 150],
+        )
+        st.plotly_chart(fig_comm_av, use_container_width=True)
+
+        st.caption("Valori >100% indicano commesse che hanno superato le ore previste.")
+
+    # =========================
     # SEZIONE EDIT / DELETE (SOLO ADMIN)
     # =========================
     if role != "admin":
