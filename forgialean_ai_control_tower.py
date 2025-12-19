@@ -1935,23 +1935,80 @@ def page_operations():
         return
 
     df_all = pd.DataFrame([c.__dict__ for c in commesse_all])
-    st.dataframe(df_all)
+
+    # Calcolo avanzamento % (se ore_previste > 0)
+    if {"ore_previste", "ore_consumate"}.issubset(df_all.columns):
+        df_all["avanzamento_pct"] = df_all.apply(
+            lambda r: (r["ore_consumate"] / r["ore_previste"] * 100.0) if r["ore_previste"] > 0 else 0.0,
+            axis=1,
+        )
+    else:
+        df_all["avanzamento_pct"] = 0.0
+
+    cols_view = [
+        "commessa_id",
+        "cod_commessa",
+        "descrizione_cliente",
+        "stato_commessa",
+        "data_inizio",
+        "data_fine_prevista",
+        "ore_previste",
+        "ore_consumate",
+        "avanzamento_pct",
+    ]
+    cols_view = [c for c in cols_view if c in df_all.columns]
+
+    st.dataframe(
+        df_all[cols_view].rename(
+            columns={
+                "commessa_id": "ID",
+                "cod_commessa": "Commessa",
+                "descrizione_cliente": "Cliente / Descrizione",
+                "stato_commessa": "Stato",
+                "data_inizio": "Inizio",
+                "data_fine_prevista": "Fine prevista",
+                "ore_previste": "Ore previste",
+                "ore_consumate": "Ore consumate",
+                "avanzamento_pct": "Avanzamento %",
+            }
+        ).style.format({
+            "Ore previste": "{:,.1f}".format,
+            "Ore consumate": "{:,.1f}".format,
+            "Avanzamento %": "{:,.1f} %".format,
+        })
+    )
+
+    # Alert commesse critiche (consumo > 100%)
+    if (df_all["avanzamento_pct"] > 100).any():
+        st.error("⚠️ Una o più commesse hanno avanzamento **oltre il 100%** (ore consumate > ore previste).")
 
     st.subheader("📈 Ore previste vs consumate per commessa")
     cols = {"cod_commessa", "ore_previste", "ore_consumate"}
     if cols.issubset(df_all.columns):
         kpi = df_all[list(cols)]
+
         fig_kpi = px.bar(
             kpi,
             x="cod_commessa",
             y=["ore_previste", "ore_consumate"],
             barmode="group",
             title="Ore previste vs consumate per commessa",
+            color_discrete_map={
+                "ore_previste": "#1b9e77",
+                "ore_consumate": "#d95f02",
+            },
+        )
+        fig_kpi.update_traces(
+            hovertemplate="Commessa=%{x}<br>Ore=%{y:,.1f}<extra></extra>"
+        )
+        fig_kpi.update_layout(
+            xaxis_title="Commessa",
+            yaxis_title="Ore",
+            legend_title="Tipo",
         )
         st.plotly_chart(fig_kpi, use_container_width=True)
     else:
         st.info("Mancano colonne per il grafico ore previste/consumate.")
-
 
     st.markdown("---")
     st.subheader("📋 Fasi / Task commesse")
