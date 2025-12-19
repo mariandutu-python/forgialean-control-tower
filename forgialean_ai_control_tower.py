@@ -635,6 +635,47 @@ def page_crm_sales():
 
     df_opps = pd.DataFrame([o.__dict__ for o in opps])
 
+    # ---------- KPI sintetici CRM ----------
+    st.subheader("📊 KPI CRM sintetici")
+
+    df_kpi_crm = df_opps.copy()
+
+    # Valore totale pipeline (solo opportunità aperte)
+    if "stato_opportunita" in df_kpi_crm.columns:
+        df_aperta = df_kpi_crm[df_kpi_crm["stato_opportunita"] == "aperta"].copy()
+    else:
+        df_aperta = df_kpi_crm.copy()
+
+    valore_totale_pipeline = float(df_aperta["valore_stimato"].sum()) if "valore_stimato" in df_aperta.columns else 0.0
+
+    # Valore atteso = valore × probabilità
+    if {"valore_stimato", "probabilita"}.issubset(df_aperta.columns):
+        df_aperta["valore_atteso"] = df_aperta["valore_stimato"] * (df_aperta["probabilita"] / 100.0)
+        valore_atteso_pipeline = float(df_aperta["valore_atteso"].sum())
+    else:
+        valore_atteso_pipeline = 0.0
+
+    # Numero opportunità per fase
+    if "fase_pipeline" in df_kpi_crm.columns:
+        num_opps = len(df_kpi_crm)
+        num_per_fase = df_kpi_crm["fase_pipeline"].value_counts().to_dict()
+    else:
+        num_opps = 0
+        num_per_fase = {}
+
+    col_k1, col_k2, col_k3 = st.columns(3)
+    with col_k1:
+        st.metric("Valore totale pipeline (aperte)", f"{valore_totale_pipeline:,.2f} €".replace(",", " "))
+    with col_k2:
+        st.metric("Valore atteso (aperte)", f"{valore_atteso_pipeline:,.2f} €".replace(",", " "))
+    with col_k3:
+        st.metric("Numero opportunità totali", f"{num_opps}")
+
+    if num_per_fase:
+        fasi_txt = " · ".join([f"{fase}: {count}" for fase, count in num_per_fase.items()])
+        st.caption(f"Distribuzione opportunità per fase: {fasi_txt}")
+
+    # ---------- Filtri funnel ----------
     col1, col2 = st.columns(2)
     with col1:
         fase_opt = ["Tutte"] + sorted(df_opps["fase_pipeline"].dropna().unique().tolist())
@@ -644,7 +685,7 @@ def page_crm_sales():
         if "owner" in df_opps.columns:
             owner_opt += sorted(df_opps["owner"].dropna().unique().tolist())
         f_owner = st.selectbox("Filtro owner", owner_opt)
-
+ 
     df_f = df_opps.copy()
     if f_fase != "Tutte":
         df_f = df_f[df_f["fase_pipeline"] == f_fase]
@@ -2337,7 +2378,10 @@ def page_people_departments():
     else:
         st.info("Prima crea almeno una persona per registrare KPI persona.")
 
-    # Filtro e grafici KPI reparto
+        # Filtro e grafici KPI reparto
+    st.markdown("---")
+    st.subheader("🏭 KPI per reparto (time series)")
+
     if not df_kpi_dept.empty:
         df_kpi_dept["data"] = pd.to_datetime(df_kpi_dept["data"], errors="coerce")
 
@@ -2358,14 +2402,55 @@ def page_people_departments():
                 dept_id = row.iloc[0]["department_id"]
                 df = df[df["department_id"] == dept_id]
 
-        if {"data", "kpi_name", "valore", "target"}.issubset(df.columns):
+        if {"data", "kpi_name", "valore", "target", "unita"}.issubset(df.columns):
             kpi_list = ["Tutti"] + sorted(df["kpi_name"].dropna().unique().tolist())
             sel_kpi = st.selectbox("Seleziona KPI reparto", kpi_list)
             if sel_kpi != "Tutti":
                 df = df[df["kpi_name"] == sel_kpi]
+
             df = df.sort_values("data")
-            st.line_chart(df.set_index("data")[["valore", "target"]])
-            st.dataframe(df)
+
+            # Alert se valori medi sotto target
+            df["scostamento"] = df["valore"] - df["target"]
+            media_scostamento = df["scostamento"].mean()
+            if media_scostamento < 0:
+                st.warning("⚠️ In media il KPI reparto è **sotto target** nel periodo selezionato.")
+
+            fig_dept = px.line(
+                df,
+                x="data",
+                y=["valore", "target"],
+                title=f"Andamento KPI reparto: {sel_kpi if sel_kpi != 'Tutti' else 'tutti'}",
+                color_discrete_map={
+                    "valore": "#1b9e77",
+                    "target": "#d95f02",
+                },
+                markers=True,
+            )
+            fig_dept.update_traces(
+                hovertemplate="Data=%{x|%Y-%m-%d}<br>Valore=%{y:,.2f}<extra>%{legendgroup}</extra>"
+            )
+            fig_dept.update_layout(
+                xaxis_title="Data",
+                yaxis_title="Valore KPI",
+                legend_title="Serie",
+            )
+            st.plotly_chart(fig_dept, use_container_width=True)
+
+            st.dataframe(
+                df[["data", "kpi_name", "valore", "target", "unita"]]
+                .rename(columns={
+                    "data": "Data",
+                    "kpi_name": "KPI",
+                    "valore": "Valore",
+                    "target": "Target",
+                    "unita": "Unità",
+                })
+                .style.format({
+                    "Valore": "{:,.2f}".format,
+                    "Target": "{:,.2f}".format,
+                })
+            )
         else:
             st.info("Dati KPI reparto non completi.")
     else:
@@ -2397,14 +2482,54 @@ def page_people_departments():
                 emp_id = row.iloc[0]["employee_id"]
                 df_e = df_e[df_e["employee_id"] == emp_id]
 
-        if {"data", "kpi_name", "valore", "target"}.issubset(df_e.columns):
+        if {"data", "kpi_name", "valore", "target", "unita"}.issubset(df_e.columns):
             kpi_list_e = ["Tutti"] + sorted(df_e["kpi_name"].dropna().unique().tolist())
             sel_kpi_e = st.selectbox("Seleziona KPI persona", kpi_list_e)
             if sel_kpi_e != "Tutti":
                 df_e = df_e[df_e["kpi_name"] == sel_kpi_e]
+
             df_e = df_e.sort_values("data")
-            st.line_chart(df_e.set_index("data")[["valore", "target"]])
-            st.dataframe(df_e)
+
+            df_e["scostamento"] = df_e["valore"] - df_e["target"]
+            media_scostamento_e = df_e["scostamento"].mean()
+            if media_scostamento_e < 0:
+                st.warning("⚠️ In media il KPI persona è **sotto target** nel periodo selezionato.")
+
+            fig_emp = px.line(
+                df_e,
+                x="data",
+                y=["valore", "target"],
+                title=f"Andamento KPI persona: {sel_emp if sel_emp != 'Tutti' else 'tutti'}",
+                color_discrete_map={
+                    "valore": "#1b9e77",
+                    "target": "#d95f02",
+                },
+                markers=True,
+            )
+            fig_emp.update_traces(
+                hovertemplate="Data=%{x|%Y-%m-%d}<br>Valore=%{y:,.2f}<extra>%{legendgroup}</extra>"
+            )
+            fig_emp.update_layout(
+                xaxis_title="Data",
+                yaxis_title="Valore KPI",
+                legend_title="Serie",
+            )
+            st.plotly_chart(fig_emp, use_container_width=True)
+
+            st.dataframe(
+                df_e[["data", "kpi_name", "valore", "target", "unita"]]
+                .rename(columns={
+                    "data": "Data",
+                    "kpi_name": "KPI",
+                    "valore": "Valore",
+                    "target": "Target",
+                    "unita": "Unità",
+                })
+                .style.format({
+                    "Valore": "{:,.2f}".format,
+                    "Target": "{:,.2f}".format,
+                })
+            )
         else:
             st.info("Dati KPI persona non completi.")
     else:
