@@ -2422,15 +2422,28 @@ def page_people_departments():
         else:
             st.dataframe(df_emp_all)
 
+    # =========================
+    # KPI PEOPLE & ORE (da timesheet)
+    # =========================
+    with get_session() as session:
+        time_all = session.exec(select(TimeEntry)).all()
+
     st.markdown("---")
-    st.subheader("📅 Filtro periodo KPI")
+    st.subheader("📊 KPI People (tutte le persone)")
+    ...
+    # (tutto il blocco KPI + grafico ore per reparto)
+    ...
+    # =========================
+    # FILTRO PERIODO KPI MANUALI (reparto/persona)
+    # =========================
+    st.markdown("---")
+    st.subheader("📅 Filtro periodo KPI (manuali)")
 
     col_k1, col_k2 = st.columns(2)
     with col_k1:
         kpi_da = st.date_input("Da data KPI", value=None, key="kpi_da")
     with col_k2:
         kpi_a = st.date_input("A data KPI", value=None, key="kpi_a")
-
     # =========================
     # INSERIMENTO KPI REPARTO (DATI REALI)
     # =========================
