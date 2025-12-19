@@ -226,7 +226,7 @@ In questo modo hai sia un **miglioramento operativo concreto**, sia la possibili
 """)
 
     st.markdown("""
-Questi esempi sono rappresentativi del tipo di risultati ottenibili quando c'è impegno congiunto 
+Risultati ottenibili quando c'è impegno congiunto 
 tra direzione, produzione e miglioramento continuo.
 """)
     # =====================
@@ -3067,26 +3067,35 @@ def page_finance_dashboard():
 
     # ---------- KPI sintetici ----------
     st.subheader("KPI periodo selezionato")
+
+    margine_val = totale_entrate - totale_uscite
+    margine_perc = (margine_val / totale_entrate * 100.0) if totale_entrate > 0 else 0.0
+
     col_k1, col_k2, col_k3 = st.columns(3)
     with col_k1:
-        st.metric("Entrate totali", f"{totale_entrate:,.2f} €".replace(",", " "))
+        st.metric("Entrate totali", f"€ {totale_entrate:,.0f}".replace(",", "."))
     with col_k2:
-        st.metric("Uscite totali", f"{totale_uscite:,.2f} €".replace(",", " "))
+        st.metric("Uscite totali", f"€ {totale_uscite:,.0f}".replace(",", "."))
     with col_k3:
-        st.metric("Margine", f"{(totale_entrate - totale_uscite):,.2f} €".replace(",", " "))
+        st.metric(
+            "Margine",
+            f"€ {margine_val:,.0f} ({margine_perc:.1f}%)".replace(",", "."),
+            delta=None,
+        )
 
     # ---------- Grafici ----------
     if not df_kpi.empty:
-        st.subheader("Entrate vs Uscite per mese")
+          st.subheader("Entrate vs Uscite per mese")
         fig_eu = px.bar(
             df_kpi,
             x="mese",
             y=["Entrate", "Uscite"],
             barmode="group",
             title="Entrate vs Uscite per mese",
+            labels={"value": "Importo (€)", "mese": "Mese", "variable": "Voce"},
         )
+        fig_eu.update_layout(legend_title_text="")
         st.plotly_chart(fig_eu, use_container_width=True)
-
         st.subheader("Margine per mese")
         fig_m = px.line(
             df_kpi,
