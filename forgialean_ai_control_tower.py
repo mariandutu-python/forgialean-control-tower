@@ -743,6 +743,8 @@ def page_crm_sales():
 
     st.markdown("---")
 
+    st.markdown("---")
+
     # =========================
     # VISTA / FILTRI OPPORTUNITÀ
     # =========================
@@ -756,6 +758,29 @@ def page_crm_sales():
         return
 
     df_opps = pd.DataFrame([o.__dict__ for o in opps])
+
+    # --- KPI di sintesi pipeline (solo opportunità aperte) ---
+    df_open = df_opps[df_opps["stato_opportunita"] == "aperta"].copy()
+
+    if not df_open.empty:
+        df_open["valore_ponderato"] = df_open["valore_stimato"] * df_open["probabilita"] / 100.0
+
+        col_k1, col_k2, col_k3 = st.columns(3)
+        with col_k1:
+            st.metric(
+                "Valore pipeline (aperte)",
+                f"€ {df_open['valore_stimato'].sum():,.0f}".replace(",", "."),
+            )
+        with col_k2:
+            st.metric(
+                "Valore ponderato",
+                f"€ {df_open['valore_ponderato'].sum():,.0f}".replace(",", "."),
+            )
+        with col_k3:
+            st.metric(
+                "N. opportunità aperte",
+                int(df_open.shape[0]),
+            )
 
     col1, col2 = st.columns(2)
     with col1:
@@ -777,9 +802,18 @@ def page_crm_sales():
     if "fase_pipeline" in df_f.columns and "valore_stimato" in df_f.columns and not df_f.empty:
         st.subheader("📈 Valore opportunità per fase")
         pivot = df_f.groupby("fase_pipeline")["valore_stimato"].sum().reset_index()
-        st.bar_chart(pivot.set_index("fase_pipeline"))
+        fig_fase = px.bar(
+            pivot,
+            x="fase_pipeline",
+            y="valore_stimato",
+            title="Valore totale per fase pipeline",
+            text="valore_stimato",
+        )
+        fig_fase.update_traces(texttemplate="€ %{y:,.0f}", textposition="outside")
+        fig_fase.update_layout(yaxis_title="Valore (€)")
+        st.plotly_chart(fig_fase, use_container_width=True)
 
-        # =========================
+    # =========================
     # SEZIONE EDIT / DELETE (SOLO ADMIN)
     # =========================
     if role != "admin":
