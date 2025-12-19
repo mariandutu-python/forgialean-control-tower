@@ -148,8 +148,11 @@ ForgiaLean unisce **Black Belt Lean Six Sigma**, **Operations Management** e **d
             title="OEE medio linea",
             text="OEE",
             range_y=[0, 100],
+            color="Fase",
+            color_discrete_map={"Prima": "#E74C3C", "Dopo": "#27AE60"},
         )
         fig_oee.update_traces(texttemplate="%{y}%", textposition="outside")
+        fig_oee.update_layout(showlegend=False)
         st.plotly_chart(fig_oee, use_container_width=True)
 
     with col_g2:
@@ -159,13 +162,12 @@ ForgiaLean unisce **Black Belt Lean Six Sigma**, **Operations Management** e **d
             y="Fermi orari/turno",
             title="Ore di fermo per turno",
             text="Fermi orari/turno",
+            color="Fase",
+            color_discrete_map={"Prima": "#E74C3C", "Dopo": "#27AE60"},
         )
         fig_fermi.update_traces(texttemplate="%{y:.1f} h", textposition="outside")
+        fig_fermi.update_layout(showlegend=False)
         st.plotly_chart(fig_fermi, use_container_width=True)
-
-    st.caption(
-        "Esempio reale: progetto su una linea automatica. I valori sono indicativi e variano per settore e impianto."
-    )
 
     # DIFFERENZIAZIONE: perché voi
     st.subheader("Perché scegliere ForgiaLean rispetto ad altre soluzioni")
@@ -189,7 +191,44 @@ Compilando il form qui sotto riceverai via email un **mini‑report OEE** con:
 
 Questo è il primo passo: se i numeri confermano il pain, potrai prenotare un **Audit 30 minuti + piano personalizzato**.
 """)
+    st.subheader("Un vantaggio in più: bandi e incentivi 4.0")
 
+    st.markdown("""
+Oltre al recupero di capacità e margini, in molti casi gli investimenti su impianti, digitalizzazione e analisi dati possono rientrare tra quelli **agevolabili** da bandi **Industria 4.0** e iniziative regionali.
+
+Durante il progetto:
+- Ti segnalo i principali **bandi e incentivi** potenzialmente rilevanti per il tuo caso (nazionali e/o regionali).
+- Ti aiuto a **tradurre il progetto operativo** in termini di obiettivi, deliverable e risultati attesi, così da semplificare il lavoro con il tuo consulente di finanza agevolata o con il commercialista.
+- Mettiamo in evidenza i **benefici misurabili** (OEE, capacità recuperata, margini) che possono rafforzare la richiesta di contributo.
+
+In questo modo hai sia un **miglioramento operativo concreto**, sia la possibilità di **ridurre l’esborso netto** se l’azienda decide di attivarsi sui bandi disponibili.
+""")
+
+    # TESTIMONIANZE / SOCIAL PROOF
+    st.subheader("Cosa dicono le aziende che hanno lavorato con noi")
+
+    col_t1, col_t2 = st.columns(2)
+
+    with col_t1:
+        st.markdown("""
+> *"Prima avevamo tre linee che correvano tutto il giorno ma non sapevamo dove perdevamo tempo.  
+> In 3 mesi abbiamo ridotto gli sprechi sugli impianti chiave e oggi l'OEE è finalmente sotto controllo."*
+
+**Direttore di stabilimento – PMI metalmeccanica (Nord Italia)**
+""")
+
+    with col_t2:
+        st.markdown("""
+> *"Il lavoro con ForgiaLean ci ha permesso di tradurre i fermi e gli scarti in **€/giorno**.  
+> Questo ha cambiato il modo in cui il management decide le priorità."*
+
+**COO – Azienda elettronica (EMS)**
+""")
+
+    st.markdown("""
+Questi esempi sono rappresentativi del tipo di risultati ottenibili quando c'è impegno congiunto 
+tra direzione, produzione e miglioramento continuo.
+""")
     # =====================
     # FORM: RICHIEDI REPORT OEE (visibile a tutti)
     # =====================
