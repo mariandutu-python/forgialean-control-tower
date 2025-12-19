@@ -3022,10 +3022,26 @@ def page_finance_dashboard():
         )
         st.plotly_chart(fig_m, use_container_width=True)
 
+        # ---------- Cash flow cumulato ----------
+        st.subheader("💧 Cash flow cumulato (periodo)")
+
+        df_cf = df_kpi.sort_values("mese").copy()
+        df_cf["Cash_flow"] = df_cf["Entrate"] - df_cf["Uscite"]
+        df_cf["Cash_flow_cumulato"] = df_cf["Cash_flow"].cumsum()
+
+        fig_cf = px.line(
+            df_cf,
+            x="mese",
+            y="Cash_flow_cumulato",
+            markers=True,
+            title="Cash flow cumulato nel periodo",
+        )
+        st.plotly_chart(fig_cf, use_container_width=True)
+
         st.dataframe(df_kpi)
     else:
         st.info("Nessun dato nel periodo selezionato.")
-
+    
     # ---------- Breakdown entrate per cliente ----------
     st.markdown("---")
     st.subheader("🏆 Top clienti per entrate (periodo)")
