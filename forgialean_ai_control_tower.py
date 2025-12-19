@@ -121,6 +121,51 @@ ForgiaLean unisce **Black Belt Lean Six Sigma**, **Operations Management** e **d
 - Fermi **-82%**.
 - Circa **28.000 €/anno** di capacità recuperata, scarti dal 9% al 2%.
 """)
+    # GRAFICI PRIMA / DOPO (esempio fittizio)
+    st.subheader("Come cambia la situazione: prima e dopo il progetto")
+
+    col_g1, col_g2 = st.columns(2)
+
+    # Dati fittizi per esempio
+    df_oee = pd.DataFrame(
+        {
+            "Fase": ["Prima", "Dopo"],
+            "OEE": [68, 86],
+        }
+    )
+    df_fermi = pd.DataFrame(
+        {
+            "Fase": ["Prima", "Dopo"],
+            "Fermi orari/turno": [4.0, 0.7],
+        }
+    )
+
+    with col_g1:
+        fig_oee = px.bar(
+            df_oee,
+            x="Fase",
+            y="OEE",
+            title="OEE medio linea",
+            text="OEE",
+            range_y=[0, 100],
+        )
+        fig_oee.update_traces(texttemplate="%{y}%", textposition="outside")
+        st.plotly_chart(fig_oee, use_container_width=True)
+
+    with col_g2:
+        fig_fermi = px.bar(
+            df_fermi,
+            x="Fase",
+            y="Fermi orari/turno",
+            title="Ore di fermo per turno",
+            text="Fermi orari/turno",
+        )
+        fig_fermi.update_traces(texttemplate="%{y:.1f} h", textposition="outside")
+        st.plotly_chart(fig_fermi, use_container_width=True)
+
+    st.caption(
+        "Esempio reale: progetto su una linea automatica. I valori sono indicativi e variano per settore e impianto."
+    )
 
     # DIFFERENZIAZIONE: perché voi
     st.subheader("Perché scegliere ForgiaLean rispetto ad altre soluzioni")
