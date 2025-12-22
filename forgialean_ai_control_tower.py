@@ -189,7 +189,7 @@ Compilando il form qui sotto riceverai via email un **mini‑report OEE** con:
 - Una stima dell'impatto se hai **più macchine/linee simili** (es. 3 linee = circa 3× perdita €/giorno).
 - **3 leve di miglioramento immediate** su cui iniziare a lavorare.
 
-Questo è il primo passo: se i numeri confermano il pain, potrai prenotare un **Audit 30 minuti + piano personalizzato**.
+Fai il primo passo: Prenotare un **Audit 30 minuti + piano personalizzato**.
 """)
     st.subheader("Un vantaggio in più: bandi e incentivi 4.0")
 
