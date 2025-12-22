@@ -110,7 +110,7 @@ Risultato: impianti da **centinaia di migliaia di euro** che lavorano sotto il 7
     st.subheader("La nostra proposta: +16% OEE in 90 giorni")
 
     st.markdown("""
-ForgiaLean unisce **Black Belt Lean Six Sigma**, **Operations Management** e **dashboard real‑time Industry 4.0** per:
+ForgiaLean unisce **Black Belt Lean Six Sigma**, **Operations Management** e **Dashboard Real‑Time Industry 4.0** per:
 
 - Rendere visibili le perdite principali (fermi, velocità, scarti) per linea e per turno.
 - Tradurre l'OEE in **€/giorno di spreco** comprensibili per il management.
@@ -926,6 +926,45 @@ def page_crm_sales():
         st.success("Opportunità eliminata.")
         st.rerun()
 
+def get_next_invoice_number(session, year=None, prefix="FL"):
+    year = year or date.today().year
+    res = session.exec(
+        select(Invoice.num_fattura).where(
+            Invoice.data_fattura.between(date(year, 1, 1), date(year, 12, 31))
+        )
+    ).all()
+    nums = []
+    for r in res:
+        if not r:
+            continue
+        try:
+            base = str(r).split("/")[0]  # "12/2025-FL" -> "12"
+            nums.append(int(base))
+        except ValueError:
+            continue
+    next_seq = (max(nums) + 1) if nums else 1
+    return f"{next_seq}/{year}-" + prefix
+
+from datetime import date, datetime
+
+def get_next_invoice_number(session, year=None, prefix="FL"):
+    year = year or date.today().year
+    res = session.exec(
+        select(Invoice.num_fattura).where(
+            Invoice.data_fattura.between(date(year, 1, 1), date(year, 12, 31))
+        )
+    ).all()
+    nums = []
+    for r in res:
+        if not r:
+            continue
+        try:
+            base = str(r).split("/")[0]  # "12/2025-FL" -> "12"
+            nums.append(int(base))
+        except ValueError:
+            continue
+    next_seq = (max(nums) + 1) if nums else 1
+    return f"{next_seq}/{year}-" + prefix
 
 
 def page_finance_invoices():
@@ -939,6 +978,7 @@ def page_finance_invoices():
 
     with get_session() as session:
         clients = session.exec(select(Client)).all()
+        suggested_num = get_next_invoice_number(session, year=date.today().year, prefix="FL")
 
     if not clients:
         st.info("Prima registra almeno un cliente nella sezione Clienti.")
@@ -950,7 +990,7 @@ def page_finance_invoices():
             col1, col2 = st.columns(2)
             with col1:
                 client_label = st.selectbox("Cliente", df_clients["label"].tolist())
-                num_fattura = st.text_input("Numero fattura", "")
+                num_fattura = st.text_input("Numero fattura", suggested_num)
                 data_fattura = st.date_input("Data fattura", value=date.today())
                 data_scadenza = st.date_input("Data scadenza", value=date.today())
             with col2:
@@ -1051,13 +1091,19 @@ def page_finance_invoices():
         df_clients = pd.DataFrame([c.__dict__ for c in clients])
         df_clients["label"] = df_clients["client_id"].astype(str) + " - " + df_clients["ragione_sociale"]
 
+        with get_session() as session:
+            suggested_num_pdf = get_next_invoice_number(session, year=date.today().year, prefix="FL")
+
         with st.form("new_invoice_from_pdf"):
             st.markdown("#### Dati fattura precompilati")
 
             col1, col2 = st.columns(2)
             with col1:
                 client_label_pdf = st.selectbox("Cliente", df_clients["label"].tolist())
-                num_fattura_pdf = st.text_input("Numero fattura", parsed_data["num_fattura"])
+                num_fattura_pdf = st.text_input(
+                    "Numero fattura",
+                    parsed_data["num_fattura"] or suggested_num_pdf,
+                )
                 data_fattura_pdf = st.date_input("Data fattura", value=parsed_data["data_fattura"])
                 data_scadenza_pdf = st.date_input("Data scadenza", value=parsed_data["data_fattura"])
             with col2:
@@ -1138,6 +1184,7 @@ def page_finance_invoices():
 
     st.dataframe(df_inv)
 
+    # KPI base: totale fatturato per anno
     if {"data_fattura", "importo_totale"}.issubset(df_inv.columns):
         df_inv["data_fattura"] = pd.to_datetime(df_inv["data_fattura"], errors="coerce")
         df_inv["anno"] = df_inv["data_fattura"].dt.year
@@ -1261,9 +1308,150 @@ def page_finance_invoices():
     if export_xml_clicked:
         inv = inv_obj
 
+        # Carica dati cliente dal DB
         with get_session() as session:
             client_xml = session.get(Client, inv.client_id)
 
+        my = MY_COMPANY_DATA
+
+        # Cedente/prestatore (tu)
+        ced_den = my["denominazione"]
+        ced_piva = my["piva"]
+        ced_cf = my["codice_fiscale"]
+        ced_addr = my["indirizzo"]
+        ced_cap = my["cap"]
+        ced_comune = my["comune"]
+        ced_prov = my["provincia"]
+        ced_paese = my["nazione"]
+        ced_regime = my.get("regime_fiscale", "RF19")
+        id_paese_trasm = my.get("id_paese_trasmittente", "IT")
+        id_codice_trasm = my.get("id_codice_trasmittente", ced_cf)
+        formato_trasm = my.get("formato_trasmissione", "FPR12")
+
+        # Cessionario/committente (cliente)
+        cli_den = client_xml.ragione_sociale or ""
+        cli_piva = (client_xml.piva or "").strip() or ced_piva
+        cli_cf = (client_xml.cod_fiscale or "").strip() or cli_piva
+
+        raw_paese = (client_xml.paese or "IT").strip()
+        if raw_paese.lower() in ("italia", "it"):
+            cli_paese = "IT"
+        else:
+            cli_paese = raw_paese.upper()[:2]
+
+        cli_addr = client_xml.indirizzo or ""
+        cli_cap = client_xml.cap or ""
+        cli_comune = client_xml.comune or ""
+        cli_prov = client_xml.provincia or ""
+        cli_cod_dest = client_xml.codice_destinatario or "0000000"
+        cli_pec = client_xml.pec_fatturazione or my.get("pec_mittente", "")
+
+        # Progressivo invio
+        prefisso = my.get("progressivo_invio_prefisso", "FL")
+        progressivo_invio = f"{prefisso}_{(inv.num_fattura or '1').replace('/', '_')}"
+
+        aliquota_iva = (inv.iva / inv.importo_imponibile * 100) if inv.importo_imponibile else 22.0
+
+        xml_content = f"""<?xml version="1.0" encoding="UTF-8"?>
+<FatturaElettronica versione="{formato_trasm}">
+  <FatturaElettronicaHeader>
+    <DatiTrasmissione>
+      <IdTrasmittente>
+        <IdPaese>{id_paese_trasm}</IdPaese>
+        <IdCodice>{id_codice_trasm}</IdCodice>
+      </IdTrasmittente>
+      <ProgressivoInvio>{progressivo_invio}</ProgressivoInvio>
+      <FormatoTrasmissione>{formato_trasm}</FormatoTrasmissione>
+      <CodiceDestinatario>{cli_cod_dest}</CodiceDestinatario>
+      {"<PECDestinatario>" + cli_pec + "</PECDestinatario>" if cli_cod_dest == "0000000" and cli_pec else ""}
+    </DatiTrasmissione>
+    <CedentePrestatore>
+      <DatiAnagrafici>
+        <IdFiscaleIVA>
+          <IdPaese>{ced_paese}</IdPaese>
+          <IdCodice>{ced_piva}</IdCodice>
+        </IdFiscaleIVA>
+        <CodiceFiscale>{ced_cf}</CodiceFiscale>
+        <Anagrafica>
+          <Denominazione>{ced_den}</Denominazione>
+        </Anagrafica>
+        <RegimeFiscale>{ced_regime}</RegimeFiscale>
+      </DatiAnagrafici>
+      <Sede>
+        <Indirizzo>{ced_addr}</Indirizzo>
+        <CAP>{ced_cap}</CAP>
+        <Comune>{ced_comune}</Comune>
+        <Provincia>{ced_prov}</Provincia>
+        <Nazione>{ced_paese}</Nazione>
+      </Sede>
+    </CedentePrestatore>
+    <CessionarioCommittente>
+      <DatiAnagrafici>
+        <IdFiscaleIVA>
+          <IdPaese>{cli_paese}</IdPaese>
+          <IdCodice>{cli_piva}</IdCodice>
+        </IdFiscaleIVA>
+        <CodiceFiscale>{cli_cf}</CodiceFiscale>
+        <Anagrafica>
+          <Denominazione>{cli_den}</Denominazione>
+        </Anagrafica>
+      </DatiAnagrafici>
+      <Sede>
+        <Indirizzo>{cli_addr}</Indirizzo>
+        <CAP>{cli_cap}</CAP>
+        <Comune>{cli_comune}</Comune>
+        <Provincia>{cli_prov}</Provincia>
+        <Nazione>{cli_paese}</Nazione>
+      </Sede>
+    </CessionarioCommittente>
+  </FatturaElettronicaHeader>
+  <FatturaElettronicaBody>
+    <DatiGenerali>
+      <DatiGeneraliDocumento>
+        <TipoDocumento>TD01</TipoDocumento>
+        <Divisa>EUR</Divisa>
+        <Data>{inv.data_fattura}</Data>
+        <Numero>{inv.num_fattura}</Numero>
+        <ImportoTotaleDocumento>{inv.importo_totale:.2f}</ImportoTotaleDocumento>
+      </DatiGeneraliDocumento>
+    </DatiGenerali>
+    <DatiBeniServizi>
+      <DettaglioLinee>
+        <NumeroLinea>1</NumeroLinea>
+        <Descrizione>Servizi di consulenza ForgiaLean</Descrizione>
+        <Quantita>1.00</Quantita>
+        <PrezzoUnitario>{inv.importo_imponibile:.2f}</PrezzoUnitario>
+        <PrezzoTotale>{inv.importo_imponibile:.2f}</PrezzoTotale>
+        <AliquotaIVA>{aliquota_iva:.2f}</AliquotaIVA>
+      </DettaglioLinee>
+      <DatiRiepilogo>
+        <AliquotaIVA>{aliquota_iva:.2f}</AliquotaIVA>
+        <ImponibileImporto>{inv.importo_imponibile:.2f}</ImponibileImporto>
+        <Imposta>{inv.iva:.2f}</Imposta>
+        <EsigibilitaIVA>I</EsigibilitaIVA>
+      </DatiRiepilogo>
+    </DatiBeniServizi>
+    <DatiPagamento>
+      <CondizioniPagamento>TP02</CondizioniPagamento>
+      <DettaglioPagamento>
+        <ModalitaPagamento>MP01</ModalitaPagamento>
+        <DataScadenzaPagamento>{inv.data_scadenza or inv.data_fattura}</DataScadenzaPagamento>
+        <ImportoPagamento>{inv.importo_totale:.2f}</ImportoPagamento>
+      </DettaglioPagamento>
+    </DatiPagamento>
+  </FatturaElettronicaBody>
+</FatturaElettronica>
+"""
+
+        b = io.BytesIO(xml_content.encode("utf-8"))
+        st.download_button(
+            label="⬇️ Scarica XML FatturaPA (bozza)",
+            data=b,
+            file_name=f"fattura_{inv.num_fattura}.xml",
+            mime="application/xml",
+            key=f"download_xml_{inv.invoice_id}",
+        )
+        st.info("XML FatturaPA di bozza generato. Verifica con un validatore/gestionale prima dell'invio allo SdI.")
      
 def page_payments():
     st.title("💶 Incassi / Scadenze")
