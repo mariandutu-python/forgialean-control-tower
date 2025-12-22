@@ -1300,10 +1300,16 @@ def page_finance_invoices():
         with get_session() as session:
             obj = session.get(Invoice, inv_id_sel)
             if obj:
-                session.delete(obj)
-                session.commit()
-        st.success("Fattura eliminata.")
-        st.rerun()
+                pays_linked = session.exec(
+                    select(Payment).where(Payment.invoice_id == inv_id_sel)
+                ).all()
+                if pays_linked:
+                    st.warning("Impossibile eliminare: esistono incassi collegati a questa fattura.")
+                else:
+                    session.delete(obj)
+                    session.commit()
+                    st.success("Fattura eliminata.")
+                    st.rerun()
 
     if export_xml_clicked:
         inv = inv_obj
@@ -1625,6 +1631,86 @@ def page_payments():
             st.metric("Fatture scadute non incassate", int(scadute_non_incassate.shape[0]))
     else:
         st.info("Nessuna fattura disponibile per i KPI.")
+
+    # =========================
+    # AGING FATTURE APERTE
+    # =========================
+    st.markdown("---")
+    st.subheader("📌 Aging fatture aperte")
+
+    with get_session() as session:
+        invoices_aging = session.exec(select(Invoice)).all()
+    df_aging = pd.DataFrame([i.__dict__ for i in invoices_aging]) if invoices_aging else pd.DataFrame()
+
+    if not df_aging.empty:
+        df_aging["data_scadenza"] = pd.to_datetime(df_aging["data_scadenza"], errors="coerce")
+        df_aging["data_fattura"] = pd.to_datetime(df_aging["data_fattura"], errors="coerce")
+
+        oggi = pd.to_datetime(date.today())
+
+        # Considero solo fatture non completamente incassate
+        df_aging_open = df_aging[~df_aging["stato_pagamento"].isin(["incassata"])].copy()
+
+        # Calcolo giorni di ritardo (solo se scadute)
+        df_aging_open["days_overdue"] = (oggi - df_aging_open["data_scadenza"]).dt.days
+        df_aging_open["days_overdue"] = df_aging_open["days_overdue"].fillna(0)
+
+        # Bucket aging
+        def aging_bucket(row):
+            d = row["days_overdue"]
+            if d <= 0:
+                return "Non ancora scaduta"
+            elif 1 <= d <= 30:
+                return "1-30 giorni"
+            elif 31 <= d <= 60:
+                return "31-60 giorni"
+            elif 61 <= d <= 90:
+                return "61-90 giorni"
+            else:
+                return ">90 giorni"
+
+        df_aging_open["aging_bucket"] = df_aging_open.apply(aging_bucket, axis=1)
+
+        # Totale per bucket
+        aging_summary = (
+            df_aging_open.groupby("aging_bucket")["importo_totale"]
+            .sum()
+            .reset_index()
+            .sort_values(
+                "aging_bucket",
+                key=lambda s: s.map(
+                    {
+                        "Non ancora scaduta": 0,
+                        "1-30 giorni": 1,
+                        "31-60 giorni": 2,
+                        "61-90 giorni": 3,
+                        ">90 giorni": 4,
+                    }
+                ),
+            )
+        )
+
+        st.markdown("**Riepilogo per bucket**")
+        st.dataframe(aging_summary)
+
+        st.markdown("**Dettaglio fatture aperte**")
+        # Se hai il merge con clienti come sopra, puoi riutilizzare df_clients; altrimenti lascio così
+        st.dataframe(
+            df_aging_open[
+                [
+                    "invoice_id",
+                    "num_fattura",
+                    "data_fattura",
+                    "data_scadenza",
+                    "importo_totale",
+                    "stato_pagamento",
+                    "days_overdue",
+                    "aging_bucket",
+                ]
+            ]
+        )
+    else:
+        st.info("Nessuna fattura disponibile per l'aging.")
 
     st.markdown("---")
     st.subheader("📋 Pagamenti registrati")
@@ -2073,7 +2159,14 @@ def page_payments():
         prefisso = my.get("progressivo_invio_prefisso", "FL")
         progressivo_invio = f"{prefisso}_{(inv.num_fattura or '1').replace('/', '_')}"
 
-        aliquota_iva = (inv.iva / inv.importo_imponibile * 100) if inv.importo_imponibile else 22.0
+        # Aliquota IVA: calcolata da imponibile e iva
+        if inv.importo_imponibile:
+            aliquota_iva = round((inv.iva / inv.importo_imponibile) * 100, 2)
+        else:
+            aliquota_iva = 22.0
+
+        # Descrizione riga (per ora fissa, ma parametrizzabile)
+        descrizione_riga = "Servizi di consulenza ForgiaLean"
 
         xml_content = f"""<?xml version="1.0" encoding="UTF-8"?>
 <FatturaElettronica versione="{formato_trasm}">
@@ -2085,8 +2178,7 @@ def page_payments():
       </IdTrasmittente>
       <ProgressivoInvio>{progressivo_invio}</ProgressivoInvio>
       <FormatoTrasmissione>{formato_trasm}</FormatoTrasmissione>
-      <CodiceDestinatario>{cli_cod_dest}</CodiceDestinatario>
-      {"<PECDestinatario>" + cli_pec + "</PECDestinatario>" if cli_cod_dest == "0000000" and cli_pec else ""}
+      <CodiceDestinatario>{cli_cod_dest}</CodiceDestinatario>{("<PECDestinatario>" + cli_pec + "</PECDestinatario>") if cli_cod_dest == "0000000" and cli_pec else ""}
     </DatiTrasmissione>
     <CedentePrestatore>
       <DatiAnagrafici>
@@ -2141,7 +2233,7 @@ def page_payments():
     <DatiBeniServizi>
       <DettaglioLinee>
         <NumeroLinea>1</NumeroLinea>
-        <Descrizione>Servizi di consulenza ForgiaLean</Descrizione>
+        <Descrizione>{descrizione_riga}</Descrizione>
         <Quantita>1.00</Quantita>
         <PrezzoUnitario>{inv.importo_imponibile:.2f}</PrezzoUnitario>
         <PrezzoTotale>{inv.importo_imponibile:.2f}</PrezzoTotale>
