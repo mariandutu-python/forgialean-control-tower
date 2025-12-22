@@ -141,6 +141,112 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
+def build_income_statement_monthly(anno_sel: int) -> pd.DataFrame:
+    """Conto Economico gestionale per mese: Proventi, Costi, Netto."""
+    with get_session() as session:
+        invoices = session.exec(
+            select(Invoice).where(
+                Invoice.data_fattura.is_not(None),
+                SQLModel.raw_column("strftime('%Y', data_fattura) = :anno")
+            ).params(anno=str(anno_sel))
+        ).all()
+        expenses = session.exec(
+            select(Expense).where(
+                Expense.data.is_not(None),
+                SQLModel.raw_column("strftime('%Y', data) = :anno")
+            ).params(anno=str(anno_sel))
+        ).all()
+        inps = session.exec(
+            select(InpsContribution).where(
+                InpsContribution.payment_date.is_not(None),
+                SQLModel.raw_column("strftime('%Y', payment_date) = :anno")
+            ).params(anno=str(anno_sel))
+        ).all()
+        taxes = session.exec(
+            select(TaxDeadline).where(
+                TaxDeadline.payment_date.is_not(None),
+                SQLModel.raw_column("strftime('%Y', payment_date) = :anno")
+            ).params(anno=str(anno_sel))
+        ).all()
+
+    df_inv = pd.DataFrame([i.__dict__ for i in invoices]) if invoices else pd.DataFrame()
+    df_exp = pd.DataFrame([e.__dict__ for e in expenses]) if expenses else pd.DataFrame()
+    df_inps = pd.DataFrame([c.__dict__ for c in inps]) if inps else pd.DataFrame()
+    df_tax = pd.DataFrame([t.__dict__ for t in taxes]) if taxes else pd.DataFrame()
+
+    # Proventi per mese (competenza: data_fattura)
+    if not df_inv.empty:
+        df_inv["data_fattura"] = pd.to_datetime(df_inv["data_fattura"], errors="coerce")
+        df_inv["mese"] = df_inv["data_fattura"].dt.month
+        ricavi_mese = (
+            df_inv.groupby("mese")["importo_imponibile"]
+            .sum()
+            .rename("Proventi")
+            .reset_index()
+        )
+    else:
+        ricavi_mese = pd.DataFrame(columns=["mese", "Proventi"])
+
+    # Costi operativi (spese) per mese
+    if not df_exp.empty:
+        df_exp["data"] = pd.to_datetime(df_exp["data"], errors="coerce")
+        df_exp["mese"] = df_exp["data"].dt.month
+        costi_spese_mese = (
+            df_exp.groupby("mese")["importo_imponibile"]
+            .sum()
+            .rename("Costi_spese")
+            .reset_index()
+        )
+    else:
+        costi_spese_mese = pd.DataFrame(columns=["mese", "Costi_spese"])
+
+    # INPS per mese (pagamento)
+    if not df_inps.empty:
+        df_inps["payment_date"] = pd.to_datetime(df_inps["payment_date"], errors="coerce")
+        df_inps["mese"] = df_inps["payment_date"].dt.month
+        costi_inps_mese = (
+            df_inps.groupby("mese")["amount_paid"]
+            .sum()
+            .rename("Costi_inps")
+            .reset_index()
+        )
+    else:
+        costi_inps_mese = pd.DataFrame(columns=["mese", "Costi_inps"])
+
+    # Imposte per mese (pagamento)
+    if not df_tax.empty:
+        df_tax["payment_date"] = pd.to_datetime(df_tax["payment_date"], errors="coerce")
+        df_tax["mese"] = df_tax["payment_date"].dt.month
+        costi_tasse_mese = (
+            df_tax.groupby("mese")["amount_paid"]
+            .sum()
+            .rename("Costi_tasse")
+            .reset_index()
+        )
+    else:
+        costi_tasse_mese = pd.DataFrame(columns=["mese", "Costi_tasse"])
+
+    mesi_df = pd.DataFrame({"mese": list(range(1, 13))})
+
+    df_ce_mese = (
+        mesi_df
+        .merge(ricavi_mese, on="mese", how="left")
+        .merge(costi_spese_mese, on="mese", how="left")
+        .merge(costi_inps_mese, on="mese", how="left")
+        .merge(costi_tasse_mese, on="mese", how="left")
+        .fillna(0.0)
+    )
+
+    df_ce_mese["Costi_totali"] = (
+        df_ce_mese["Costi_spese"] + df_ce_mese["Costi_inps"] + df_ce_mese["Costi_tasse"]
+    )
+    df_ce_mese["Risultato_netto"] = df_ce_mese["Proventi"] - df_ce_mese["Costi_totali"]
+    df_ce_mese["Mese"] = df_ce_mese["mese"].apply(lambda m: f"{m:02d}/{anno_sel}")
+
+    return df_ce_mese[
+        ["Mese", "Proventi", "Costi_spese", "Costi_inps", "Costi_tasse", "Costi_totali", "Risultato_netto"]
+    ]
+
 def page_presentation():
     # HERO: chi sei e che beneficio dai
     st.title("🏭 Turni lunghi, OEE basso e margini sotto pressione?")
@@ -3765,6 +3871,35 @@ def page_finance_dashboard():
 
     st.subheader(f"Conto Economico gestionale {anno_ce}")
     st.dataframe(df_ce.style.format({"Importo": "{:,.2f}"}))
+
+    # =========================
+    # Conto Economico mensile (anno selezionato)
+    # =========================
+    st.subheader(f"Conto Economico mensile {anno_ce}")
+    df_ce_mese = build_income_statement_monthly(anno_ce)
+
+    st.dataframe(
+        df_ce_mese.style.format(
+            {
+                "Proventi": "{:,.2f}",
+                "Costi_spese": "{:,.2f}",
+                "Costi_inps": "{:,.2f}",
+                "Costi_tasse": "{:,.2f}",
+                "Costi_totali": "{:,.2f}",
+                "Risultato_netto": "{:,.2f}",
+            }
+        )
+    )
+
+    st.subheader("Risultato netto per mese")
+    fig_ce_m = px.line(
+        df_ce_mese,
+        x="Mese",
+        y="Risultato_netto",
+        markers=True,
+        title=f"Risultato netto mensile {anno_ce}",
+    )
+    st.plotly_chart(fig_ce_m, use_container_width=True)
 
     # ---------- ENTRATE (Fatture incassate) ----------
     if not df_inv.empty:
