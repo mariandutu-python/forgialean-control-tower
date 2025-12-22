@@ -362,6 +362,171 @@ def build_balance_sheet(data_rif: date, saldo_cassa: float) -> pd.DataFrame:
     ]
     return pd.DataFrame(data)
 
+
+# =========================
+# SUPPORTO PER NOTA INTEGRATIVA
+# =========================
+
+def get_conto_economico_summary(anno_sel: int) -> dict:
+    """
+    Riepilogo Conto Economico gestionale per Nota Integrativa.
+    Usa build_income_statement(anno_sel).
+    """
+    df_ce = build_income_statement(anno_sel)
+    if df_ce is None or df_ce.empty:
+        return {
+            "anno_rif": anno_sel,
+            "ricavi_totali": 0.0,
+            "costi_totali": 0.0,
+            "utile_netto": 0.0,
+        }
+
+    proventi = df_ce.loc[df_ce["Voce"] == "Proventi", "Importo"].sum()
+    # tutti i costi sono negativi, quindi sommo e poi prendo il valore assoluto
+    costi_totali = (
+        df_ce.loc[
+            df_ce["Voce"].isin(
+                ["Costi operativi (spese)", "Costi INPS", "Imposte"]
+            ),
+            "Importo",
+        ]
+        .sum()
+        * -1
+    )
+    risultato_netto = df_ce.loc[df_ce["Voce"] == "Risultato netto", "Importo"].sum()
+
+    return {
+        "anno_rif": anno_sel,
+        "ricavi_totali": float(proventi),
+        "costi_totali": float(costi_totali),
+        "utile_netto": float(risultato_netto),
+    }
+
+
+def get_stato_patrimoniale_minimale(data_rif: date, saldo_cassa: float) -> dict:
+    """
+    Riepilogo Stato Patrimoniale minimale per Nota Integrativa.
+    Usa build_balance_sheet(data_rif, saldo_cassa).
+    """
+    df_sp = build_balance_sheet(data_rif, saldo_cassa)
+    if df_sp is None or df_sp.empty:
+        return {
+            "data_rif": data_rif.strftime("%d/%m/%Y"),
+            "cassa": saldo_cassa,
+            "crediti_clienti": 0.0,
+            "debiti_fornitori": 0.0,
+            "debiti_inps": 0.0,
+            "debiti_fisco": 0.0,
+            "patrimonio_netto": 0.0,
+        }
+
+    def _sum_voce(sezione: str, voce: str) -> float:
+        return float(
+            df_sp.loc[
+                (df_sp["Sezione"] == sezione) & (df_sp["Voce"] == voce),
+                "Importo",
+            ].sum()
+        )
+
+    cassa = _sum_voce("Attività", "Cassa")
+    crediti_clienti = _sum_voce("Attività", "Crediti verso clienti")
+    debiti_fornitori = _sum_voce("Passività", "Debiti verso fornitori")
+    debiti_inps = _sum_voce("Passività", "Debiti INPS")
+    debiti_fisco = _sum_voce("Passività", "Debiti Fisco")
+    patrimonio_netto = _sum_voce(
+        "Patrimonio Netto", "Patrimonio netto gestionale"
+    )
+
+    return {
+        "data_rif": data_rif.strftime("%d/%m/%Y"),
+        "cassa": cassa,
+        "crediti_clienti": crediti_clienti,
+        "debiti_fornitori": debiti_fornitori,
+        "debiti_inps": debiti_inps,
+        "debiti_fisco": debiti_fisco,
+        "patrimonio_netto": patrimonio_netto,
+    }
+
+
+# =========================
+# PAGINA NOTA INTEGRATIVA
+# =========================
+
+def page_nota_integrativa():
+    st.title("📄 Nota integrativa gestionale – ForgiaLean")
+
+    # Parametri base (puoi anche prenderli da sidebar o config)
+    today = date.today()
+    anno_sel = today.year
+    # TODO: se hai una funzione che calcola il saldo cassa, usala qui
+    saldo_cassa = 0.0  # per ora zero, sostituisci con il tuo calcolo reale
+
+    ce = get_conto_economico_summary(anno_sel)
+    sp = get_stato_patrimoniale_minimale(today, saldo_cassa)
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.subheader("Conto Economico gestionale")
+        st.metric("Anno di riferimento", ce["anno_rif"])
+        st.metric(
+            "Ricavi totali",
+            f"{ce['ricavi_totali']:,.0f} €".replace(",", "."),
+        )
+        st.metric(
+            "Costi totali",
+            f"{ce['costi_totali']:,.0f} €".replace(",", "."),
+        )
+        st.metric(
+            "Utile netto",
+            f"{ce['utile_netto']:,.0f} €".replace(",", "."),
+        )
+    with col2:
+        st.subheader("Stato Patrimoniale minimale")
+        st.metric("Data di riferimento", sp["data_rif"])
+        st.metric("Cassa", f"{sp['cassa']:,.0f} €".replace(",", "."))
+        st.metric(
+            "Crediti verso clienti",
+            f"{sp['crediti_clienti']:,.0f} €".replace(",", "."),
+        )
+        st.metric(
+            "Debiti verso fornitori",
+            f"{sp['debiti_fornitori']:,.0f} €".replace(",", "."),
+        )
+        st.metric(
+            "Debiti INPS",
+            f"{sp['debiti_inps']:,.0f} €".replace(",", "."),
+        )
+        st.metric(
+            "Debiti fisco",
+            f"{sp['debiti_fisco']:,.0f} €".replace(",", "."),
+        )
+        st.metric(
+            "Patrimonio netto gestionale",
+            f"{sp['patrimonio_netto']:,.0f} €".replace(",", "."),
+        )
+
+    st.markdown("---")
+    st.subheader("Testo Nota Integrativa gestionale")
+
+    st.markdown(
+        """
+**Attività e modello di business**  
+ForgiaLean è uno studio di consulenza aziendale specializzato nel miglioramento delle performance operative delle PMI manifatturiere e di servizio. L’attività è svolta da un consulente certificato Lean Six Sigma Black Belt, con esperienza in Operations Management e come IPC Trainer su processi di assemblaggio elettronico e qualità dei prodotti. I servizi offerti comprendono progetti di miglioramento delle performance di reparto (produttività, ritardi, scarti), programmi Lean Six Sigma (DMAIC) su processi produttivi e di servizio, formazione tecnica e manageriale in ambito operations e qualità, oltre allo sviluppo di cruscotti e sistemi di monitoraggio KPI per decisioni basate sui dati. [web:1322][web:1348]
+
+**Criteri di rilevazione e struttura del bilancio gestionale**  
+Il presente bilancio gestionale è redatto con finalità interne di pianificazione e controllo di gestione, a supporto delle decisioni operative e strategiche. Lo schema si basa su un Conto Economico gestionale che aggrega i ricavi per linee di servizio (ad esempio progetti di miglioramento performance, formazione, sviluppo dashboard) e i costi per natura (ad esempio consulenze, software, trasferte, marketing, contributi previdenziali e imposte), e su uno Stato Patrimoniale minimale focalizzato su cassa e capitale circolante operativo. A seconda delle esigenze, i ricavi e i costi possono essere analizzati sia secondo il principio di competenza economica (fatture emesse/spese maturate) sia secondo il principio di cassa (incassi e pagamenti effettivi), mantenendo coerenza tra le informazioni utilizzate per analisi e previsioni. [web:1307][web:1350]
+
+**Stato Patrimoniale minimale**  
+Lo Stato Patrimoniale gestionale si concentra sugli elementi più rilevanti per la liquidità e il rischio operativo. All’attivo sono esposti la cassa (saldo dei conti correnti e delle disponibilità liquide) e i crediti verso clienti derivanti da fatture emesse e non ancora incassate. Al passivo sono esposti i debiti verso fornitori per spese registrate e non ancora pagate, nonché le passività verso INPS e fisco, calcolate in coerenza con il risultato gestionale dell’esercizio e con le aliquote applicabili al regime fiscale adottato. Questo approccio essenziale consente di monitorare rapidamente la posizione finanziaria netta, il capitale circolante e la capacità dell’attività di consulenza di generare cassa. [web:1307][web:1347]
+
+**Collegamento con il Rendiconto Finanziario / Cashflow**  
+A partire dal Conto Economico e dallo Stato Patrimoniale minimale, la dashboard ForgiaLean calcola un rendiconto finanziario gestionale e proiezioni di cashflow. I flussi di cassa sono distinti per categorie operative (incassi da clienti e pagamenti a fornitori e altri costi), fiscali e previdenziali (versamenti di imposte e contributi INPS) e di investimento (acquisti di beni e strumenti per l’attività). Le proiezioni tengono conto dei tempi di incasso e pagamento, così da evidenziare per ciascun periodo il saldo di cassa atteso, il fabbisogno o l’eccedenza di liquidità, e supportare le decisioni su prezzi, carico di lavoro e investimenti. [web:1308][web:1312]
+
+**Utilizzo gestionale delle informazioni**  
+Le informazioni aggregate in questa Nota Integrativa gestionale, insieme ai prospetti di Conto Economico, Stato Patrimoniale e Rendiconto Finanziario, sono utilizzate per monitorare l’andamento dell’attività di consulenza, valutare la redditività delle diverse linee di servizio e misurare l’impatto delle iniziative di miglioramento proposte ai clienti. L’approccio Lean Six Sigma, basato su dati e indicatori, guida sia l’analisi interna sia la progettazione delle dashboard e dei KPI offerti ai clienti, con l’obiettivo di garantire risultati misurabili e sostenibili nel tempo. [web:1322][web:1348]
+        """
+    )
+
 def page_presentation():
     # HERO: chi sei e che beneficio dai
     st.title("🏭 Turni lunghi, OEE basso e margini sotto pressione?")
@@ -4866,6 +5031,7 @@ PAGES = {
     "Fisco & INPS": page_tax_inps,
     "Spese": page_expenses,
     "Finanza / Dashboard": page_finance_dashboard,
+    "Nota integrativa gestionale": page_nota_integrativa,
     "Operations / Commesse": page_operations,
     "People & Reparti": page_people_departments,
     "Capacità People": page_capacity_people,
