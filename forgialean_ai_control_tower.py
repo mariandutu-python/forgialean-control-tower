@@ -67,45 +67,50 @@ def build_income_statement(anno_sel: int) -> pd.DataFrame:
         invoices = session.exec(
             select(Invoice).where(
                 Invoice.data_fattura.is_not(None),
-                SQLModel.raw_column("strftime('%Y', data_fattura) = :anno")
-            ).params(anno=str(anno_sel))
+                Invoice.data_fattura >= date(anno_sel, 1, 1),
+                Invoice.data_fattura <= date(anno_sel, 12, 31),
+            )
         ).all()
-
-        df_inv = pd.DataFrame([i.__dict__ for i in invoices]) if invoices else pd.DataFrame()
-        ricavi = df_inv["importo_imponibile"].sum() if not df_inv.empty else 0.0
 
         # Costi operativi: imponibile spese nell'anno (data)
         expenses = session.exec(
             select(Expense).where(
                 Expense.data.is_not(None),
-                SQLModel.raw_column("strftime('%Y', data) = :anno")
-            ).params(anno=str(anno_sel))
+                Expense.data >= date(anno_sel, 1, 1),
+                Expense.data <= date(anno_sel, 12, 31),
+            )
         ).all()
-
-        df_exp = pd.DataFrame([e.__dict__ for e in expenses]) if expenses else pd.DataFrame()
-        costi_spese = df_exp["importo_imponibile"].sum() if not df_exp.empty else 0.0
 
         # Contributi INPS pagati nell'anno
         inps = session.exec(
             select(InpsContribution).where(
                 InpsContribution.payment_date.is_not(None),
-                SQLModel.raw_column("strftime('%Y', payment_date) = :anno")
-            ).params(anno=str(anno_sel))
+                InpsContribution.payment_date >= date(anno_sel, 1, 1),
+                InpsContribution.payment_date <= date(anno_sel, 12, 31),
+            )
         ).all()
-
-        df_inps = pd.DataFrame([c.__dict__ for c in inps]) if inps else pd.DataFrame()
-        costi_inps = df_inps["amount_paid"].sum() if not df_inps.empty else 0.0
 
         # Imposte pagate nell'anno
         taxes = session.exec(
             select(TaxDeadline).where(
                 TaxDeadline.payment_date.is_not(None),
-                SQLModel.raw_column("strftime('%Y', payment_date) = :anno")
-            ).params(anno=str(anno_sel))
+                TaxDeadline.payment_date >= date(anno_sel, 1, 1),
+                TaxDeadline.payment_date <= date(anno_sel, 12, 31),
+            )
         ).all()
 
-        df_tax = pd.DataFrame([t.__dict__ for t in taxes]) if taxes else pd.DataFrame()
-        costi_tasse = df_tax["amount_paid"].sum() if not df_tax.empty else 0.0
+    # DataFrame e somme
+    df_inv = pd.DataFrame([i.__dict__ for i in invoices]) if invoices else pd.DataFrame()
+    ricavi = df_inv["importo_imponibile"].sum() if not df_inv.empty else 0.0
+
+    df_exp = pd.DataFrame([e.__dict__ for e in expenses]) if expenses else pd.DataFrame()
+    costi_spese = df_exp["importo_imponibile"].sum() if not df_exp.empty else 0.0
+
+    df_inps = pd.DataFrame([c.__dict__ for c in inps]) if inps else pd.DataFrame()
+    costi_inps = df_inps["amount_paid"].sum() if not df_inps.empty else 0.0
+
+    df_tax = pd.DataFrame([t.__dict__ for t in taxes]) if taxes else pd.DataFrame()
+    costi_tasse = df_tax["amount_paid"].sum() if not df_tax.empty else 0.0
 
     proventi = ricavi
     costi_totali = costi_spese + costi_inps + costi_tasse
