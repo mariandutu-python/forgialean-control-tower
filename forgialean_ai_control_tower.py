@@ -263,18 +263,39 @@ def build_balance_sheet(data_rif: date, saldo_cassa: float) -> pd.DataFrame:
         ).all()
         # Pagamenti incassi fatture fino a data_rif
         payments = session.exec(
-            select(Payment).where(Payment.data_pagamento <= data_rif)
+            select(Payment).where(Payment.payment_date <= data_rif)
         ).all()
-
         # Spese registrate fino a data_rif
         expenses = session.exec(
             select(Expense).where(Expense.data <= data_rif)
         ).all()
-        # Spese pagate fino a data_rif (se usi data_pagamento)
+        # Spese pagate fino a data_rif
         expenses_paid = session.exec(
             select(Expense).where(
                 Expense.data_pagamento.is_not(None),
                 Expense.data_pagamento <= data_rif
+            )
+        ).all()
+        # INPS con scadenza fino a data_rif
+        inps = session.exec(
+            select(InpsContribution).where(InpsContribution.due_date <= data_rif)
+        ).all()
+        # INPS pagati fino a data_rif
+        inps_paid = session.exec(
+            select(InpsContribution).where(
+                InpsContribution.payment_date.is_not(None),
+                InpsContribution.payment_date <= data_rif
+            )
+        ).all()
+        # Fisco con scadenza fino a data_rif
+        taxes = session.exec(
+            select(TaxDeadline).where(TaxDeadline.due_date <= data_rif)
+        ).all()
+        # Fisco pagato fino a data_rif
+        taxes_paid = session.exec(
+            select(TaxDeadline).where(
+                TaxDeadline.payment_date.is_not(None),
+                TaxDeadline.payment_date <= data_rif
             )
         ).all()
 
