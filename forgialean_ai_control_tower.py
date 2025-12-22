@@ -247,6 +247,121 @@ def build_income_statement_monthly(anno_sel: int) -> pd.DataFrame:
         ["Mese", "Proventi", "Costi_spese", "Costi_inps", "Costi_tasse", "Costi_totali", "Risultato_netto"]
     ]
 
+def build_balance_sheet(data_rif: date, saldo_cassa: float) -> pd.DataFrame:
+    """Stato Patrimoniale minimale alla data: Attività, Passività, Patrimonio Netto."""
+    data_rif_dt = pd.to_datetime(data_rif)
+
+    with get_session() as session:
+        # Fatture emesse fino a data_rif
+        invoices = session.exec(
+            select(Invoice).where(Invoice.data_fattura <= data_rif)
+        ).all()
+        # Pagamenti incassi fatture fino a data_rif
+        payments = session.exec(
+            select(Payment).where(Payment.data_pagamento <= data_rif)
+        ).all()
+
+        # Spese registrate fino a data_rif
+        expenses = session.exec(
+            select(Expense).where(Expense.data <= data_rif)
+        ).all()
+        # Spese pagate fino a data_rif (se usi data_pagamento)
+        expenses_paid = session.exec(
+            select(Expense).where(
+                Expense.data_pagamento.is_not(None),
+                Expense.data_pagamento <= data_rif
+            )
+        ).all()
+
+        # INPS con scadenza fino a data_rif
+        inps = session.exec(
+            select(InpsContribution).where(InpsContribution.due_date <= data_rif)
+        ).all()
+        # INPS pagati fino a data_rif
+        inps_paid = session.exec(
+            select(InpsContribution).where(
+                InpsContribution.payment_date.is_not(None),
+                InpsContribution.payment_date <= data_rif
+            )
+        ).all()
+
+        # Fisco con scadenza fino a data_rif
+        taxes = session.exec(
+            select(TaxDeadline).where(TaxDeadline.due_date <= data_rif)
+        ).all()
+        # Fisco pagato fino a data_rif
+        taxes_paid = session.exec(
+            select(TaxDeadline).where(
+                TaxDeadline.payment_date.is_not(None),
+                TaxDeadline.payment_date <= data_rif
+            )
+        ).all()
+
+    # DataFrame
+    df_inv = pd.DataFrame([i.__dict__ for i in invoices]) if invoices else pd.DataFrame()
+    df_pay = pd.DataFrame([p.__dict__ for p in payments]) if payments else pd.DataFrame()
+    df_exp = pd.DataFrame([e.__dict__ for e in expenses]) if expenses else pd.DataFrame()
+    df_exp_paid = pd.DataFrame([e.__dict__ for e in expenses_paid]) if expenses_paid else pd.DataFrame()
+    df_inps = pd.DataFrame([c.__dict__ for c in inps]) if inps else pd.DataFrame()
+    df_inps_paid = pd.DataFrame([c.__dict__ for c in inps_paid]) if inps_paid else pd.DataFrame()
+    df_tax = pd.DataFrame([t.__dict__ for t in taxes]) if taxes else pd.DataFrame()
+    df_tax_paid = pd.DataFrame([t.__dict__ for t in taxes_paid]) if taxes_paid else pd.DataFrame()
+
+    # Crediti verso clienti = fatture emesse fino a data_rif - incassi fino a data_rif
+    crediti_clienti = 0.0
+    if not df_inv.empty:
+        totale_fatture = df_inv["importo_totale"].sum()
+        if not df_pay.empty:
+            incassi = df_pay["importo_pagato"].sum()
+        else:
+            incassi = 0.0
+        crediti_clienti = max(totale_fatture - incassi, 0.0)
+
+    # Debiti verso fornitori = spese registrate fino a data_rif - spese pagate fino a data_rif
+    debiti_fornitori = 0.0
+    if not df_exp.empty:
+        totale_spese = df_exp["importo_totale"].sum()
+        if not df_exp_paid.empty:
+            pagato_spese = df_exp_paid["importo_totale"].sum()
+        else:
+            pagato_spese = 0.0
+        debiti_fornitori = max(totale_spese - pagato_spese, 0.0)
+
+    # Debiti INPS = contributi dovuti fino a data_rif - contributi pagati fino a data_rif
+    debiti_inps = 0.0
+    if not df_inps.empty:
+        inps_dovuto = df_inps["amount_due"].sum()
+        if not df_inps_paid.empty:
+            inps_pagato = df_inps_paid["amount_paid"].sum()
+        else:
+            inps_pagato = 0.0
+        debiti_inps = max(inps_dovuto - inps_pagato, 0.0)
+
+    # Debiti Fisco = imposte dovute fino a data_rif - imposte pagate fino a data_rif
+    debiti_fisco = 0.0
+    if not df_tax.empty:
+        tasse_dovute = df_tax["estimated_amount"].sum()
+        if not df_tax_paid.empty:
+            tasse_pagate = df_tax_paid["amount_paid"].sum()
+        else:
+            tasse_pagate = 0.0
+        debiti_fisco = max(tasse_dovute - tasse_pagate, 0.0)
+
+    # Attività totali e Passività totali
+    attivita_totali = saldo_cassa + crediti_clienti
+    passivita_totali = debiti_fornitori + debiti_inps + debiti_fisco
+    patrimonio_netto = attivita_totali - passivita_totali
+
+    data = [
+        {"Sezione": "Attività", "Voce": "Cassa", "Importo": saldo_cassa},
+        {"Sezione": "Attività", "Voce": "Crediti verso clienti", "Importo": crediti_clienti},
+        {"Sezione": "Passività", "Voce": "Debiti verso fornitori", "Importo": debiti_fornitori},
+        {"Sezione": "Passività", "Voce": "Debiti INPS", "Importo": debiti_inps},
+        {"Sezione": "Passività", "Voce": "Debiti Fisco", "Importo": debiti_fisco},
+        {"Sezione": "Patrimonio Netto", "Voce": "Patrimonio netto gestionale", "Importo": patrimonio_netto},
+    ]
+    return pd.DataFrame(data)
+
 def page_presentation():
     # HERO: chi sei e che beneficio dai
     st.title("🏭 Turni lunghi, OEE basso e margini sotto pressione?")
@@ -3900,6 +4015,33 @@ def page_finance_dashboard():
         title=f"Risultato netto mensile {anno_ce}",
     )
     st.plotly_chart(fig_ce_m, use_container_width=True)
+
+    # =========================
+    # Stato Patrimoniale minimale
+    # =========================
+    st.markdown("---")
+    st.subheader("Stato Patrimoniale minimale")
+
+    col_sp1, col_sp2 = st.columns(2)
+    with col_sp1:
+        data_sp = st.date_input(
+            "Data di riferimento SP",
+            value=date.today(),
+            help="Data alla quale vuoi vedere la situazione crediti/debiti."
+        )
+    with col_sp2:
+        saldo_cassa = st.number_input(
+            "Saldo cassa/conti alla data",
+            value=0.0,
+            step=100.0,
+            help="Inserisci il saldo totale di conto corrente / cassa alla data scelta."
+        )
+
+    df_sp = build_balance_sheet(data_sp, saldo_cassa)
+
+    st.dataframe(
+        df_sp.style.format({"Importo": "{:,.2f}"})
+    )
 
     # ---------- ENTRATE (Fatture incassate) ----------
     if not df_inv.empty:
