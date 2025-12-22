@@ -270,6 +270,24 @@ class Expense(SQLModel, table=True):
     data_pagamento: Optional[date] = None
     note: Optional[str] = None
 
+class CashflowBudget(SQLModel, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    anno: int = Field(index=True)
+    mese: int = Field(index=True)  # 1-12
+    categoria: str = Field(index=True)  # es. "Entrate clienti", "Costi fissi", "Fisco/INPS"
+    importo_previsto: float  # + entrata, - uscita
+
+
+class CashflowEvent(SQLModel, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    data: date = Field(index=True)
+    tipo: str = Field(index=True)  # "entrata" / "uscita"
+    categoria: str = Field(index=True)
+    descrizione: str | None = None
+    importo: float  # + entrata, - uscita
+    client_id: int | None = Field(default=None, foreign_key="client.client_id")
+    commessa_id: int | None = Field(default=None, foreign_key="projectcommessa.commessa_id")
+
 # =========================
 # INIT & SESSION
 # =========================
