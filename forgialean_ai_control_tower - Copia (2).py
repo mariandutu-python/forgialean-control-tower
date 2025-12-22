@@ -81,193 +81,85 @@ st.set_page_config(
 )
 
 def page_presentation():
-    # HERO: chi sei e che beneficio dai
-    st.title("🏭 Turni lunghi, OEE basso e margini sotto pressione?")
+    st.title("ForgiaLean - quando l'OEE fa male")
 
+    st.subheader("Domanda iniziale")
     st.markdown("""
-**Da qui inizia il tuo check OEE in 3 minuti.**
+- OEE medio della tua linea principale è:
+  - superiore all'85%?
+  - tra 80% e 85%?
+  - tra 70% e 80%?
+  - sotto il 70%?
 
-Se gestisci **impianti o linee automatiche** (elettronica, metalmeccanico, packaging, food, ecc.)
-e vedi che produzione e margini non tornano, probabilmente ti ritrovi in almeno uno di questi punti:
-- L'OEE reale delle tue linee è tra **60% e 80%**, oppure nessuno sa dirti il valore.
-- Fermi, cambi formato/setup, lotti urgenti e scarti stanno mangiando capacità ogni giorno.
-- Straordinari continui, ma clienti comunque insoddisfatti e margini sotto pressione.
+Se non conosci il valore, questo è già un primo campanello d'allarme.
 """)
 
-    # PAIN: rendere esplicito il dolore quotidiano
-    st.subheader("Il problema reale: sprechi invisibili e margini erosi")
-
+    st.subheader("Segnali che l'OEE sta facendo male")
     st.markdown("""
-- Fermi macchina ricorrenti che equivalgono anche a **4 ore/giorno perse**.
-- Cambi setup che bloccano le linee e generano ritardi a catena.
-- Lotti urgenti che mandano in caos il piano e fanno salire gli scarti (anche **8–10%**).
-- Excel, riunioni e report che richiedono tempo ma non dicono chiaramente **dove** intervenire.
-
-Risultato: impianti da **centinaia di migliaia di euro** che lavorano sotto il 70–75% di OEE e margini che si assottigliano.
+- Fermi impianto ricorrenti, ma senza una visione chiara delle cause principali.
+- Scarti di qualità che aumentano, gestiti solo a consuntivo.
+- Performance macchina lontana dai valori di targa, senza un monitoraggio continuo.
+- Report e file Excel che richiedono molto tempo, ma danno poche risposte operative.
 """)
 
-    # SOLUZIONE: cosa fa ForgiaLean
-    st.subheader("La nostra proposta: +16% OEE in 90 giorni")
-
+    st.subheader("Perché l'OEE è il KPI centrale")
     st.markdown("""
-ForgiaLean unisce **Black Belt Lean Six Sigma**, **Operations Management** e **Dashboard Real‑Time Industry 4.0** per:
-
-- Rendere visibili le perdite principali (fermi, velocità, scarti) per linea e per turno.
-- Tradurre l'OEE in **€/giorno di spreco** comprensibili per il management.
-- Costruire un piano d'azione mirato per recuperare capacità, ridurre straordinari e migliorare il livello di servizio.
-
-**Caso reale – elettronica (EMS):**
-- OEE da **68% → 86%**.
-- Fermi **-82%**.
-- Circa **28.000 €/anno** di capacità recuperata, scarti dal 9% al 2%.
+- Combina disponibilità, performance e qualità in un unico indicatore.
+- Un OEE inferiore all'80% indica un importante potenziale di recupero capacità.
+- Lavorare sull'OEE significa agire contemporaneamente su fermi, velocità e scarti.
 """)
-    # GRAFICI PRIMA / DOPO (esempio fittizio)
-    st.subheader("Come cambia la situazione: prima e dopo il progetto")
 
-    col_g1, col_g2 = st.columns(2)
-
-    # Dati fittizi per esempio
-    df_oee = pd.DataFrame(
-        {
-            "Fase": ["Prima", "Dopo"],
-            "OEE": [68, 86],
-        }
-    )
-    df_fermi = pd.DataFrame(
-        {
-            "Fase": ["Prima", "Dopo"],
-            "Fermi orari/turno": [4.0, 0.7],
-        }
-    )
-
-    with col_g1:
-        fig_oee = px.bar(
-            df_oee,
-            x="Fase",
-            y="OEE",
-            title="OEE medio linea",
-            text="OEE",
-            range_y=[0, 100],
-            color="Fase",
-            color_discrete_map={"Prima": "#E74C3C", "Dopo": "#27AE60"},
-        )
-        fig_oee.update_traces(texttemplate="%{y}%", textposition="outside")
-        fig_oee.update_layout(showlegend=False)
-        st.plotly_chart(fig_oee, use_container_width=True)
-
-    with col_g2:
-        fig_fermi = px.bar(
-            df_fermi,
-            x="Fase",
-            y="Fermi orari/turno",
-            title="Ore di fermo per turno",
-            text="Fermi orari/turno",
-            color="Fase",
-            color_discrete_map={"Prima": "#E74C3C", "Dopo": "#27AE60"},
-        )
-        fig_fermi.update_traces(texttemplate="%{y:.1f} h", textposition="outside")
-        fig_fermi.update_layout(showlegend=False)
-        st.plotly_chart(fig_fermi, use_container_width=True)
-
-    # DIFFERENZIAZIONE: perché voi
-    st.subheader("Perché scegliere ForgiaLean rispetto ad altre soluzioni")
-
+    st.subheader("Cosa offre ForgiaLean")
     st.markdown("""
-- **Non è solo software**: integriamo analisi dati, miglioramento continuo e coaching operativo in reparto.
-- **Parliamo la lingua degli impianti**: lavoriamo su fermi, setup, scarti e flussi reali, non solo su KPI teorici.
-- **Focus su risultati misurabili**: OEE, capacità recuperata e margine in € sono il centro del progetto.
-- **Rischio ribaltato**: obiettivo tipico **+16% OEE in 90 giorni**; se il progetto non genera valore, lo mettiamo nero su bianco.
+- Supporto a PMI manifatturiere con OEE inferiore all'80%.
+- Analisi dei dati esistenti (Excel, sistemi di produzione, report interni).
+- Costruzione di dashboard chiare per rendere visibili le perdite principali.
+- Definizione di azioni concrete di miglioramento su disponibilità, performance e qualità.
 """)
 
-    # OFFERTA: lead magnet
-    st.subheader("Mini‑report OEE gratuito in 3 minuti")
-
+    st.subheader("Come procedere")
     st.markdown("""
-Compilando il form qui sotto riceverai via email un **mini‑report OEE** con:
-- Una stima del tuo **OEE reale** sulla tua linea o macchina principale.
-- Una quantificazione in **€/giorno** della capacità che stai perdendo **per una macchina/linea**.
-- Una stima dell'impatto se hai **più macchine/linee simili** (es. 3 linee = circa 3× perdita €/giorno).
-- **3 leve di miglioramento immediate** su cui iniziare a lavorare.
+1. Raccogli il valore di OEE medio degli ultimi mesi (in %).
+2. Descrivi brevemente la tipologia di linea/impianto.
+3. Contatta ForgiaLean per un primo check senza impegno.
 
-Fai il primo passo: Prenotare un **Audit 30 minuti + piano personalizzato**.
-""")
-    st.subheader("Un vantaggio in più: bandi e incentivi 4.0")
+ForgiaLean - Crevalcore (BO) 
 
-    st.markdown("""
-Oltre al recupero di capacità e margini, in molti casi gli investimenti su impianti, digitalizzazione e analisi dati possono rientrare tra quelli **agevolabili** da bandi **Industria 4.0** e iniziative regionali.
-
-Durante il progetto:
-- Ti segnalo i principali **bandi e incentivi** potenzialmente rilevanti per il tuo caso (nazionali e/o regionali).
-- Ti aiuto a **tradurre il progetto operativo** in termini di obiettivi, deliverable e risultati attesi, così da semplificare il lavoro con il tuo consulente di finanza agevolata o con il commercialista.
-- Mettiamo in evidenza i **benefici misurabili** (OEE, capacità recuperata, margini) che possono rafforzare la richiesta di contributo.
-
-In questo modo hai sia un **miglioramento operativo concreto**, sia la possibilità di **ridurre l’esborso netto** se l’azienda decide di attivarsi sui bandi disponibili.
 """)
 
-    # TESTIMONIANZE / SOCIAL PROOF
-    st.subheader("Cosa dicono le aziende che hanno lavorato con noi")
-
-    col_t1, col_t2 = st.columns(2)
-
-    with col_t1:
-        st.markdown("""
-> *"Prima avevamo tre linee che correvano tutto il giorno ma non sapevamo dove perdevamo tempo.  
-> In 3 mesi abbiamo ridotto gli sprechi sugli impianti chiave e oggi l'OEE è finalmente sotto controllo."*
-
-**Direttore di stabilimento – PMI metalmeccanica (Nord Italia)**
-""")
-
-    with col_t2:
-        st.markdown("""
-> *"Il lavoro con ForgiaLean ci ha permesso di tradurre i fermi e gli scarti in **€/giorno**.  
-> Questo ha cambiato il modo in cui il management decide le priorità."*
-
-**COO – Azienda elettronica (EMS)**
-""")
-
-    st.markdown("""
-Risultati ottenibili quando c'è impegno congiunto 
-tra direzione, produzione e miglioramento continuo.
-""")
     # =====================
     # FORM: RICHIEDI REPORT OEE (visibile a tutti)
     # =====================
     st.markdown("---")
-    st.subheader("Richiedi il tuo mini‑report OEE ForgiaLean")
+    st.subheader("Richiedi il tuo report OEE ForgiaLean")
 
     with st.form("lead_oee_form"):
         nome = st.text_input("Nome e cognome")
         azienda = st.text_input("Azienda")
         email = st.text_input("Email aziendale")
         descrizione = st.text_area("Descrizione impianto / linea principale")
+        ore_fermi = st.number_input(
+            "Ore di fermo macchina per turno (stima)", min_value=0.0, step=0.5
+        )
+        scarti = st.number_input(
+            "Percentuale scarti / rilavorazioni (%)",
+            min_value=0.0,
+            max_value=100.0,
+            step=0.5,
+        )
+        velocita = st.number_input(
+            "Velocità reale vs nominale (%)",
+            min_value=0.0,
+            max_value=200.0,
+            step=1.0,
+        )
+        valore_orario = st.number_input(
+            "Valore economico di 1 ora di produzione (€ / ora, stima)",
+            min_value=0.0,
+            step=10.0,
+        )
 
-        col_f1, col_f2 = st.columns(2)
-        with col_f1:
-            ore_fermi = st.number_input(
-                "Ore di fermo macchina per turno (stima)",
-                min_value=0.0,
-                step=0.5,
-            )
-            scarti = st.number_input(
-                "Percentuale scarti / rilavorazioni (%)",
-                min_value=0.0,
-                max_value=100.0,
-                step=0.5,
-            )
-        with col_f2:
-            velocita = st.number_input(
-                "Velocità reale vs nominale (%)",
-                min_value=0.0,
-                max_value=200.0,
-                step=1.0,
-            )
-            valore_orario = st.number_input(
-                "Valore economico di 1 ora di produzione (€ / ora, stima)",
-                min_value=0.0,
-                step=10.0,
-            )
-
-        submitted = st.form_submit_button("Ottieni il mini‑report OEE")
+        submitted = st.form_submit_button("Richiedi report OEE")
 
     if submitted:
         if not (nome and azienda and email):
@@ -279,7 +171,7 @@ tra direzione, produzione e miglioramento continuo.
                     new_client = Client(
                         ragione_sociale=azienda,
                         email=email,
-                        canale_acquisizione="Landing OEE",
+                        canale_acquisizione="Demo OEE LinkedIn",
                         segmento_cliente="PMI manifatturiera",
                         data_creazione=date.today(),
                         stato_cliente="prospect",
@@ -308,8 +200,7 @@ tra direzione, produzione e miglioramento continuo.
                     session.commit()
 
                 st.success(
-                    "Richiesta ricevuta. Riceverai via email il mini‑report OEE con la stima degli sprechi €/giorno per una macchina/linea, "
-                    "una proiezione per più asset simili e 3 leve di azione prioritarie."
+                    "Richiesta ricevuta. Ti contatterò via email per condividere il report OEE e approfondire i risultati."
                 )
             except Exception as e:
                 st.error("Si è verificato un errore nel salvataggio del lead OEE.")
@@ -320,14 +211,7 @@ tra direzione, produzione e miglioramento continuo.
     # =====================
     role = st.session_state.get("role", "user")
     if role != "admin":
-        # Il cliente vede solo landing + form
-        st.markdown("""
-Se hai linee o impianti che lavorano sotto l'80% di OEE, **continuare così è la scelta più costosa**.
-
-Compila il form qui sopra per il mini‑report OEE gratuito: sarà la base per valutare
-se un progetto ForgiaLean può portarti **+16% OEE e più margine**, senza perdere altro tempo in riunioni sterili.
-""")
-        return
+        return  # il cliente vede solo landing + form
 
     st.markdown("---")
     st.subheader("Calcolatore rapido OEE e perdita economica (uso interno)")
@@ -401,18 +285,12 @@ se un progetto ForgiaLean può portarti **+16% OEE e più margine**, senza perde
                 st.write(f"OEE stimato: **{oee*100:.1f}%** (target {oee_target*100:.0f}%)")
                 st.write(f"Gap OEE: **{gap_oee*100:.1f} punti**")
 
-                st.write(f"Capacità persa per turno (1 macchina/linea): **{capacita_persa_turno:.2f} ore equivalenti**")
-                st.write(f"Perdita economica per turno (1 macchina/linea): **€ {perdita_euro_turno:,.0f}**")
-
-                st.write(
-                    "⚠️ Nota: questi calcoli si riferiscono a **una macchina/linea**. "
-                    "Se hai N macchine/linee simili, l'impatto potenziale è circa N× queste cifre."
-                )
+                st.write(f"Capacità persa per turno: **{capacita_persa_turno:.2f} ore equivalenti**")
+                st.write(f"Perdita economica per turno: **€ {perdita_euro_turno:,.0f}**")
 
                 if turni_anno > 0:
                     perdita_annua = perdita_euro_turno * turni_anno
-                    st.write(f"Perdita economica stimata per anno (1 macchina/linea): **€ {perdita_annua:,.0f}**")
-                    st.write("Per più macchine/linee simili moltiplica questa stima per il numero di asset.")
+                    st.write(f"Perdita economica stimata per anno: **€ {perdita_annua:,.0f}**")
      
 # =========================
 # PAGINA: OVERVIEW
@@ -743,8 +621,6 @@ def page_crm_sales():
 
     st.markdown("---")
 
-    st.markdown("---")
-
     # =========================
     # VISTA / FILTRI OPPORTUNITÀ
     # =========================
@@ -758,29 +634,6 @@ def page_crm_sales():
         return
 
     df_opps = pd.DataFrame([o.__dict__ for o in opps])
-
-    # --- KPI di sintesi pipeline (solo opportunità aperte) ---
-    df_open = df_opps[df_opps["stato_opportunita"] == "aperta"].copy()
-
-    if not df_open.empty:
-        df_open["valore_ponderato"] = df_open["valore_stimato"] * df_open["probabilita"] / 100.0
-
-        col_k1, col_k2, col_k3 = st.columns(3)
-        with col_k1:
-            st.metric(
-                "Valore pipeline (aperte)",
-                f"€ {df_open['valore_stimato'].sum():,.0f}".replace(",", "."),
-            )
-        with col_k2:
-            st.metric(
-                "Valore ponderato",
-                f"€ {df_open['valore_ponderato'].sum():,.0f}".replace(",", "."),
-            )
-        with col_k3:
-            st.metric(
-                "N. opportunità aperte",
-                int(df_open.shape[0]),
-            )
 
     col1, col2 = st.columns(2)
     with col1:
@@ -802,18 +655,9 @@ def page_crm_sales():
     if "fase_pipeline" in df_f.columns and "valore_stimato" in df_f.columns and not df_f.empty:
         st.subheader("📈 Valore opportunità per fase")
         pivot = df_f.groupby("fase_pipeline")["valore_stimato"].sum().reset_index()
-        fig_fase = px.bar(
-            pivot,
-            x="fase_pipeline",
-            y="valore_stimato",
-            title="Valore totale per fase pipeline",
-            text="valore_stimato",
-        )
-        fig_fase.update_traces(texttemplate="€ %{y:,.0f}", textposition="outside")
-        fig_fase.update_layout(yaxis_title="Valore (€)")
-        st.plotly_chart(fig_fase, use_container_width=True)
+        st.bar_chart(pivot.set_index("fase_pipeline"))
 
-    # =========================
+        # =========================
     # SEZIONE EDIT / DELETE (SOLO ADMIN)
     # =========================
     if role != "admin":
@@ -926,45 +770,6 @@ def page_crm_sales():
         st.success("Opportunità eliminata.")
         st.rerun()
 
-def get_next_invoice_number(session, year=None, prefix="FL"):
-    year = year or date.today().year
-    res = session.exec(
-        select(Invoice.num_fattura).where(
-            Invoice.data_fattura.between(date(year, 1, 1), date(year, 12, 31))
-        )
-    ).all()
-    nums = []
-    for r in res:
-        if not r:
-            continue
-        try:
-            base = str(r).split("/")[0]  # "12/2025-FL" -> "12"
-            nums.append(int(base))
-        except ValueError:
-            continue
-    next_seq = (max(nums) + 1) if nums else 1
-    return f"{next_seq}/{year}-" + prefix
-
-from datetime import date, datetime
-
-def get_next_invoice_number(session, year=None, prefix="FL"):
-    year = year or date.today().year
-    res = session.exec(
-        select(Invoice.num_fattura).where(
-            Invoice.data_fattura.between(date(year, 1, 1), date(year, 12, 31))
-        )
-    ).all()
-    nums = []
-    for r in res:
-        if not r:
-            continue
-        try:
-            base = str(r).split("/")[0]  # "12/2025-FL" -> "12"
-            nums.append(int(base))
-        except ValueError:
-            continue
-    next_seq = (max(nums) + 1) if nums else 1
-    return f"{next_seq}/{year}-" + prefix
 
 
 def page_finance_invoices():
@@ -978,7 +783,6 @@ def page_finance_invoices():
 
     with get_session() as session:
         clients = session.exec(select(Client)).all()
-        suggested_num = get_next_invoice_number(session, year=date.today().year, prefix="FL")
 
     if not clients:
         st.info("Prima registra almeno un cliente nella sezione Clienti.")
@@ -990,7 +794,7 @@ def page_finance_invoices():
             col1, col2 = st.columns(2)
             with col1:
                 client_label = st.selectbox("Cliente", df_clients["label"].tolist())
-                num_fattura = st.text_input("Numero fattura", suggested_num)
+                num_fattura = st.text_input("Numero fattura", "")
                 data_fattura = st.date_input("Data fattura", value=date.today())
                 data_scadenza = st.date_input("Data scadenza", value=date.today())
             with col2:
@@ -1091,8 +895,395 @@ def page_finance_invoices():
         df_clients = pd.DataFrame([c.__dict__ for c in clients])
         df_clients["label"] = df_clients["client_id"].astype(str) + " - " + df_clients["ragione_sociale"]
 
+        with st.form("new_invoice_from_pdf"):
+            st.markdown("#### Dati fattura precompilati")
+
+            col1, col2 = st.columns(2)
+            with col1:
+                client_label_pdf = st.selectbox("Cliente", df_clients["label"].tolist())
+                num_fattura_pdf = st.text_input("Numero fattura", parsed_data["num_fattura"])
+                data_fattura_pdf = st.date_input("Data fattura", value=parsed_data["data_fattura"])
+                data_scadenza_pdf = st.date_input("Data scadenza", value=parsed_data["data_fattura"])
+            with col2:
+                imponibile_pdf = st.number_input(
+                    "Imponibile (€)",
+                    min_value=0.0,
+                    step=100.0,
+                    value=float(parsed_data["imponibile"]),
+                )
+                iva_perc_pdf = st.number_input(
+                    "Aliquota IVA (%)",
+                    min_value=0.0,
+                    step=1.0,
+                    value=float(parsed_data["iva_perc"]),
+                )
+                stato_pagamento_pdf = st.selectbox(
+                    "Stato pagamento",
+                    ["emessa", "incassata", "scaduta"],
+                    index=0,
+                )
+                data_incasso_pdf = st.date_input("Data incasso (se incassata)", value=date.today())
+
+            submitted_pdf = st.form_submit_button("Salva fattura da PDF")
+
+        if submitted_pdf:
+            if not num_fattura_pdf.strip():
+                st.warning("Il numero fattura è obbligatorio.")
+            else:
+                client_id_sel_pdf = int(client_label_pdf.split(" - ")[0])
+                iva_val_pdf = imponibile_pdf * iva_perc_pdf / 100.0
+                totale_pdf = imponibile_pdf + iva_val_pdf
+
+                with get_session() as session:
+                    new_inv_pdf = Invoice(
+                        client_id=client_id_sel_pdf,
+                        num_fattura=num_fattura_pdf.strip(),
+                        data_fattura=data_fattura_pdf,
+                        data_scadenza=data_scadenza_pdf,
+                        importo_imponibile=imponibile_pdf,
+                        iva=iva_val_pdf,
+                        importo_totale=totale_pdf,
+                        stato_pagamento=stato_pagamento_pdf,
+                        data_incasso=data_incasso_pdf if stato_pagamento_pdf == "incassata" else None,
+                    )
+                    session.add(new_inv_pdf)
+                    session.commit()
+                    session.refresh(new_inv_pdf)
+                st.success(f"Fattura {new_inv_pdf.num_fattura} (da PDF) registrata.")
+                st.rerun()
+
+    st.markdown("---")
+
+    # =========================
+    # 3) ELENCO FATTURE + KPI
+    # =========================
+    st.subheader("📊 Elenco fatture")
+
+    col_f1, col_f2 = st.columns(2)
+    with col_f1:
+        data_da = st.date_input("Da data (fattura)", value=None)
+    with col_f2:
+        data_a = st.date_input("A data (fattura)", value=None)
+
+    with get_session() as session:
+        invoices = session.exec(select(Invoice)).all()
+
+    if not invoices:
+        st.info("Nessuna fattura registrata.")
+        return
+
+    df_inv = pd.DataFrame([i.__dict__ for i in invoices])
+    df_inv["data_fattura"] = pd.to_datetime(df_inv["data_fattura"], errors="coerce")
+
+    if data_da:
+        df_inv = df_inv[df_inv["data_fattura"] >= pd.to_datetime(data_da)]
+    if data_a:
+        df_inv = df_inv[df_inv["data_fattura"] <= pd.to_datetime(data_a)]
+
+    st.dataframe(df_inv)
+
+    if {"data_fattura", "importo_totale"}.issubset(df_inv.columns):
+        df_inv["data_fattura"] = pd.to_datetime(df_inv["data_fattura"], errors="coerce")
+        df_inv["anno"] = df_inv["data_fattura"].dt.year
+        kpi_year = df_inv.groupby("anno")["importo_totale"].sum().reset_index()
+        st.markdown("#### Totale fatturato per anno")
+        st.bar_chart(kpi_year.set_index("anno")["importo_totale"])
+
+    # =========================
+    # 4) MODIFICA / ELIMINA FATTURA (SOLO ADMIN) + EXPORT XML
+    # =========================
+    if role != "admin":
+        st.info("Modifica, eliminazione ed export XML disponibili solo per ruolo 'admin'.")
+        return
+
+    st.markdown("---")
+    st.subheader("✏️ Modifica / elimina / esporta fattura (solo admin)")
+
+    inv_ids = df_inv["invoice_id"].tolist()
+    inv_id_sel = st.selectbox("Seleziona ID fattura", inv_ids)
+
+    with get_session() as session:
+        inv_obj = session.get(Invoice, inv_id_sel)
+        clients_all = session.exec(select(Client)).all()
+
+    if not inv_obj:
+        st.warning("Fattura non trovata.")
+        return
+
+    df_clients_all = pd.DataFrame([c.__dict__ for c in clients_all]) if clients_all else pd.DataFrame()
+    if not df_clients_all.empty:
+        df_clients_all["label"] = df_clients_all["client_id"].astype(str) + " - " + df_clients_all["ragione_sociale"]
+        try:
+            current_client_label = df_clients_all[
+                df_clients_all["client_id"] == inv_obj.client_id
+            ]["label"].iloc[0]
+        except IndexError:
+            current_client_label = df_clients_all["label"].iloc[0]
+    else:
+        current_client_label = ""
+
+    with st.form("edit_invoice"):
+        col1, col2 = st.columns(2)
+        with col1:
+            client_label_e = st.selectbox(
+                "Cliente",
+                df_clients_all["label"].tolist() if not df_clients_all.empty else [],
+                index=df_clients_all["label"].tolist().index(current_client_label) if current_client_label else 0,
+            ) if not df_clients_all.empty else ("",)
+            num_fattura_e = st.text_input("Numero fattura", inv_obj.num_fattura or "")
+            data_fattura_e = st.date_input(
+                "Data fattura",
+                value=inv_obj.data_fattura or date.today(),
+            )
+            data_scadenza_e = st.date_input(
+                "Data scadenza",
+                value=inv_obj.data_scadenza or date.today(),
+            )
+        with col2:
+            importo_imponibile_e = st.number_input(
+                "Imponibile (€)",
+                min_value=0.0,
+                step=100.0,
+                value=float(inv_obj.importo_imponibile or 0.0),
+            )
+            iva_e = st.number_input(
+                "IVA (€)",
+                min_value=0.0,
+                step=100.0,
+                value=float(inv_obj.iva or 0.0),
+            )
+            stato_pagamento_e = st.selectbox(
+                "Stato pagamento",
+                ["emessa", "incassata", "scaduta"],
+                index=["emessa", "incassata", "scaduta"].index(inv_obj.stato_pagamento or "emessa"),
+            )
+            data_incasso_e = st.date_input(
+                "Data incasso",
+                value=inv_obj.data_incasso or date.today(),
+            )
+
+        col_b1, col_b2, col_b3 = st.columns(3)
+        with col_b1:
+            update_clicked = st.form_submit_button("💾 Aggiorna fattura")
+        with col_b2:
+            delete_clicked = st.form_submit_button("🗑 Elimina fattura")
+        with col_b3:
+            export_xml_clicked = st.form_submit_button("📤 Esporta XML FatturaPA (bozza)")
+
+    if update_clicked:
+        if not num_fattura_e.strip():
+            st.warning("Il numero fattura è obbligatorio.")
+        else:
+            with get_session() as session:
+                obj = session.get(Invoice, inv_id_sel)
+                if obj:
+                    if not df_clients_all.empty:
+                        client_id_e = int(client_label_e.split(" - ")[0])
+                        obj.client_id = client_id_e
+                    obj.num_fattura = num_fattura_e.strip()
+                    obj.data_fattura = data_fattura_e
+                    obj.data_scadenza = data_scadenza_e
+                    obj.importo_imponibile = importo_imponibile_e
+                    obj.iva = iva_e
+                    obj.importo_totale = importo_imponibile_e + iva_e
+                    obj.stato_pagamento = stato_pagamento_e
+                    obj.data_incasso = data_incasso_e if stato_pagamento_e == "incassata" else None
+                    session.add(obj)
+                    session.commit()
+            st.success("Fattura aggiornata.")
+            st.rerun()
+
+    if delete_clicked:
         with get_session() as session:
-            suggested_num_pdf = get_next_invoice_number(session, year=date.today().year, prefix="FL")
+            obj = session.get(Invoice, inv_id_sel)
+            if obj:
+                session.delete(obj)
+                session.commit()
+        st.success("Fattura eliminata.")
+        st.rerun()
+
+    if export_xml_clicked:
+        inv = inv_obj
+
+        with get_session() as session:
+            client_xml = session.get(Client, inv.client_id)
+
+     
+def page_payments():
+    st.title("💶 Incassi / Scadenze")
+    role = st.session_state.get("role", "user")
+
+    # Carico fatture
+    with get_session() as session:
+        invoices = session.exec(select(Invoice)).all()
+
+    if not invoices:
+        st.info("Nessuna fattura registrata.")
+        return
+
+    df_inv = pd.DataFrame([i.__dict__ for i in invoices])
+    df_inv["label"] = df_inv["invoice_id"].astype(str) + " - " + df_inv["num_fattura"]
+
+    st.subheader("➕ Registra nuovo incasso")
+
+    with st.form("new_payment"):
+        invoice_label = st.selectbox("Fattura", df_inv["label"].tolist())
+        payment_date = st.date_input("Data pagamento", value=date.today())
+        amount = st.number_input("Importo incassato (€)", min_value=0.0, step=50.0)
+        method = st.text_input("Metodo (bonifico, carta, contanti...)", "bonifico")
+        note = st.text_area("Note", "")
+
+        submitted_pay = st.form_submit_button("Salva incasso")
+
+    if submitted_pay:
+        if amount <= 0:
+            st.warning("L'importo deve essere maggiore di zero.")
+        else:
+            invoice_id_sel = int(invoice_label.split(" - ")[0])
+            with get_session() as session:
+                new_pay = Payment(
+                    invoice_id=invoice_id_sel,
+                    payment_date=payment_date,
+                    amount=amount,
+                    method=method.strip() or "bonifico",
+                    note=note.strip() or None,
+                )
+                session.add(new_pay)
+                session.commit()
+            st.success("Incasso registrato.")
+            st.rerun()
+
+    st.markdown("---")
+    st.subheader("📋 Pagamenti registrati")
+
+    with get_session() as session:
+        pays = session.exec(select(Payment)).all()
+
+    if not pays:
+        st.info("Nessun pagamento registrato.")
+        return
+
+    df_pay = pd.DataFrame([p.__dict__ for p in pays])
+    st.dataframe(df_pay)
+
+    # =========================
+    # 1) INSERIMENTO MANUALE FATTURA
+    # =========================
+    st.subheader("➕ Inserisci nuova fattura (manuale)")
+
+    with get_session() as session:
+        clients = session.exec(select(Client)).all()
+
+    if not clients:
+        st.info("Prima registra almeno un cliente nella sezione Clienti.")
+    else:
+        df_clients = pd.DataFrame([c.__dict__ for c in clients])
+        df_clients["label"] = df_clients["client_id"].astype(str) + " - " + df_clients["ragione_sociale"]
+
+        with st.form("new_invoice_manual"):
+            col1, col2 = st.columns(2)
+            with col1:
+                client_label = st.selectbox("Cliente", df_clients["label"].tolist())
+                num_fattura = st.text_input("Numero fattura", "")
+                data_fattura = st.date_input("Data fattura", value=date.today())
+                data_scadenza = st.date_input("Data scadenza", value=date.today())
+            with col2:
+                importo_imponibile = st.number_input("Imponibile (€)", min_value=0.0, step=100.0)
+                iva_perc = st.number_input("Aliquota IVA (%)", min_value=0.0, step=1.0, value=22.0)
+                stato_pagamento = st.selectbox(
+                    "Stato pagamento",
+                    ["emessa", "incassata", "scaduta"],
+                    index=0,
+                )
+                data_incasso = st.date_input("Data incasso (se incassata)", value=date.today())
+
+            submitted_manual = st.form_submit_button("Salva fattura manuale")
+
+        if submitted_manual:
+            if not num_fattura.strip():
+                st.warning("Il numero fattura è obbligatorio.")
+            else:
+                client_id_sel = int(client_label.split(" - ")[0])
+                iva_val = importo_imponibile * iva_perc / 100.0
+                totale = importo_imponibile + iva_val
+
+                with get_session() as session:
+                    new_inv = Invoice(
+                        client_id=client_id_sel,
+                        num_fattura=num_fattura.strip(),
+                        data_fattura=data_fattura,
+                        data_scadenza=data_scadenza,
+                        importo_imponibile=importo_imponibile,
+                        iva=iva_val,
+                        importo_totale=totale,
+                        stato_pagamento=stato_pagamento,
+                        data_incasso=data_incasso if stato_pagamento == "incassata" else None,
+                    )
+                    session.add(new_inv)
+                    session.commit()
+                    session.refresh(new_inv)
+                st.success(f"Fattura {new_inv.num_fattura} registrata.")
+                st.rerun()
+
+    st.markdown("---")
+
+    # =========================
+    # 2) UPLOAD PDF FATTURA + PRECOMPILAZIONE
+    # =========================
+    st.subheader("📎 Carica fattura PDF e precompila")
+
+    uploaded_file = st.file_uploader("Carica file PDF fattura", type=["pdf"])
+
+    parsed_data = {
+        "num_fattura": "",
+        "data_fattura": date.today(),
+        "data_scadenza": date.today(),
+        "imponibile": 0.0,
+        "iva_perc": 22.0,
+    }
+
+    if uploaded_file is not None:
+        try:
+            with pdfplumber.open(uploaded_file) as pdf:
+                text_pages = [page.extract_text() or "" for page in pdf.pages]
+            full_text = "\n".join(text_pages)
+
+            import re
+
+            # Numero fattura
+            m_num = re.search(r"[Ff]attura\s*(n\.|nr\.|numero)?\s*([A-Za-z0-9\-\/]+)", full_text)
+            if m_num:
+                parsed_data["num_fattura"] = m_num.group(2).strip()
+
+            # Data fattura
+            m_date = re.search(r"(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})", full_text)
+            if m_date:
+                for fmt in ("%d/%m/%Y", "%d-%m-%Y"):
+                    try:
+                        parsed_data["data_fattura"] = datetime.strptime(m_date.group(1), fmt).date()
+                        break
+                    except ValueError:
+                        continue
+
+            # Imponibile e totale (euristica)
+            numbers = re.findall(r"(\d{1,3}(?:[\.\,]\d{3})*(?:[\.\,]\d{2}))", full_text)
+            if len(numbers) >= 2:
+                def to_float(s):
+                    s = s.replace(".", "").replace(",", ".")
+                    return float(s)
+                parsed_data["imponibile"] = to_float(numbers[-2])
+                totale_pdf = to_float(numbers[-1])
+                if parsed_data["imponibile"] > 0:
+                    parsed_data["iva_perc"] = round((totale_pdf / parsed_data["imponibile"] - 1) * 100, 2)
+
+            st.success("PDF letto, controlla e conferma i dati sotto.")
+
+        except Exception as e:
+            st.error(f"Errore lettura PDF: {e}")
+
+    if uploaded_file is not None and clients:
+        df_clients = pd.DataFrame([c.__dict__ for c in clients])
+        df_clients["label"] = df_clients["client_id"].astype(str) + " - " + df_clients["ragione_sociale"]
 
         with st.form("new_invoice_from_pdf"):
             st.markdown("#### Dati fattura precompilati")
@@ -1100,10 +1291,7 @@ def page_finance_invoices():
             col1, col2 = st.columns(2)
             with col1:
                 client_label_pdf = st.selectbox("Cliente", df_clients["label"].tolist())
-                num_fattura_pdf = st.text_input(
-                    "Numero fattura",
-                    parsed_data["num_fattura"] or suggested_num_pdf,
-                )
+                num_fattura_pdf = st.text_input("Numero fattura", parsed_data["num_fattura"])
                 data_fattura_pdf = st.date_input("Data fattura", value=parsed_data["data_fattura"])
                 data_scadenza_pdf = st.date_input("Data scadenza", value=parsed_data["data_fattura"])
             with col2:
@@ -1431,737 +1619,6 @@ def page_finance_invoices():
         <EsigibilitaIVA>I</EsigibilitaIVA>
       </DatiRiepilogo>
     </DatiBeniServizi>
-    <DatiPagamento>
-      <CondizioniPagamento>TP02</CondizioniPagamento>
-      <DettaglioPagamento>
-        <ModalitaPagamento>MP01</ModalitaPagamento>
-        <DataScadenzaPagamento>{inv.data_scadenza or inv.data_fattura}</DataScadenzaPagamento>
-        <ImportoPagamento>{inv.importo_totale:.2f}</ImportoPagamento>
-      </DettaglioPagamento>
-    </DatiPagamento>
-  </FatturaElettronicaBody>
-</FatturaElettronica>
-"""
-
-        b = io.BytesIO(xml_content.encode("utf-8"))
-        st.download_button(
-            label="⬇️ Scarica XML FatturaPA (bozza)",
-            data=b,
-            file_name=f"fattura_{inv.num_fattura}.xml",
-            mime="application/xml",
-            key=f"download_xml_{inv.invoice_id}",
-        )
-        st.info("XML FatturaPA di bozza generato. Verifica con un validatore/gestionale prima dell'invio allo SdI.")
-     
-def page_payments():
-    st.title("💶 Incassi / Scadenze")
-    role = st.session_state.get("role", "user")
-
-    # =========================
-    # CARICO FATTURE E COSTRUISCO LABEL
-    # =========================
-    with get_session() as session:
-        invoices = session.exec(select(Invoice)).all()
-
-    if not invoices:
-        st.info("Nessuna fattura registrata. Prima inserisci almeno una fattura nella pagina Finanza / Fatture.")
-        return
-
-    df_inv = pd.DataFrame([i.__dict__ for i in invoices])
-
-    # Etichetta: ID - Numero fattura - Cliente - Totale - Stato
-    with get_session() as session:
-        clients = session.exec(select(Client)).all()
-    df_clients = pd.DataFrame([c.__dict__ for c in clients]) if clients else pd.DataFrame()
-
-    df_inv["label"] = df_inv["invoice_id"].astype(str) + " - " + df_inv["num_fattura"].astype(str)
-
-    if not df_clients.empty:
-        df_clients = df_clients.rename(columns={"client_id": "client_id"})
-        df_inv = df_inv.merge(
-            df_clients[["client_id", "ragione_sociale"]],
-            how="left",
-            on="client_id",
-        )
-        df_inv["label"] = (
-            df_inv["invoice_id"].astype(str)
-            + " - "
-            + df_inv["num_fattura"].astype(str)
-            + " - "
-            + df_inv["ragione_sociale"].fillna("")
-        )
-
-    df_inv["label"] = df_inv["label"] + " - " + df_inv["importo_totale"].fillna(0).astype(float).map(lambda x: f"€ {x:,.2f}")
-    df_inv["label"] = df_inv["label"] + " - " + df_inv["stato_pagamento"].fillna("emessa")
-
-    # =========================
-    # Helper per aggiornare lo stato fattura
-    # =========================
-    def aggiorna_stato_fattura(session, invoice_id, payment_date):
-        inv_obj = session.get(Invoice, invoice_id)
-        if not inv_obj:
-            return
-
-        pays_all = session.exec(
-            select(Payment).where(Payment.invoice_id == invoice_id)
-        ).all()
-        totale_incassato = sum(p.amount for p in pays_all) if pays_all else 0.0
-
-        today = date.today()
-        scadenza = inv_obj.data_scadenza or inv_obj.data_fattura or today
-
-        if totale_incassato >= (inv_obj.importo_totale or 0):
-            inv_obj.stato_pagamento = "incassata"
-            # data incasso = data ultimo incasso registrato
-            if pays_all:
-                last_pay_date = max(p.payment_date for p in pays_all if p.payment_date)
-                inv_obj.data_incasso = last_pay_date or payment_date
-            else:
-                inv_obj.data_incasso = payment_date
-        else:
-            if totale_incassato > 0:
-                inv_obj.stato_pagamento = "parzialmente_incassata"
-            else:
-                # nessun incasso
-                if scadenza < today:
-                    inv_obj.stato_pagamento = "scaduta"
-                else:
-                    inv_obj.stato_pagamento = "emessa"
-            inv_obj.data_incasso = None
-
-        session.add(inv_obj)
-
-    # =========================
-    # NUOVO INCASSO (con precompilazione dalla fattura)
-    # =========================
-    st.subheader("➕ Registra nuovo incasso")
-
-    with st.form("new_payment"):
-        invoice_label = st.selectbox("Fattura", df_inv["label"].tolist())
-        invoice_id_sel = int(invoice_label.split(" - ")[0])
-
-        fattura_sel = df_inv[df_inv["invoice_id"] == invoice_id_sel].iloc[0]
-        importo_totale_fattura = float(fattura_sel["importo_totale"] or 0.0)
-
-        with get_session() as session:
-            pays_existing = session.exec(
-                select(Payment).where(Payment.invoice_id == invoice_id_sel)
-            ).all()
-        totale_gia_incassato = sum(p.amount for p in pays_existing) if pays_existing else 0.0
-        residuo = importo_totale_fattura - totale_gia_incassato
-
-        st.write(f"Totale fattura: € {importo_totale_fattura:,.2f}")
-        st.write(f"Già incassato: € {totale_gia_incassato:,.2f}")
-        st.write(f"Residuo: € {residuo:,.2f}")
-
-        payment_date = st.date_input("Data pagamento", value=date.today())
-        default_amount = max(residuo, 0.0) if residuo > 0 else 0.0
-        amount = st.number_input("Importo incassato (€)", min_value=0.0, step=50.0, value=default_amount)
-        method = st.text_input("Metodo (bonifico, carta, contanti...)", "bonifico")
-        note = st.text_area("Note", "")
-
-        submitted_pay = st.form_submit_button("Salva incasso")
-
-    if submitted_pay:
-        if amount <= 0:
-            st.warning("L'importo deve essere maggiore di zero.")
-        else:
-            with get_session() as session:
-                new_pay = Payment(
-                    invoice_id=invoice_id_sel,
-                    payment_date=payment_date,
-                    amount=amount,
-                    method=method.strip() or "bonifico",
-                    note=note.strip() or None,
-                )
-                session.add(new_pay)
-
-                # aggiorno stato fattura in base a tutti gli incassi
-                aggiorna_stato_fattura(session, invoice_id_sel, payment_date)
-
-                session.commit()
-            st.success("Incasso registrato e stato fattura aggiornato.")
-            st.rerun()
-    # =========================
-    # KPI INCASSI / SCADENZE
-    # =========================
-    st.markdown("---")
-    st.subheader("📊 KPI incassi e scadenze")
-
-    # Ricalcolo df_inv aggiornato dal DB per sicurezza
-    with get_session() as session:
-        invoices_kpi = session.exec(select(Invoice)).all()
-    df_kpi = pd.DataFrame([i.__dict__ for i in invoices_kpi]) if invoices_kpi else pd.DataFrame()
-
-    if not df_kpi.empty:
-        df_kpi["data_fattura"] = pd.to_datetime(df_kpi["data_fattura"], errors="coerce")
-        df_kpi["anno"] = df_kpi["data_fattura"].dt.year
-
-        anno_corrente = date.today().year
-        fatture_anno = df_kpi[df_kpi["anno"] == anno_corrente]
-
-        totale_incassato_ytd = fatture_anno[
-            fatture_anno["stato_pagamento"].isin(["parzialmente_incassata", "incassata"])
-        ]["importo_totale"].sum() if not fatture_anno.empty else 0.0
-
-        esposizione_aperta = df_kpi[
-            ~df_kpi["stato_pagamento"].isin(["incassata"])
-        ]["importo_totale"].sum()
-
-        oggi = pd.to_datetime(date.today())
-        df_kpi["data_scadenza"] = pd.to_datetime(df_kpi["data_scadenza"], errors="coerce")
-        scadute_non_incassate = df_kpi[
-            (df_kpi["data_scadenza"].notna())
-            & (df_kpi["data_scadenza"] < oggi)
-            & (~df_kpi["stato_pagamento"].isin(["incassata"]))
-        ]
-
-        col_k1, col_k2, col_k3 = st.columns(3)
-        with col_k1:
-            st.metric("Incassato anno corrente", f"€ {totale_incassato_ytd:,.2f}")
-        with col_k2:
-            st.metric("Esposizione aperta", f"€ {esposizione_aperta:,.2f}")
-        with col_k3:
-            st.metric("Fatture scadute non incassate", int(scadute_non_incassate.shape[0]))
-    else:
-        st.info("Nessuna fattura disponibile per i KPI.")
-
-    st.markdown("---")
-    st.subheader("📋 Pagamenti registrati")
-
-    with get_session() as session:
-        pays = session.exec(select(Payment)).all()
-
-    if not pays:
-        st.info("Nessun pagamento registrato.")
-        return
-
-    df_pay = pd.DataFrame([p.__dict__ for p in pays])
-
-    df_pay = df_pay.merge(
-        df_inv[["invoice_id", "num_fattura", "ragione_sociale"]] if "ragione_sociale" in df_inv.columns else df_inv[["invoice_id", "num_fattura"]],
-        how="left",
-        left_on="invoice_id",
-        right_on="invoice_id",
-    )
-
-    st.dataframe(df_pay)
-
-    # =========================
-    # 1) INSERIMENTO MANUALE FATTURA
-    # =========================
-    st.subheader("➕ Inserisci nuova fattura (manuale)")
-
-    with get_session() as session:
-        clients = session.exec(select(Client)).all()
-
-    if not clients:
-        st.info("Prima registra almeno un cliente nella sezione Clienti.")
-    else:
-        df_clients = pd.DataFrame([c.__dict__ for c in clients])
-        df_clients["label"] = df_clients["client_id"].astype(str) + " - " + df_clients["ragione_sociale"]
-
-        with st.form("new_invoice_manual"):
-            col1, col2 = st.columns(2)
-            with col1:
-                client_label = st.selectbox("Cliente", df_clients["label"].tolist())
-                num_fattura = st.text_input("Numero fattura", "")
-                data_fattura = st.date_input("Data fattura", value=date.today())
-                data_scadenza = st.date_input("Data scadenza", value=date.today())
-            with col2:
-                importo_imponibile = st.number_input("Imponibile (€)", min_value=0.0, step=100.0)
-                iva_perc = st.number_input("Aliquota IVA (%)", min_value=0.0, step=1.0, value=22.0)
-                stato_pagamento = st.selectbox(
-                    "Stato pagamento",
-                    ["emessa", "incassata", "scaduta"],
-                    index=0,
-                )
-                data_incasso = st.date_input("Data incasso (se incassata)", value=date.today())
-
-            submitted_manual = st.form_submit_button("Salva fattura manuale")
-
-        if submitted_manual:
-            if not num_fattura.strip():
-                st.warning("Il numero fattura è obbligatorio.")
-            else:
-                client_id_sel = int(client_label.split(" - ")[0])
-                iva_val = importo_imponibile * iva_perc / 100.0
-                totale = importo_imponibile + iva_val
-
-                with get_session() as session:
-                    new_inv = Invoice(
-                        client_id=client_id_sel,
-                        num_fattura=num_fattura.strip(),
-                        data_fattura=data_fattura,
-                        data_scadenza=data_scadenza,
-                        importo_imponibile=importo_imponibile,
-                        iva=iva_val,
-                        importo_totale=totale,
-                        stato_pagamento=stato_pagamento,
-                        data_incasso=data_incasso if stato_pagamento == "incassata" else None,
-                    )
-                    session.add(new_inv)
-                    session.commit()
-                    session.refresh(new_inv)
-                st.success(f"Fattura {new_inv.num_fattura} registrata.")
-                st.rerun()
-
-    st.markdown("---")
-
-    # =========================
-    # 2) UPLOAD PDF FATTURA + PRECOMPILAZIONE
-    # =========================
-    st.subheader("📎 Carica fattura PDF e precompila")
-
-    uploaded_file = st.file_uploader("Carica file PDF fattura", type=["pdf"])
-
-    parsed_data = {
-        "num_fattura": "",
-        "data_fattura": date.today(),
-        "data_scadenza": date.today(),
-        "imponibile": 0.0,
-        "iva_perc": 22.0,
-    }
-
-    if uploaded_file is not None:
-        try:
-            with pdfplumber.open(uploaded_file) as pdf:
-                text_pages = [page.extract_text() or "" for page in pdf.pages]
-            full_text = "\n".join(text_pages)
-
-            import re
-
-            # Numero fattura
-            m_num = re.search(r"[Ff]attura\s*(n\.|nr\.|numero)?\s*([A-Za-z0-9\-\/]+)", full_text)
-            if m_num:
-                parsed_data["num_fattura"] = m_num.group(2).strip()
-
-            # Data fattura
-            m_date = re.search(r"(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})", full_text)
-            if m_date:
-                for fmt in ("%d/%m/%Y", "%d-%m-%Y"):
-                    try:
-                        parsed_data["data_fattura"] = datetime.strptime(m_date.group(1), fmt).date()
-                        break
-                    except ValueError:
-                        continue
-
-            # Imponibile e totale (euristica)
-            numbers = re.findall(r"(\d{1,3}(?:[\.\,]\d{3})*(?:[\.\,]\d{2}))", full_text)
-            if len(numbers) >= 2:
-                def to_float(s):
-                    s = s.replace(".", "").replace(",", ".")
-                    return float(s)
-                parsed_data["imponibile"] = to_float(numbers[-2])
-                totale_pdf = to_float(numbers[-1])
-                if parsed_data["imponibile"] > 0:
-                    parsed_data["iva_perc"] = round((totale_pdf / parsed_data["imponibile"] - 1) * 100, 2)
-
-            st.success("PDF letto, controlla e conferma i dati sotto.")
-
-        except Exception as e:
-            st.error(f"Errore lettura PDF: {e}")
-
-    if uploaded_file is not None and clients:
-        df_clients = pd.DataFrame([c.__dict__ for c in clients])
-        df_clients["label"] = df_clients["client_id"].astype(str) + " - " + df_clients["ragione_sociale"]
-
-        with st.form("new_invoice_from_pdf"):
-            st.markdown("#### Dati fattura precompilati")
-
-            col1, col2 = st.columns(2)
-            with col1:
-                client_label_pdf = st.selectbox("Cliente", df_clients["label"].tolist())
-                num_fattura_pdf = st.text_input("Numero fattura", parsed_data["num_fattura"])
-                data_fattura_pdf = st.date_input("Data fattura", value=parsed_data["data_fattura"])
-                data_scadenza_pdf = st.date_input("Data scadenza", value=parsed_data["data_fattura"])
-            with col2:
-                imponibile_pdf = st.number_input(
-                    "Imponibile (€)",
-                    min_value=0.0,
-                    step=100.0,
-                    value=float(parsed_data["imponibile"]),
-                )
-                iva_perc_pdf = st.number_input(
-                    "Aliquota IVA (%)",
-                    min_value=0.0,
-                    step=1.0,
-                    value=float(parsed_data["iva_perc"]),
-                )
-                stato_pagamento_pdf = st.selectbox(
-                    "Stato pagamento",
-                    ["emessa", "incassata", "scaduta"],
-                    index=0,
-                )
-                data_incasso_pdf = st.date_input("Data incasso (se incassata)", value=date.today())
-
-            submitted_pdf = st.form_submit_button("Salva fattura da PDF")
-
-        if submitted_pdf:
-            if not num_fattura_pdf.strip():
-                st.warning("Il numero fattura è obbligatorio.")
-            else:
-                client_id_sel_pdf = int(client_label_pdf.split(" - ")[0])
-                iva_val_pdf = imponibile_pdf * iva_perc_pdf / 100.0
-                totale_pdf = imponibile_pdf + iva_val_pdf
-
-                with get_session() as session:
-                    new_inv_pdf = Invoice(
-                        client_id=client_id_sel_pdf,
-                        num_fattura=num_fattura_pdf.strip(),
-                        data_fattura=data_fattura_pdf,
-                        data_scadenza=data_scadenza_pdf,
-                        importo_imponibile=imponibile_pdf,
-                        iva=iva_val_pdf,
-                        importo_totale=totale_pdf,
-                        stato_pagamento=stato_pagamento_pdf,
-                        data_incasso=data_incasso_pdf if stato_pagamento_pdf == "incassata" else None,
-                    )
-                    session.add(new_inv_pdf)
-                    session.commit()
-                    session.refresh(new_inv_pdf)
-                st.success(f"Fattura {new_inv_pdf.num_fattura} (da PDF) registrata.")
-                st.rerun()
-
-    st.markdown("---")
-
-    # =========================
-    # 3) ELENCO FATTURE + KPI
-    # =========================
-    st.subheader("📊 Elenco fatture")
-
-    # -------------------------
-    # FILTRI RICERCA FATTURE
-    # -------------------------
-    col_f1, col_f2, col_f3 = st.columns(3)
-    with col_f1:
-        data_da = st.date_input("Da data (fattura)", value=None)
-    with col_f2:
-        data_a = st.date_input("A data (fattura)", value=None)
-    with col_f3:
-        stato_filter = st.selectbox(
-            "Stato pagamento",
-            ["tutti", "emessa", "parzialmente_incassata", "incassata", "scaduta"],
-            index=0,
-        )
-
-    # filtro per cliente e anno
-    col_f4, col_f5 = st.columns(2)
-    with col_f4:
-        with get_session() as session:
-            clients_all = session.exec(select(Client)).all()
-        df_clients_all = pd.DataFrame([c.__dict__ for c in clients_all]) if clients_all else pd.DataFrame()
-        cliente_filter = "tutti"
-        if not df_clients_all.empty:
-            clienti_labels = ["tutti"] + (
-                df_clients_all["client_id"].astype(str) + " - " + df_clients_all["ragione_sociale"]
-            ).tolist()
-            cliente_filter = st.selectbox("Cliente", clienti_labels, index=0)
-    with col_f5:
-        anno_filter = st.selectbox("Anno fattura", ["tutti"] + [str(y) for y in range(2023, date.today().year + 1)], index=0)
-
-    with get_session() as session:
-        invoices = session.exec(select(Invoice)).all()
-
-    if not invoices:
-        st.info("Nessuna fattura registrata.")
-        return
-
-    df_inv = pd.DataFrame([i.__dict__ for i in invoices])
-    df_inv["data_fattura"] = pd.to_datetime(df_inv["data_fattura"], errors="coerce")
-
-    # Applica filtri
-    if data_da:
-        df_inv = df_inv[df_inv["data_fattura"] >= pd.to_datetime(data_da)]
-    if data_a:
-        df_inv = df_inv[df_inv["data_fattura"] <= pd.to_datetime(data_a)]
-
-    if stato_filter != "tutti" and "stato_pagamento" in df_inv.columns:
-        df_inv = df_inv[df_inv["stato_pagamento"] == stato_filter]
-
-    if cliente_filter != "tutti" and "client_id" in df_inv.columns:
-        client_id_sel = int(cliente_filter.split(" - ")[0])
-        df_inv = df_inv[df_inv["client_id"] == client_id_sel]
-
-    if anno_filter != "tutti":
-        df_inv["anno"] = df_inv["data_fattura"].dt.year
-        df_inv = df_inv[df_inv["anno"] == int(anno_filter)]
-
-    if df_inv.empty:
-        st.info("Nessuna fattura trovata con i filtri selezionati.")
-        return
-
-    st.dataframe(df_inv)
-
-    if not invoices:
-        st.info("Nessuna fattura registrata.")
-        return
-
-    df_inv = pd.DataFrame([i.__dict__ for i in invoices])
-    df_inv["data_fattura"] = pd.to_datetime(df_inv["data_fattura"], errors="coerce")
-
-    if data_da:
-        df_inv = df_inv[df_inv["data_fattura"] >= pd.to_datetime(data_da)]
-    if data_a:
-        df_inv = df_inv[df_inv["data_fattura"] <= pd.to_datetime(data_a)]
-
-    st.dataframe(df_inv)
-
-    # KPI base: totale fatturato per anno
-    if {"data_fattura", "importo_totale"}.issubset(df_inv.columns):
-        df_inv["data_fattura"] = pd.to_datetime(df_inv["data_fattura"], errors="coerce")
-        df_inv["anno"] = df_inv["data_fattura"].dt.year
-        kpi_year = df_inv.groupby("anno")["importo_totale"].sum().reset_index()
-        st.markdown("#### Totale fatturato per anno")
-        st.bar_chart(kpi_year.set_index("anno")["importo_totale"])
-
-    # =========================
-    # 4) MODIFICA / ELIMINA FATTURA (SOLO ADMIN) + EXPORT XML
-    # =========================
-    if role != "admin":
-        st.info("Modifica, eliminazione ed export XML disponibili solo per ruolo 'admin'.")
-        return
-
-    st.markdown("---")
-    st.subheader("✏️ Modifica / elimina / esporta fattura (solo admin)")
-
-    inv_ids = df_inv["invoice_id"].tolist()
-    inv_id_sel = st.selectbox("Seleziona ID fattura", inv_ids)
-
-    with get_session() as session:
-        inv_obj = session.get(Invoice, inv_id_sel)
-        clients_all = session.exec(select(Client)).all()
-
-    if not inv_obj:
-        st.warning("Fattura non trovata.")
-        return
-
-    df_clients_all = pd.DataFrame([c.__dict__ for c in clients_all]) if clients_all else pd.DataFrame()
-    if not df_clients_all.empty:
-        df_clients_all["label"] = df_clients_all["client_id"].astype(str) + " - " + df_clients_all["ragione_sociale"]
-        try:
-            current_client_label = df_clients_all[
-                df_clients_all["client_id"] == inv_obj.client_id
-            ]["label"].iloc[0]
-        except IndexError:
-            current_client_label = df_clients_all["label"].iloc[0]
-    else:
-        current_client_label = ""
-
-    with st.form("edit_invoice"):
-        col1, col2 = st.columns(2)
-        with col1:
-            client_label_e = st.selectbox(
-                "Cliente",
-                df_clients_all["label"].tolist() if not df_clients_all.empty else [],
-                index=df_clients_all["label"].tolist().index(current_client_label) if current_client_label else 0,
-            ) if not df_clients_all.empty else ("",)
-            num_fattura_e = st.text_input("Numero fattura", inv_obj.num_fattura or "")
-            data_fattura_e = st.date_input(
-                "Data fattura",
-                value=inv_obj.data_fattura or date.today(),
-            )
-            data_scadenza_e = st.date_input(
-                "Data scadenza",
-                value=inv_obj.data_scadenza or date.today(),
-            )
-        with col2:
-            importo_imponibile_e = st.number_input(
-                "Imponibile (€)",
-                min_value=0.0,
-                step=100.0,
-                value=float(inv_obj.importo_imponibile or 0.0),
-            )
-            iva_e = st.number_input(
-                "IVA (€)",
-                min_value=0.0,
-                step=100.0,
-                value=float(inv_obj.iva or 0.0),
-            )
-            stato_pagamento_e = st.selectbox(
-                "Stato pagamento",
-                ["emessa", "incassata", "scaduta"],
-                index=["emessa", "incassata", "scaduta"].index(inv_obj.stato_pagamento or "emessa"),
-            )
-            data_incasso_e = st.date_input(
-                "Data incasso",
-                value=inv_obj.data_incasso or date.today(),
-            )
-
-        col_b1, col_b2, col_b3 = st.columns(3)
-        with col_b1:
-            update_clicked = st.form_submit_button("💾 Aggiorna fattura")
-        with col_b2:
-            delete_clicked = st.form_submit_button("🗑 Elimina fattura")
-        with col_b3:
-            export_xml_clicked = st.form_submit_button("📤 Esporta XML FatturaPA (bozza)")
-
-    if update_clicked:
-        if not num_fattura_e.strip():
-            st.warning("Il numero fattura è obbligatorio.")
-        else:
-            with get_session() as session:
-                obj = session.get(Invoice, inv_id_sel)
-                if obj:
-                    if not df_clients_all.empty:
-                        client_id_e = int(client_label_e.split(" - ")[0])
-                        obj.client_id = client_id_e
-                    obj.num_fattura = num_fattura_e.strip()
-                    obj.data_fattura = data_fattura_e
-                    obj.data_scadenza = data_scadenza_e
-                    obj.importo_imponibile = importo_imponibile_e
-                    obj.iva = iva_e
-                    obj.importo_totale = importo_imponibile_e + iva_e
-                    obj.stato_pagamento = stato_pagamento_e
-                    obj.data_incasso = data_incasso_e if stato_pagamento_e == "incassata" else None
-                    session.add(obj)
-                    session.commit()
-            st.success("Fattura aggiornata.")
-            st.rerun()
-
-    if delete_clicked:
-        with get_session() as session:
-            obj = session.get(Invoice, inv_id_sel)
-            if obj:
-                session.delete(obj)
-                session.commit()
-        st.success("Fattura eliminata.")
-        st.rerun()
-
-    if export_xml_clicked:
-        inv = inv_obj
-
-        # Carica dati cliente dal DB
-        with get_session() as session:
-            client_xml = session.get(Client, inv.client_id)
-
-        my = MY_COMPANY_DATA
-
-        # Cedente/prestatore (tu)
-        ced_den = my["denominazione"]
-        ced_piva = my["piva"]
-        ced_cf = my["codice_fiscale"]
-        ced_addr = my["indirizzo"]
-        ced_cap = my["cap"]
-        ced_comune = my["comune"]
-        ced_prov = my["provincia"]
-        ced_paese = my["nazione"]
-        ced_regime = my.get("regime_fiscale", "RF19")
-        id_paese_trasm = my.get("id_paese_trasmittente", "IT")
-        id_codice_trasm = my.get("id_codice_trasmittente", ced_cf)
-        formato_trasm = my.get("formato_trasmissione", "FPR12")
-
-        # Cessionario/committente (cliente)
-        cli_den = client_xml.ragione_sociale or ""
-        cli_piva = (client_xml.piva or "").strip() or ced_piva
-        cli_cf = (client_xml.cod_fiscale or "").strip() or cli_piva
-
-        raw_paese = (client_xml.paese or "IT").strip()
-        if raw_paese.lower() in ("italia", "it"):
-            cli_paese = "IT"
-        else:
-            cli_paese = raw_paese.upper()[:2]
-
-        cli_addr = client_xml.indirizzo or ""
-        cli_cap = client_xml.cap or ""
-        cli_comune = client_xml.comune or ""
-        cli_prov = client_xml.provincia or ""
-        cli_cod_dest = client_xml.codice_destinatario or "0000000"
-        cli_pec = client_xml.pec_fatturazione or my.get("pec_mittente", "")
-
-        # Progressivo invio
-        prefisso = my.get("progressivo_invio_prefisso", "FL")
-        progressivo_invio = f"{prefisso}_{(inv.num_fattura or '1').replace('/', '_')}"
-
-        aliquota_iva = (inv.iva / inv.importo_imponibile * 100) if inv.importo_imponibile else 22.0
-
-        xml_content = f"""<?xml version="1.0" encoding="UTF-8"?>
-<FatturaElettronica versione="{formato_trasm}">
-  <FatturaElettronicaHeader>
-    <DatiTrasmissione>
-      <IdTrasmittente>
-        <IdPaese>{id_paese_trasm}</IdPaese>
-        <IdCodice>{id_codice_trasm}</IdCodice>
-      </IdTrasmittente>
-      <ProgressivoInvio>{progressivo_invio}</ProgressivoInvio>
-      <FormatoTrasmissione>{formato_trasm}</FormatoTrasmissione>
-      <CodiceDestinatario>{cli_cod_dest}</CodiceDestinatario>
-      {"<PECDestinatario>" + cli_pec + "</PECDestinatario>" if cli_cod_dest == "0000000" and cli_pec else ""}
-    </DatiTrasmissione>
-    <CedentePrestatore>
-      <DatiAnagrafici>
-        <IdFiscaleIVA>
-          <IdPaese>{ced_paese}</IdPaese>
-          <IdCodice>{ced_piva}</IdCodice>
-        </IdFiscaleIVA>
-        <CodiceFiscale>{ced_cf}</CodiceFiscale>
-        <Anagrafica>
-          <Denominazione>{ced_den}</Denominazione>
-        </Anagrafica>
-        <RegimeFiscale>{ced_regime}</RegimeFiscale>
-      </DatiAnagrafici>
-      <Sede>
-        <Indirizzo>{ced_addr}</Indirizzo>
-        <CAP>{ced_cap}</CAP>
-        <Comune>{ced_comune}</Comune>
-        <Provincia>{ced_prov}</Provincia>
-        <Nazione>{ced_paese}</Nazione>
-      </Sede>
-    </CedentePrestatore>
-    <CessionarioCommittente>
-      <DatiAnagrafici>
-        <IdFiscaleIVA>
-          <IdPaese>{cli_paese}</IdPaese>
-          <IdCodice>{cli_piva}</IdCodice>
-        </IdFiscaleIVA>
-        <CodiceFiscale>{cli_cf}</CodiceFiscale>
-        <Anagrafica>
-          <Denominazione>{cli_den}</Denominazione>
-        </Anagrafica>
-      </DatiAnagrafici>
-      <Sede>
-        <Indirizzo>{cli_addr}</Indirizzo>
-        <CAP>{cli_cap}</CAP>
-        <Comune>{cli_comune}</Comune>
-        <Provincia>{cli_prov}</Provincia>
-        <Nazione>{cli_paese}</Nazione>
-      </Sede>
-    </CessionarioCommittente>
-  </FatturaElettronicaHeader>
-  <FatturaElettronicaBody>
-    <DatiGenerali>
-      <DatiGeneraliDocumento>
-        <TipoDocumento>TD01</TipoDocumento>
-        <Divisa>EUR</Divisa>
-        <Data>{inv.data_fattura}</Data>
-        <Numero>{inv.num_fattura}</Numero>
-        <ImportoTotaleDocumento>{inv.importo_totale:.2f}</ImportoTotaleDocumento>
-      </DatiGeneraliDocumento>
-    </DatiGenerali>
-    <DatiBeniServizi>
-      <DettaglioLinee>
-        <NumeroLinea>1</NumeroLinea>
-        <Descrizione>Servizi di consulenza ForgiaLean</Descrizione>
-        <Quantita>1.00</Quantita>
-        <PrezzoUnitario>{inv.importo_imponibile:.2f}</PrezzoUnitario>
-        <PrezzoTotale>{inv.importo_imponibile:.2f}</PrezzoTotale>
-        <AliquotaIVA>{aliquota_iva:.2f}</AliquotaIVA>
-      </DettaglioLinee>
-      <DatiRiepilogo>
-        <AliquotaIVA>{aliquota_iva:.2f}</AliquotaIVA>
-        <ImponibileImporto>{inv.importo_imponibile:.2f}</ImponibileImporto>
-        <Imposta>{inv.iva:.2f}</Imposta>
-        <EsigibilitaIVA>I</EsigibilitaIVA>
-      </DatiRiepilogo>
-    </DatiBeniServizi>
-    <DatiPagamento>
-      <CondizioniPagamento>TP02</CondizioniPagamento>
-      <DettaglioPagamento>
-        <ModalitaPagamento>MP01</ModalitaPagamento>
-        <DataScadenzaPagamento>{inv.data_scadenza or inv.data_fattura}</DataScadenzaPagamento>
-        <ImportoPagamento>{inv.importo_totale:.2f}</ImportoPagamento>
-      </DettaglioPagamento>
-    </DatiPagamento>
   </FatturaElettronicaBody>
 </FatturaElettronica>
 """
@@ -2416,76 +1873,7 @@ def page_operations():
     else:
         st.info("Nessuna riga di timesheet registrata.")
 
-    st.markdown("---")
-    st.subheader("📊 KPI commesse e ore lavorate")
-
-    with get_session() as session:
-        commesse_all_kpi = session.exec(select(ProjectCommessa)).all()
-        time_all_kpi = session.exec(select(TimeEntry)).all()
-
-    if not commesse_all_kpi or not time_all_kpi:
-        st.info("Per i KPI servono almeno una commessa e qualche registrazione ore.")
-    else:
-        df_comm_all = pd.DataFrame([c.__dict__ for c in commesse_all_kpi])
-        df_time_all = pd.DataFrame([t.__dict__ for t in time_all_kpi])
-
-        # KPI sintetici
-        ore_totali = df_time_all["ore"].sum()
-        n_commesse_aperte = df_comm_all[
-            df_comm_all["stato_commessa"].isin(["aperta", "in corso"])
-        ].shape[0]
-        ore_previste_tot = df_comm_all["ore_previste"].sum()
-        utilizzo_ore = (ore_totali / ore_previste_tot * 100.0) if ore_previste_tot > 0 else 0.0
-
-        col_k1, col_k2, col_k3 = st.columns(3)
-        with col_k1:
-            st.metric("Ore totali lavorate (tutte le commesse)", f"{ore_totali:.1f} h")
-        with col_k2:
-            st.metric("N. commesse aperte / in corso", int(n_commesse_aperte))
-        with col_k3:
-            st.metric("Utilizzo ore vs previste", f"{utilizzo_ore:.1f} %")
-
-        st.markdown("---")
-        st.subheader("📦 Avanzamento commesse")
-
-        # Avanzamento per commessa: ore_consumate vs ore_previste
-        df_comm_all["Avanzamento_ore_%"] = df_comm_all.apply(
-            lambda r: (r["ore_consumate"] / r["ore_previste"] * 100.0) if r["ore_previste"] > 0 else 0.0,
-            axis=1,
-        )
-
-        st.dataframe(
-            df_comm_all[
-                ["cod_commessa", "stato_commessa", "ore_previste", "ore_consumate", "Avanzamento_ore_%"]
-            ].rename(
-                columns={
-                    "cod_commessa": "Commessa",
-                    "stato_commessa": "Stato",
-                    "ore_previste": "Ore previste",
-                    "ore_consumate": "Ore consumate",
-                    "Avanzamento_ore_%": "Avanzamento ore (%)",
-                }
-            )
-        )
-
-        fig_comm_av = px.bar(
-            df_comm_all,
-            x="cod_commessa",
-            y="Avanzamento_ore_%",
-            color="stato_commessa",
-            title="Avanzamento ore per commessa",
-            labels={
-                "cod_commessa": "Commessa",
-                "Avanzamento_ore_%": "Avanzamento ore (%)",
-                "stato_commessa": "Stato",
-            },
-            range_y=[0, 150],
-        )
-        st.plotly_chart(fig_comm_av, use_container_width=True)
-
-        st.caption("Valori >100% indicano commesse che hanno superato le ore previste.")
-
-    # =========================
+        # =========================
     # SEZIONE EDIT / DELETE (SOLO ADMIN)
     # =========================
     if role != "admin":
@@ -2809,28 +2197,15 @@ def page_people_departments():
         else:
             st.dataframe(df_emp_all)
 
-    # =========================
-    # KPI PEOPLE & ORE (da timesheet)
-    # =========================
-    with get_session() as session:
-        time_all = session.exec(select(TimeEntry)).all()
-
     st.markdown("---")
-    st.subheader("📊 KPI People (tutte le persone)")
-    ...
-    # (tutto il blocco KPI + grafico ore per reparto)
-    ...
-    # =========================
-    # FILTRO PERIODO KPI MANUALI (reparto/persona)
-    # =========================
-    st.markdown("---")
-    st.subheader("📅 Filtro periodo KPI (manuali)")
+    st.subheader("📅 Filtro periodo KPI")
 
     col_k1, col_k2 = st.columns(2)
     with col_k1:
         kpi_da = st.date_input("Da data KPI", value=None, key="kpi_da")
     with col_k2:
         kpi_a = st.date_input("A data KPI", value=None, key="kpi_a")
+
     # =========================
     # INSERIMENTO KPI REPARTO (DATI REALI)
     # =========================
@@ -3536,21 +2911,13 @@ def page_finance_dashboard():
 
     # ---------- KPI sintetici ----------
     st.subheader("KPI periodo selezionato")
-
-    margine_val = totale_entrate - totale_uscite
-    margine_perc = (margine_val / totale_entrate * 100.0) if totale_entrate > 0 else 0.0
-
     col_k1, col_k2, col_k3 = st.columns(3)
     with col_k1:
-        st.metric("Entrate totali", f"€ {totale_entrate:,.0f}".replace(",", "."))
+        st.metric("Entrate totali", f"{totale_entrate:,.2f} €".replace(",", " "))
     with col_k2:
-        st.metric("Uscite totali", f"€ {totale_uscite:,.0f}".replace(",", "."))
+        st.metric("Uscite totali", f"{totale_uscite:,.2f} €".replace(",", " "))
     with col_k3:
-        st.metric(
-            "Margine",
-            f"€ {margine_val:,.0f} ({margine_perc:.1f}%)".replace(",", "."),
-            delta=None,
-        )
+        st.metric("Margine", f"{(totale_entrate - totale_uscite):,.2f} €".replace(",", " "))
 
     # ---------- Grafici ----------
     if not df_kpi.empty:
@@ -3561,10 +2928,9 @@ def page_finance_dashboard():
             y=["Entrate", "Uscite"],
             barmode="group",
             title="Entrate vs Uscite per mese",
-            labels={"value": "Importo (€)", "mese": "Mese", "variable": "Voce"},
         )
-        fig_eu.update_layout(legend_title_text="")
         st.plotly_chart(fig_eu, use_container_width=True)
+
         st.subheader("Margine per mese")
         fig_m = px.line(
             df_kpi,
