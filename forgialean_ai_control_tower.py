@@ -4504,17 +4504,19 @@ PAGES = {
     "Presentazione": page_presentation,
     "Overview": page_overview,
     "Clienti": page_clients,
-    "CRM & Vendite": page_crm_vendite,
-    "Finanza / Fatture": page_finance_dashboard,
-    "Incassi / Scadenze": page_incassi_scadenze,
+    "CRM & Vendite": page_crm_sales,
+    "Finanza / Fatture": page_finance_invoices,    # pagina fatture
+    "Finanza / Pagamenti": page_finance_payments,  # se è una pagina distinta
+    "Incassi / Scadenze": page_payments,
     "Cashflow proiettato": page_cashflow_forecast,
-    "Fatture → AE": page_fatture_ae,
-    "Fisco & INPS": page_fisco_inps,
-    "Operations / Commesse": page_operations_commesse,
+    "Fatture → AE": page_invoice_transmission,
+    "Fisco & INPS": page_tax_inps,
+    "Spese": page_expenses,
+    "Finanza / Dashboard": page_finance_dashboard,
+    "Operations / Commesse": page_operations,
     "People & Reparti": page_people_departments,
-    "Capacità People": page_capacity_people,  # nuova pagina
+    "Capacità People": page_capacity_people,
 }
-
 
 # =========================
 # LOGIN & MAIN
