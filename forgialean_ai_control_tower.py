@@ -33,6 +33,8 @@ from db import (
     ExpenseCategory,
     Account,
     Expense,
+    CashflowBudget, 
+    CashflowEvent,
 )
 
 from cache_functions import (
@@ -4092,6 +4094,205 @@ def page_finance_dashboard():
     df_exp = pd.DataFrame([e.__dict__ for e in expenses])
     st.dataframe(df_exp)
 
+def page_cashflow_forecast():
+    st.title("📈 Cashflow proiettato (Budget / Consuntivo / Forecast)")
+
+    today = date.today()
+    anno_sel = st.selectbox("Anno", [today.year - 1, today.year, today.year + 1], index=1)
+
+    # -------------------------
+    # 1) BUDGET MENSILE
+    # -------------------------
+    st.subheader("🧭 Budget mensile per categoria")
+
+    with get_session() as session:
+        budget_rows = session.exec(
+            select(CashflowBudget).where(CashflowBudget.anno == anno_sel)
+        ).all()
+
+    df_budget = pd.DataFrame([b.__dict__ for b in (budget_rows or [])])
+
+    with st.form("budget_form"):
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            mese_b = st.selectbox("Mese", list(range(1, 13)), index=today.month - 1)
+        with col2:
+            categoria_b = st.text_input(
+                "Categoria",
+                "Entrate clienti",
+                help="Es. Entrate clienti, Costi fissi, Costi variabili, Fisco/INPS",
+            )
+        with col3:
+            importo_b = st.number_input(
+                "Importo previsto (positivo=entrata, negativo=uscita)",
+                value=0.0,
+                step=100.0,
+            )
+
+        submit_budget = st.form_submit_button("💾 Aggiungi riga budget")
+
+    if submit_budget:
+        with get_session() as session:
+            new_b = CashflowBudget(
+                anno=anno_sel,
+                mese=mese_b,
+                categoria=categoria_b.strip(),
+                importo_previsto=float(importo_b),
+            )
+            session.add(new_b)
+            session.commit()
+        st.success("Riga budget salvata.")
+        st.rerun()
+
+    if not df_budget.empty:
+        df_budget = df_budget.sort_values(["mese", "categoria"])
+        st.markdown("#### Budget definito")
+        st.dataframe(df_budget)
+    else:
+        st.info("Nessun budget definito per questo anno.")
+
+    st.markdown("---")
+
+    # -------------------------
+    # 2) EVENTI FUTURI
+    # -------------------------
+    st.subheader("📌 Eventi futuri (entrate/uscite specifiche)")
+
+    with get_session() as session:
+        events_rows = session.exec(
+            select(CashflowEvent).where(CashflowEvent.data >= date(anno_sel, 1, 1))
+        ).all()
+
+    df_events = pd.DataFrame([e.__dict__ for e in (events_rows or [])])
+
+    with st.form("event_form"):
+        col1, col2 = st.columns(2)
+        with col1:
+            data_e = st.date_input("Data evento", value=today)
+            tipo_e = st.selectbox("Tipo", ["entrata", "uscita"])
+            categoria_e = st.text_input("Categoria evento", "Entrate clienti")
+        with col2:
+            importo_e = st.number_input(
+                "Importo (positivo=entrata, negativo=uscita)",
+                value=0.0,
+                step=100.0,
+            )
+            riferimento_e = st.text_input("Riferimento (cliente/commessa)", "")
+
+        descr_e = st.text_input("Descrizione", "")
+        submit_event = st.form_submit_button("💾 Aggiungi evento")
+
+    if submit_event:
+        with get_session() as session:
+            new_e = CashflowEvent(
+                data=data_e,
+                tipo=tipo_e,
+                categoria=categoria_e.strip(),
+                descrizione=descr_e.strip() or None,
+                importo=float(importo_e),
+                riferimento=riferimento_e.strip() or None,
+            )
+            session.add(new_e)
+            session.commit()
+        st.success("Evento salvato.")
+        st.rerun()
+
+    if not df_events.empty:
+        df_events = df_events.sort_values("data")
+        st.markdown("#### Eventi registrati")
+        st.dataframe(df_events)
+    else:
+        st.info("Nessun evento futuro registrato per questo anno.")
+
+    st.markdown("---")
+
+    # -------------------------
+    # 3) CONSUNTIVO vs BUDGET vs FORECAST
+    # -------------------------
+    st.subheader("📊 Consuntivo vs Budget vs Forecast")
+
+    # Consuntivo: riuso logica finanza (Invoice + Expense)
+    with get_session() as session:
+        invoices = session.exec(
+            select(Invoice).where(
+                Invoice.data_fattura.between(date(anno_sel, 1, 1), date(anno_sel, 12, 31))
+            )
+        ).all()
+        expenses = session.exec(
+            select(Expense).where(
+                Expense.data.between(date(anno_sel, 1, 1), date(anno_sel, 12, 31))
+            )
+        ).all()
+
+    df_inv = pd.DataFrame([i.__dict__ for i in (invoices or [])])
+    df_exp = pd.DataFrame([e.__dict__ for e in (expenses or [])])
+
+    # Entrate consuntivo per mese
+    if not df_inv.empty:
+        df_inv["data_rif"] = pd.to_datetime(
+            df_inv["data_incasso"].fillna(df_inv["data_fattura"]), errors="coerce"
+        )
+        df_inv = df_inv.dropna(subset=["data_rif"])
+        df_inv["mese"] = df_inv["data_rif"].dt.month
+        entrate_cons = (
+            df_inv.groupby("mese")["importo_totale"].sum().rename("Entrate_cons").reset_index()
+        )
+    else:
+        entrate_cons = pd.DataFrame({"mese": [], "Entrate_cons": []})
+
+    # Uscite consuntivo per mese
+    if not df_exp.empty:
+        df_exp["data"] = pd.to_datetime(df_exp["data"], errors="coerce")
+        df_exp = df_exp.dropna(subset=["data"])
+        df_exp["mese"] = df_exp["data"].dt.month
+        uscite_cons = (
+            df_exp.groupby("mese")["importo_totale"].sum().rename("Uscite_cons").reset_index()
+        )
+    else:
+        uscite_cons = pd.DataFrame({"mese": [], "Uscite_cons": []})
+
+    # Budget per mese
+    if not df_budget.empty:
+        budget_mese = (
+            df_budget.groupby("mese")["importo_previsto"].sum().rename("Netto_budget").reset_index()
+        )
+    else:
+        budget_mese = pd.DataFrame({"mese": [], "Netto_budget": []})
+
+    # Eventi per mese
+    if not df_events.empty:
+        df_events["mese"] = pd.to_datetime(df_events["data"]).dt.month
+        eventi_mese = (
+            df_events.groupby("mese")["importo"].sum().rename("Netto_eventi").reset_index()
+        )
+    else:
+        eventi_mese = pd.DataFrame({"mese": [], "Netto_eventi": []})
+
+    # Merge
+    mesi = pd.DataFrame({"mese": list(range(1, 13))})
+    df_cf = mesi.merge(entrate_cons, on="mese", how="left")
+    df_cf = df_cf.merge(uscite_cons, on="mese", how="left")
+    df_cf = df_cf.merge(budget_mese, on="mese", how="left")
+    df_cf = df_cf.merge(eventi_mese, on="mese", how="left")
+    df_cf = df_cf.fillna(0.0)
+
+    df_cf["Netto_cons"] = df_cf["Entrate_cons"] - df_cf["Uscite_cons"]
+    df_cf["Forecast"] = df_cf["Netto_cons"] + df_cf["Netto_eventi"]
+    df_cf["Varianza_budget"] = df_cf["Netto_cons"] - df_cf["Netto_budget"]
+
+    st.dataframe(df_cf)
+
+    # Grafico
+    fig = px.line(
+        df_cf,
+        x="mese",
+        y=["Netto_cons", "Netto_budget", "Forecast"],
+        markers=True,
+        title=f"Cashflow mensile {anno_sel}: consuntivo vs budget vs forecast",
+        labels={"value": "€", "mese": "Mese", "variable": "Serie"},
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
 # =========================
 # ROUTER
 # =========================
@@ -4105,6 +4306,7 @@ PAGES = {
     "Incassi / Scadenze": page_finance_payments,      # nuova pagina
     "Costi & Fornitori": page_expenses,      # <--- aggiungi questa
     "Cruscotto Finanza": page_finance_dashboard,  # <-- nuova voce
+    "Cashflow proiettato": page_cashflow_forecast,   # <--- nuova
     "Fatture → AE": page_invoice_transmission,         # nuova pagina
     "Fisco & INPS": page_tax_inps,                     # nuova pagina
     "Operations / Commesse": page_operations,
