@@ -4900,28 +4900,64 @@ def page_cashflow_forecast():
         uscite_actual = pd.DataFrame(columns=["mese", "Uscite_actual"])
 
     # ---------------------------
-    # Budget per mese
+    # Budget per mese (con categorie di cashflow)
     # ---------------------------
     df_budget = pd.DataFrame(
         [
             {
                 "mese": b.mese,
-                "categoria": b.categoria,
+                "categoria": (b.categoria or "").strip(),
                 "importo_previsto": b.importo_previsto,
             }
             for b in (budgets or [])
         ]
     )
 
+    def _classifica_cashflow_cat(nome_cat: str) -> str:
+        """Restituisce: operativo / fisco_inps / investimenti_altro."""
+        nome = (nome_cat or "").lower()
+        if any(k in nome for k in ["fisco", "imposte", "tasse", "inps", "previd"]):
+            return "fisco_inps"
+        if any(k in nome for k in ["invest", "macchin", "impiant", "attrezz", "capex"]):
+            return "investimenti_altro"
+        # default: tutto ciò che non è fisco/INPS o investimenti lo consideriamo operativo
+        return "operativo"
+
     if not df_budget.empty:
+        df_budget["macro_cat"] = df_budget["categoria"].apply(_classifica_cashflow_cat)
+        # netto totale budget (come prima)
         budget_mese = (
             df_budget.groupby("mese")["importo_previsto"]
             .sum()
             .rename("Netto_budget")
             .reset_index()
         )
+        # budget per macro-categoria
+        budget_mese_macro = (
+            df_budget.groupby(["mese", "macro_cat"])["importo_previsto"]
+            .sum()
+            .reset_index()
+            .pivot(index="mese", columns="macro_cat", values="importo_previsto")
+            .fillna(0.0)
+            .reset_index()
+        )
+        budget_mese_macro = budget_mese_macro.rename(
+            columns={
+                "operativo": "Budget_operativo",
+                "fisco_inps": "Budget_fisco_inps",
+                "investimenti_altro": "Budget_investimenti_altro",
+            }
+        )
     else:
         budget_mese = pd.DataFrame(columns=["mese", "Netto_budget"])
+        budget_mese_macro = pd.DataFrame(
+            columns=[
+                "mese",
+                "Budget_operativo",
+                "Budget_fisco_inps",
+                "Budget_investimenti_altro",
+            ]
+        )
 
     # ---------------------------
     # Eventi puntuali (forecast)
@@ -4956,6 +4992,8 @@ def page_cashflow_forecast():
     df_cf = df_cf.merge(uscite_actual, on="mese", how="left")
     df_cf = df_cf.merge(budget_mese, on="mese", how="left")
     df_cf = df_cf.merge(events_mese, on="mese", how="left")
+    df_cf = df_cf.merge(budget_mese_macro, on="mese", how="left")
+
 
     df_cf = df_cf.fillna(0.0)
 
@@ -4966,6 +5004,17 @@ def page_cashflow_forecast():
     df_cf["Netto_actual"] = df_cf["Entrate_actual"] - df_cf["Uscite_actual"]
     df_cf["Netto_budget_events"] = df_cf["Netto_budget"] + df_cf["Events_netto"]
     df_cf["Netto_forecast"] = df_cf["Netto_actual"] + df_cf["Netto_budget_events"]
+    # Scomposizione del forecast per macro-categoria
+    df_cf["Netto_operativo"] = df_cf["Netto_actual"] + df_cf["Budget_operativo"]
+    df_cf["Netto_fisco_inps"] = df_cf["Budget_fisco_inps"]
+    df_cf["Netto_investimenti_altro"] = df_cf["Budget_investimenti_altro"]
+
+    # Controllo: somma delle tre componenti
+    df_cf["Netto_somma_componenti"] = (
+        df_cf["Netto_operativo"]
+        + df_cf["Netto_fisco_inps"]
+        + df_cf["Netto_investimenti_altro"]
+    )
 
     # Calcolo saldo mese per mese
     saldi = []
@@ -4995,10 +5044,14 @@ def page_cashflow_forecast():
         "Netto_actual",
         "Netto_budget",
         "Events_netto",
+        "Netto_operativo",
+        "Netto_fisco_inps",
+        "Netto_investimenti_altro",
         "Netto_forecast",
         "Saldo_iniziale",
         "Saldo_finale",
     ]
+
     df_view = df_view[cols_show]
 
     st.subheader("Tabella mensile Actual vs Budget + saldo proiettato")
