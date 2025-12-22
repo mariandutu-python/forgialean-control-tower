@@ -3189,6 +3189,112 @@ def page_people_departments():
                 st.success("Persona eliminata.")
                 st.rerun()
 
+def page_capacity_people():
+    st.title("👥 Capacità people vs carico (da timesheet)")
+
+    # ---------- Filtro periodo ----------
+    st.subheader("Filtro periodo")
+    col_f1, col_f2 = st.columns(2)
+    with col_f1:
+        data_da = st.date_input("Da data", value=date(date.today().year, 1, 1), key="cap_da")
+    with col_f2:
+        data_a = st.date_input("A data", value=date.today(), key="cap_a")
+
+    # ---------- Parametri capacità standard ----------
+    st.subheader("Parametri capacità standard")
+    col_c1, col_c2 = st.columns(2)
+    with col_c1:
+        ore_giorno = st.number_input(
+            "Ore/giorno",
+            min_value=1.0,
+            max_value=12.0,
+            value=8.0,
+            step=0.5,
+            key="cap_ore_giorno",
+        )
+    with col_c2:
+        giorni_settimana = st.number_input(
+            "Giorni/settimana",
+            min_value=1,
+            max_value=7,
+            value=5,
+            step=1,
+            key="cap_giorni_sett",
+        )
+
+    # ---------- Carico timesheet ----------
+    with get_session() as session:
+        entries = session.exec(select(TimeEntry)).all()
+        employees = session.exec(select(Employee)).all()
+
+    if not entries:
+        st.info("Nessuna riga timesheet registrata.")
+        return
+
+    df_te = pd.DataFrame([e.__dict__ for e in entries])
+    df_te["data_lavoro"] = pd.to_datetime(df_te["data_lavoro"], errors="coerce")
+    df_te = df_te.dropna(subset=["data_lavoro"])
+
+    df_te = df_te[
+        (df_te["data_lavoro"] >= pd.to_datetime(data_da)) &
+        (df_te["data_lavoro"] <= pd.to_datetime(data_a))
+    ]
+
+    if df_te.empty:
+        st.info("Nessuna riga timesheet nel periodo selezionato.")
+        return
+
+    # ---------- Mapping operatore -> employee / reparto ----------
+    df_emp = pd.DataFrame([e.__dict__ for e in (employees or [])])
+    if not df_emp.empty:
+        df_emp["nome_completo"] = df_emp["nome"] + " " + df_emp["cognome"]
+        df_te = df_te.merge(
+            df_emp[["employee_id", "department_id", "nome_completo"]],
+            how="left",
+            left_on="operatore",
+            right_on="nome_completo",
+        )
+    else:
+        df_te["employee_id"] = None
+        df_te["department_id"] = None
+
+    # ---------- Capacità teorica periodo ----------
+    giorni = pd.date_range(start=data_da, end=data_a, freq="D")
+    # 0 = lunedì ... 6 = domenica; prendiamo solo i primi 'giorni_settimana' valori
+    giorni_lav = [g for g in giorni if g.weekday() < giorni_settimana]
+    giorni_lav_count = len(giorni_lav)
+    capacita_teorica = giorni_lav_count * ore_giorno
+
+    # ---------- Aggregazione per persona ----------
+    agg = (
+        df_te.groupby("operatore")["ore"]
+        .sum()
+        .reset_index()
+        .rename(columns={"ore": "Ore_registrate"})
+    )
+    agg["Capacita_teorica"] = capacita_teorica
+    agg["Utilization_%"] = agg["Ore_registrate"] / agg["Capacita_teorica"] * 100.0
+
+    st.subheader("Saturazione per persona (periodo)")
+    st.dataframe(
+        agg.style.format(
+            {
+                "Ore_registrate": "{:,.2f}",
+                "Capacita_teorica": "{:,.2f}",
+                "Utilization_%": "{:,.1f}",
+            }
+        )
+    )
+
+    # ---------- Grafico utilizzo ----------
+    fig = px.bar(
+        agg,
+        x="operatore",
+        y="Utilization_%",
+        title="Utilization % per persona",
+        labels={"operatore": "Operatore", "Utilization_%": "Utilization (%)"},
+    )
+    st.plotly_chart(fig, use_container_width=True)
 
 # =========================
 # PAGINE FINANZA AVANZATE
