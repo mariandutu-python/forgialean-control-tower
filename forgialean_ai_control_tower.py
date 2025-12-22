@@ -4499,6 +4499,23 @@ def page_cashflow_forecast():
     )
     st.plotly_chart(fig, use_container_width=True)
 
+
+PAGES = {
+    "Presentazione": page_presentazione,
+    "Overview": page_overview,
+    "Clienti": page_clients,
+    "CRM & Vendite": page_crm_vendite,
+    "Finanza / Fatture": page_finance_dashboard,
+    "Incassi / Scadenze": page_incassi_scadenze,
+    "Cashflow proiettato": page_cashflow_forecast,
+    "Fatture → AE": page_fatture_ae,
+    "Fisco & INPS": page_fisco_inps,
+    "Operations / Commesse": page_operations_commesse,
+    "People & Reparti": page_people_departments,
+    "Capacità People": page_capacity_people,  # nuova pagina
+}
+
+
 # =========================
 # LOGIN & MAIN
 # =========================
