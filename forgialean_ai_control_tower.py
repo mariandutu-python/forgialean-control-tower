@@ -60,6 +60,65 @@ init_db()
 
 LOGO_PATH = Path("forgialean_logo.png")
 
+def build_income_statement(anno_sel: int) -> pd.DataFrame:
+    """Conto Economico gestionale semplice per anno: Proventi, Costi, Netto."""
+    with get_session() as session:
+        # Ricavi: imponibile fatture per anno selezionato (data_fattura)
+        invoices = session.exec(
+            select(Invoice).where(
+                Invoice.data_fattura.is_not(None),
+                SQLModel.raw_column("strftime('%Y', data_fattura) = :anno")
+            ).params(anno=str(anno_sel))
+        ).all()
+
+        df_inv = pd.DataFrame([i.__dict__ for i in invoices]) if invoices else pd.DataFrame()
+        ricavi = df_inv["importo_imponibile"].sum() if not df_inv.empty else 0.0
+
+        # Costi operativi: imponibile spese nell'anno (data)
+        expenses = session.exec(
+            select(Expense).where(
+                Expense.data.is_not(None),
+                SQLModel.raw_column("strftime('%Y', data) = :anno")
+            ).params(anno=str(anno_sel))
+        ).all()
+
+        df_exp = pd.DataFrame([e.__dict__ for e in expenses]) if expenses else pd.DataFrame()
+        costi_spese = df_exp["importo_imponibile"].sum() if not df_exp.empty else 0.0
+
+        # Contributi INPS pagati nell'anno
+        inps = session.exec(
+            select(InpsContribution).where(
+                InpsContribution.payment_date.is_not(None),
+                SQLModel.raw_column("strftime('%Y', payment_date) = :anno")
+            ).params(anno=str(anno_sel))
+        ).all()
+
+        df_inps = pd.DataFrame([c.__dict__ for c in inps]) if inps else pd.DataFrame()
+        costi_inps = df_inps["amount_paid"].sum() if not df_inps.empty else 0.0
+
+        # Imposte pagate nell'anno
+        taxes = session.exec(
+            select(TaxDeadline).where(
+                TaxDeadline.payment_date.is_not(None),
+                SQLModel.raw_column("strftime('%Y', payment_date) = :anno")
+            ).params(anno=str(anno_sel))
+        ).all()
+
+        df_tax = pd.DataFrame([t.__dict__ for t in taxes]) if taxes else pd.DataFrame()
+        costi_tasse = df_tax["amount_paid"].sum() if not df_tax.empty else 0.0
+
+    proventi = ricavi
+    costi_totali = costi_spese + costi_inps + costi_tasse
+    risultato_netto = proventi - costi_totali
+
+    data = [
+        {"Voce": "Proventi", "Importo": proventi},
+        {"Voce": "Costi operativi (spese)", "Importo": -costi_spese},
+        {"Voce": "Costi INPS", "Importo": -costi_inps},
+        {"Voce": "Imposte", "Importo": -costi_tasse},
+        {"Voce": "Risultato netto", "Importo": risultato_netto},
+    ]
+    return pd.DataFrame(data)
 
 def export_all_to_excel(dfs: dict, filename: str):
     buffer = io.BytesIO()
@@ -3671,7 +3730,7 @@ def page_expenses():
 def page_finance_dashboard():
     st.title("📊 Cruscotto Finanza")
 
-    # Filtro periodo
+    # Filtro periodo esistente
     st.subheader("Filtro periodo")
     col_f1, col_f2 = st.columns(2)
     with col_f1:
@@ -3689,6 +3748,23 @@ def page_finance_dashboard():
     if df_inv.empty and df_exp.empty:
         st.info("Nessun dato di entrate o uscite nel sistema.")
         return
+
+    # =========================
+    # Conto Economico gestionale (annuale)
+    # =========================
+    st.markdown("---")
+    anno_ce = st.number_input(
+        "Anno Conto Economico gestionale",
+        min_value=2020,
+        max_value=2100,
+        value=date.today().year,
+        step=1,
+    )
+
+    df_ce = build_income_statement(anno_ce)
+
+    st.subheader(f"Conto Economico gestionale {anno_ce}")
+    st.dataframe(df_ce.style.format({"Importo": "{:,.2f}"}))
 
     # ---------- ENTRATE (Fatture incassate) ----------
     if not df_inv.empty:
