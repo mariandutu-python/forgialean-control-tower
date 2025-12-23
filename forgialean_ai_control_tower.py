@@ -5340,6 +5340,7 @@ PAGES = {
     "Fisco & INPS": page_tax_inps,
     "Spese": page_expenses,
     "Finanza / Dashboard": page_finance_dashboard,
+    "Bilancio gestionale": page_bilancio_gestionale,
     "Nota integrativa gestionale": page_nota_integrativa,
     "Operations / Commesse": page_operations,
     "People & Reparti": page_people_departments,
