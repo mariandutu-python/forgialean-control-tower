@@ -4400,49 +4400,49 @@ def page_finance_dashboard():
     # Stato Patrimoniale minimale
     # =========================
     st.markdown("---")
-st.subheader("Stato Patrimoniale minimale")
+    st.subheader("Stato Patrimoniale minimale")
 
-col_sp1, col_sp2 = st.columns(2)
-with col_sp1:
-    data_sp = st.date_input(
-        "Data di riferimento SP",
-        value=date.today(),
-        help="Data alla quale vuoi vedere la situazione crediti/debiti."
-    )
+    col_sp1, col_sp2 = st.columns(2)
+    with col_sp1:
+        data_sp = st.date_input(
+            "Data di riferimento SP",
+            value=date.today(),
+            help="Data alla quale vuoi vedere la situazione crediti/debiti."
+        )
 
-with col_sp2:
-    # saldo calcolato automaticamente da conti, incassi, spese, fisco/INPS
-    saldo_cassa_auto = calcola_saldo_cassa(data_sp)
-    saldo_cassa = st.number_input(
-        "Saldo cassa/conti alla data",
-        value=float(saldo_cassa_auto),
-        step=100.0,
-        help="Valore proposto calcolato dal gestionale; puoi modificarlo se necessario."
-    )
+    with col_sp2:
+        # saldo calcolato automaticamente da conti, incassi, spese, fisco/INPS
+        saldo_cassa_auto = calcola_saldo_cassa(data_sp)
+        saldo_cassa = st.number_input(
+            "Saldo cassa/conti alla data",
+            value=float(saldo_cassa_auto),
+            step=100.0,
+            help="Valore proposto calcolato dal gestionale; puoi modificarlo se necessario."
+        )
 
-df_sp = build_balance_sheet(data_sp, saldo_cassa)
+    df_sp = build_balance_sheet(data_sp, saldo_cassa)
 
-st.dataframe(
+    st.dataframe(
         df_sp.style.format({"Importo": "{:,.2f}"})
     )
 
     # ---------- ENTRATE (Fatture incassate) ----------
-if not df_inv.empty:
-    df_inv["data_riferimento"] = df_inv["data_incasso"].fillna(df_inv["data_fattura"])
-    df_inv["data_riferimento"] = pd.to_datetime(df_inv["data_riferimento"], errors="coerce")
-    df_inv = df_inv.dropna(subset=["data_riferimento"])
-    df_inv = df_inv[
-        (df_inv["data_riferimento"] >= pd.to_datetime(data_da)) &
-        (df_inv["data_riferimento"] <= pd.to_datetime(data_a))
-    ]
-    df_inv["mese"] = df_inv["data_riferimento"].dt.to_period("M").dt.to_timestamp()
-    entrate_mensili = (
-        df_inv.groupby("mese")["importo_totale"].sum().rename("Entrate").reset_index()
-    )
-    totale_entrate = df_inv["importo_totale"].sum()
-else:
-    entrate_mensili = pd.DataFrame(columns=["mese", "Entrate"])
-    totale_entrate = 0.0
+    if not df_inv.empty:
+        df_inv["data_riferimento"] = df_inv["data_incasso"].fillna(df_inv["data_fattura"])
+        df_inv["data_riferimento"] = pd.to_datetime(df_inv["data_riferimento"], errors="coerce")
+        df_inv = df_inv.dropna(subset=["data_riferimento"])
+        df_inv = df_inv[
+            (df_inv["data_riferimento"] >= pd.to_datetime(data_da)) &
+            (df_inv["data_riferimento"] <= pd.to_datetime(data_a))
+        ]
+        df_inv["mese"] = df_inv["data_riferimento"].dt.to_period("M").dt.to_timestamp()
+        entrate_mensili = (
+            df_inv.groupby("mese")["importo_totale"].sum().rename("Entrate").reset_index()
+        )
+        totale_entrate = df_inv["importo_totale"].sum()
+    else:
+        entrate_mensili = pd.DataFrame(columns=["mese", "Entrate"])
+        totale_entrate = 0.0
 
     # ---------- USCITE (Spese) ----------
     if not df_exp.empty:
