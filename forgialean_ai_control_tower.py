@@ -4422,7 +4422,7 @@ with col_sp2:
 
 df_sp = build_balance_sheet(data_sp, saldo_cassa)
 
-    st.dataframe(
+        st.dataframe(
         df_sp.style.format({"Importo": "{:,.2f}"})
     )
 
