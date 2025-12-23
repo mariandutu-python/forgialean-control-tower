@@ -301,6 +301,115 @@ def build_income_statement_monthly(anno_sel: int) -> pd.DataFrame:
         ["Mese", "Proventi", "Costi_spese", "Costi_inps", "Costi_tasse", "Costi_totali", "Risultato_netto"]
     ]
 
+def build_cashflow_monthly(anno: int) -> pd.DataFrame:
+    """
+    Cashflow operativo mensile:
+    - Incassi clienti (Payment)
+    - Uscite spese (Expense pagate)
+    - Uscite fisco/INPS (TaxDeadline pagate)
+    """
+    with get_session() as session:
+        # Incassi clienti
+        pays = session.exec(
+            select(Payment).where(
+                Payment.payment_date.is_not(None),
+                SQLModel.raw_column("strftime('%Y', payment_date) = :anno"),
+            ).params(anno=str(anno))
+        ).all()
+
+        # Spese pagate
+        exps = session.exec(
+            select(Expense).where(
+                Expense.pagata == True,
+                Expense.data_pagamento.is_not(None),
+                SQLModel.raw_column("strftime('%Y', data_pagamento) = :anno"),
+            ).params(anno=str(anno))
+        ).all()
+
+        # Fisco / INPS pagati
+        taxes = session.exec(
+            select(TaxDeadline).where(
+                TaxDeadline.payment_date.is_not(None),
+                SQLModel.raw_column("strftime('%Y', payment_date) = :anno"),
+            ).params(anno=str(anno))
+        ).all()
+
+    # DataFrame incassi
+    df_p = pd.DataFrame(
+        [
+            {"data": p.payment_date, "Incassi_clienti": p.amount or 0.0}
+            for p in (pays or [])
+        ]
+    )
+    if not df_p.empty:
+        df_p["data"] = pd.to_datetime(df_p["data"], errors="coerce")
+        df_p["mese"] = df_p["data"].dt.month
+        df_p = (
+            df_p.groupby("mese")["Incassi_clienti"]
+            .sum()
+            .reset_index()
+        )
+    else:
+        df_p = pd.DataFrame(columns=["mese", "Incassi_clienti"])
+
+    # DataFrame uscite spese
+    df_e = pd.DataFrame(
+        [
+            {"data": e.data_pagamento, "Uscite_spese": e.importo_totale or 0.0}
+            for e in (exps or [])
+        ]
+    )
+    if not df_e.empty:
+        df_e["data"] = pd.to_datetime(df_e["data"], errors="coerce")
+        df_e["mese"] = df_e["data"].dt.month
+        df_e = (
+            df_e.groupby("mese")["Uscite_spese"]
+            .sum()
+            .reset_index()
+        )
+    else:
+        df_e = pd.DataFrame(columns=["mese", "Uscite_spese"])
+
+    # DataFrame uscite fisco/INPS
+    df_t = pd.DataFrame(
+        [
+            {"data": t.payment_date, "Uscite_fisco_inps": t.amount_paid or 0.0}
+            for t in (taxes or [])
+        ]
+    )
+    if not df_t.empty:
+        df_t["data"] = pd.to_datetime(df_t["data"], errors="coerce")
+        df_t["mese"] = df_t["data"].dt.month
+        df_t = (
+            df_t.groupby("mese")["Uscite_fisco_inps"]
+            .sum()
+            .reset_index()
+        )
+    else:
+        df_t = pd.DataFrame(columns=["mese", "Uscite_fisco_inps"])
+
+    # Merge sui 12 mesi
+    mesi_df = pd.DataFrame({"mese": list(range(1, 13))})
+
+    df_cf = (
+        mesi_df
+        .merge(df_p, on="mese", how="left")
+        .merge(df_e, on="mese", how="left")
+        .merge(df_t, on="mese", how="left")
+        .fillna(0.0)
+    )
+
+    df_cf["Net_cash_flow"] = (
+        df_cf["Incassi_clienti"]
+        - df_cf["Uscite_spese"]
+        - df_cf["Uscite_fisco_inps"]
+    )
+    df_cf["Mese"] = df_cf["mese"].apply(lambda m: f"{m:02d}/{anno}")
+
+    return df_cf[
+        ["Mese", "Incassi_clienti", "Uscite_spese", "Uscite_fisco_inps", "Net_cash_flow"]
+    ]
+
 def build_balance_sheet(data_rif: date, saldo_cassa: float) -> pd.DataFrame:
     """Stato Patrimoniale minimale alla data: Attività, Passività, Patrimonio Netto."""
     data_rif_dt = pd.to_datetime(data_rif)
@@ -4256,6 +4365,36 @@ def page_finance_dashboard():
         title=f"Risultato netto mensile {anno_ce}",
     )
     st.plotly_chart(fig_ce_m, use_container_width=True)
+
+    # =========================
+    # Cashflow operativo mensile (anno selezionato)
+    # =========================
+    st.subheader(f"Cashflow operativo mensile {anno_ce}")
+
+    df_cf_mese = build_cashflow_monthly(anno_ce)
+
+    if df_cf_mese.empty:
+        st.info("Nessun dato di cashflow disponibile per l'anno selezionato.")
+    else:
+        st.dataframe(
+            df_cf_mese.style.format(
+                {
+                    "Incassi_clienti": "{:,.2f}",
+                    "Uscite_spese": "{:,.2f}",
+                    "Uscite_fisco_inps": "{:,.2f}",
+                    "Net_cash_flow": "{:,.2f}",
+                }
+            )
+        )
+
+        st.subheader("Net cash flow per mese")
+        fig_cf_m = px.bar(
+            df_cf_mese,
+            x="Mese",
+            y="Net_cash_flow",
+            title=f"Net cash flow mensile {anno_ce}",
+        )
+        st.plotly_chart(fig_cf_m, use_container_width=True)
 
     # =========================
     # Stato Patrimoniale minimale
