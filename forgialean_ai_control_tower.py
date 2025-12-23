@@ -7,6 +7,7 @@ import pandas as pd
 import plotly.express as px
 import pdfplumber
 from sqlmodel import SQLModel, Field, Session, select, delete
+from finance_utils import build_full_management_balance
 
 from config import CACHE_TTL, PAGES_BY_ROLE, APP_NAME, LOGO_PATH, MY_COMPANY_DATA
 
@@ -4402,47 +4403,47 @@ def page_finance_dashboard():
     st.markdown("---")
     st.subheader("Stato Patrimoniale minimale")
 
-    col_sp1, col_sp2 = st.columns(2)
-    with col_sp1:
-        data_sp = st.date_input(
-            "Data di riferimento SP",
-            value=date.today(),
-            help="Data alla quale vuoi vedere la situazione crediti/debiti."
-        )
+col_sp1, col_sp2 = st.columns(2)
+with col_sp1:
+    data_sp = st.date_input(
+        "Data di riferimento SP",
+        value=date.today(),
+        help="Data alla quale vuoi vedere la situazione crediti/debiti."
+    )
 
-    with col_sp2:
-        # saldo calcolato automaticamente da conti, incassi, spese, fisco/INPS
-        saldo_cassa_auto = calcola_saldo_cassa(data_sp)
-        saldo_cassa = st.number_input(
-            "Saldo cassa/conti alla data",
-            value=float(saldo_cassa_auto),
-            step=100.0,
-            help="Valore proposto calcolato dal gestionale; puoi modificarlo se necessario."
-        )
+with col_sp2:
+    # saldo calcolato automaticamente da conti, incassi, spese, fisco/INPS
+    saldo_cassa_auto = calcola_saldo_cassa(data_sp)
+    saldo_cassa = st.number_input(
+        "Saldo cassa/conti alla data",
+        value=float(saldo_cassa_auto),
+        step=100.0,
+        help="Valore proposto calcolato dal gestionale; puoi modificarlo se necessario."
+    )
 
-    df_sp = build_balance_sheet(data_sp, saldo_cassa)
+df_sp = build_balance_sheet(data_sp, saldo_cassa)
 
-    st.dataframe(
+st.dataframe(
         df_sp.style.format({"Importo": "{:,.2f}"})
     )
 
     # ---------- ENTRATE (Fatture incassate) ----------
-    if not df_inv.empty:
-        df_inv["data_riferimento"] = df_inv["data_incasso"].fillna(df_inv["data_fattura"])
-        df_inv["data_riferimento"] = pd.to_datetime(df_inv["data_riferimento"], errors="coerce")
-        df_inv = df_inv.dropna(subset=["data_riferimento"])
-        df_inv = df_inv[
-            (df_inv["data_riferimento"] >= pd.to_datetime(data_da)) &
-            (df_inv["data_riferimento"] <= pd.to_datetime(data_a))
-        ]
-        df_inv["mese"] = df_inv["data_riferimento"].dt.to_period("M").dt.to_timestamp()
-        entrate_mensili = (
-            df_inv.groupby("mese")["importo_totale"].sum().rename("Entrate").reset_index()
-        )
-        totale_entrate = df_inv["importo_totale"].sum()
-    else:
-        entrate_mensili = pd.DataFrame(columns=["mese", "Entrate"])
-        totale_entrate = 0.0
+if not df_inv.empty:
+    df_inv["data_riferimento"] = df_inv["data_incasso"].fillna(df_inv["data_fattura"])
+    df_inv["data_riferimento"] = pd.to_datetime(df_inv["data_riferimento"], errors="coerce")
+    df_inv = df_inv.dropna(subset=["data_riferimento"])
+    df_inv = df_inv[
+        (df_inv["data_riferimento"] >= pd.to_datetime(data_da)) &
+        (df_inv["data_riferimento"] <= pd.to_datetime(data_a))
+    ]
+    df_inv["mese"] = df_inv["data_riferimento"].dt.to_period("M").dt.to_timestamp()
+    entrate_mensili = (
+        df_inv.groupby("mese")["importo_totale"].sum().rename("Entrate").reset_index()
+    )
+    totale_entrate = df_inv["importo_totale"].sum()
+else:
+    entrate_mensili = pd.DataFrame(columns=["mese", "Entrate"])
+    totale_entrate = 0.0
 
     # ---------- USCITE (Spese) ----------
     if not df_exp.empty:
@@ -4935,6 +4936,52 @@ def page_finance_dashboard():
 
     df_exp = pd.DataFrame([e.__dict__ for e in expenses])
     st.dataframe(df_exp)
+
+def page_bilancio_gestionale():
+    st.title("📘 Bilancio gestionale")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        anno_sel = st.number_input(
+            "Anno di riferimento",
+            min_value=2020,
+            max_value=2100,
+            value=date.today().year,
+            step=1,
+        )
+    with col2:
+        data_sp = st.date_input(
+            "Data Stato Patrimoniale",
+            value=date.today(),
+        )
+
+    saldo_cassa_auto = calcola_saldo_cassa(data_sp)
+    saldo_cassa = st.number_input(
+        "Saldo cassa/conti alla data",
+        value=float(saldo_cassa_auto),
+        step=100.0,
+        help="Valore proposto calcolato dal gestionale; puoi modificarlo se necessario.",
+    )
+
+    bil = build_full_management_balance(anno_sel, data_sp, saldo_cassa)
+
+    st.subheader("Stato Patrimoniale gestionale")
+    if not bil["stato_patrimoniale"].empty:
+        st.dataframe(bil["stato_patrimoniale"].style.format({"Importo": "{:,.2f}"}))
+    else:
+        st.info("Nessun dato di Stato Patrimoniale disponibile.")
+
+    st.subheader("Conto Economico gestionale")
+    if not bil["conto_economico"].empty:
+        st.dataframe(bil["conto_economico"].style.format({"Importo": "{:,.2f}"}))
+    else:
+        st.info("Nessun dato di Conto Economico disponibile.")
+
+    st.subheader("Indicatori di bilancio")
+    if not bil["indicatori"].empty:
+        st.dataframe(bil["indicatori"].style.format({"Valore": "{:,.2f}"}))
+    else:
+        st.info("Nessun indicatore calcolabile per l’anno selezionato.")
 
 def page_cashflow_forecast():
     st.title("📈 Cashflow proiettato (budget vs consuntivo)")
