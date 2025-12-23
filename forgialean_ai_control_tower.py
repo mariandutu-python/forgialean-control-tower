@@ -4836,26 +4836,26 @@ else:
 
     st.markdown("---")
 
-# ---------- 3) NUOVA SPESA ----------
-st.subheader("🧾 Registra nuova spesa")
+    # ---------- 3) NUOVA SPESA ----------
+    st.subheader("🧾 Registra nuova spesa")
 
-if not categories or not accounts:
-    st.info("Per registrare una spesa serve almeno una categoria e un conto.")
-    return
+    if not categories or not accounts:
+        st.info("Per registrare una spesa serve almeno una categoria e un conto.")
+        return
 
-df_cat = pd.DataFrame([c.__dict__ for c in categories])
-df_cat["label"] = df_cat["category_id"].astype(str) + " - " + df_cat["nome"]
+    df_cat = pd.DataFrame([c.__dict__ for c in categories])
+    df_cat["label"] = df_cat["category_id"].astype(str) + " - " + df_cat["nome"]
 
-df_acc = pd.DataFrame([a.__dict__ for a in accounts])
-df_acc["label"] = df_acc["account_id"].astype(str) + " - " + df_acc["nome"]
+    df_acc = pd.DataFrame([a.__dict__ for a in accounts])
+    df_acc["label"] = df_acc["account_id"].astype(str) + " - " + df_acc["nome"]
 
-df_vend = pd.DataFrame([v.__dict__ for v in (vendors or [])]) if vendors else pd.DataFrame()
-if not df_vend.empty:
-    df_vend["label"] = df_vend["vendor_id"].astype(str) + " - " + df_vend["ragione_sociale"]
+    df_vend = pd.DataFrame([v.__dict__ for v in (vendors or [])]) if vendors else pd.DataFrame()
+    if not df_vend.empty:
+        df_vend["label"] = df_vend["vendor_id"].astype(str) + " - " + df_vend["ragione_sociale"]
 
-df_comm = pd.DataFrame([c.__dict__ for c in (commesse or [])]) if commesse else pd.DataFrame()
-if not df_comm.empty:
-    df_comm["label"] = df_comm["commessa_id"].astype(str) + " - " + df_comm["cod_commessa"]
+    df_comm = pd.DataFrame([c.__dict__ for c in (commesse or [])]) if commesse else pd.DataFrame()
+    if not df_comm.empty:
+        df_comm["label"] = df_comm["commessa_id"].astype(str) + " - " + df_comm["cod_commessa"]
 
     with st.form("new_expense"):
         col1, col2 = st.columns(2)
