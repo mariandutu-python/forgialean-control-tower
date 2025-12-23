@@ -1,0 +1,13 @@
+name: Wake Streamlit App
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/15 * * * *"
+
+jobs:
+  wake:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Curl Streamlit app
+        run: curl -sS https://LA-TUA-URL-STREAMLIT
