@@ -4770,7 +4770,8 @@ def page_cashflow_forecast():
         # Eventi futuri (entrano nel forecast, non nel consuntivo)
         events = session.exec(
             select(CashflowEvent).where(
-                extract("year", CashflowEvent.data) == anno_sel
+                CashflowEvent.data >= date(anno_sel, 1, 1),
+                CashflowEvent.data <= date(anno_sel, 12, 31),
             )
         ).all()
 
