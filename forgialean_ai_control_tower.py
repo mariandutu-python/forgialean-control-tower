@@ -4427,22 +4427,22 @@ st.dataframe(
     )
 
     # ---------- ENTRATE (Fatture incassate) ----------
-    if not df_inv.empty:
-        df_inv["data_riferimento"] = df_inv["data_incasso"].fillna(df_inv["data_fattura"])
-        df_inv["data_riferimento"] = pd.to_datetime(df_inv["data_riferimento"], errors="coerce")
-        df_inv = df_inv.dropna(subset=["data_riferimento"])
-        df_inv = df_inv[
-            (df_inv["data_riferimento"] >= pd.to_datetime(data_da)) &
-            (df_inv["data_riferimento"] <= pd.to_datetime(data_a))
-        ]
-        df_inv["mese"] = df_inv["data_riferimento"].dt.to_period("M").dt.to_timestamp()
-        entrate_mensili = (
-            df_inv.groupby("mese")["importo_totale"].sum().rename("Entrate").reset_index()
-        )
-        totale_entrate = df_inv["importo_totale"].sum()
-    else:
-        entrate_mensili = pd.DataFrame(columns=["mese", "Entrate"])
-        totale_entrate = 0.0
+if not df_inv.empty:
+    df_inv["data_riferimento"] = df_inv["data_incasso"].fillna(df_inv["data_fattura"])
+    df_inv["data_riferimento"] = pd.to_datetime(df_inv["data_riferimento"], errors="coerce")
+    df_inv = df_inv.dropna(subset=["data_riferimento"])
+    df_inv = df_inv[
+        (df_inv["data_riferimento"] >= pd.to_datetime(data_da)) &
+        (df_inv["data_riferimento"] <= pd.to_datetime(data_a))
+    ]
+    df_inv["mese"] = df_inv["data_riferimento"].dt.to_period("M").dt.to_timestamp()
+    entrate_mensili = (
+        df_inv.groupby("mese")["importo_totale"].sum().rename("Entrate").reset_index()
+    )
+    totale_entrate = df_inv["importo_totale"].sum()
+else:
+    entrate_mensili = pd.DataFrame(columns=["mese", "Entrate"])
+    totale_entrate = 0.0
 
     # ---------- USCITE (Spese) ----------
     if not df_exp.empty:
