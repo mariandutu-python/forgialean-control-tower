@@ -60,6 +60,55 @@ init_db()
 
 LOGO_PATH = Path("forgialean_logo.png")
 
+# === FUNZIONE SALDO CASSA GESTIONALE ===
+from datetime import date
+from sqlmodel import select
+
+def calcola_saldo_cassa(data_rif: date, account_id: int | None = None) -> float:
+    """
+    Saldo cassa complessivo (o per singolo conto) alla data_rif.
+
+    Formula: saldo_iniziale + incassi - uscite_spese - uscite_fisco_inps
+    """
+    with get_session() as session:
+        # 1) Saldo iniziale conti
+        q_acc = select(Account)
+        if account_id is not None:
+            q_acc = q_acc.where(Account.account_id == account_id)
+        accounts = session.exec(q_acc).all()
+        saldo_iniziale = sum(a.saldo_iniziale or 0.0 for a in (accounts or []))
+
+        # 2) Incassi clienti (Payment) fino a data_rif
+        pays = session.exec(
+            select(Payment).where(
+                Payment.payment_date.is_not(None),
+                Payment.payment_date <= data_rif,
+            )
+        ).all()
+        incassi = sum(p.amount or 0.0 for p in (pays or []))
+
+        # 3) Uscite operative (Expense pagate) fino a data_rif
+        exps = session.exec(
+            select(Expense).where(
+                Expense.pagata == True,
+                Expense.data_pagamento.is_not(None),
+                Expense.data_pagamento <= data_rif,
+            )
+        ).all()
+        uscite_spese = sum(e.importo_totale or 0.0 for e in (exps or []))
+
+        # 4) Uscite fiscali/INPS (TaxDeadline pagate) fino a data_rif
+        tax_pays = session.exec(
+            select(TaxDeadline).where(
+                TaxDeadline.payment_date.is_not(None),
+                TaxDeadline.payment_date <= data_rif,
+            )
+        ).all()
+        uscite_fisco_inps = sum(t.amount_paid or 0.0 for t in (tax_pays or []))
+
+    saldo = saldo_iniziale + incassi - uscite_spese - uscite_fisco_inps
+    return float(saldo)
+
 def build_income_statement(anno_sel: int) -> pd.DataFrame:
     """Conto Economico gestionale semplice per anno: Proventi, Costi, Netto."""
     with get_session() as session:
@@ -484,8 +533,9 @@ def page_nota_integrativa():
     # Parametri base (puoi anche prenderli da sidebar o config)
     today = date.today()
     anno_sel = today.year
-    # TODO: se hai una funzione che calcola il saldo cassa, usala qui
-    saldo_cassa = 0.0  # per ora zero, sostituisci con il tuo calcolo reale
+
+    # saldo cassa gestionale calcolato automaticamente alla data di oggi
+    saldo_cassa = calcola_saldo_cassa(today)
 
     ce = get_conto_economico_summary(anno_sel)
     sp = get_stato_patrimoniale_minimale(today, saldo_cassa)
@@ -4211,24 +4261,27 @@ def page_finance_dashboard():
     # Stato Patrimoniale minimale
     # =========================
     st.markdown("---")
-    st.subheader("Stato Patrimoniale minimale")
+st.subheader("Stato Patrimoniale minimale")
 
-    col_sp1, col_sp2 = st.columns(2)
-    with col_sp1:
-        data_sp = st.date_input(
-            "Data di riferimento SP",
-            value=date.today(),
-            help="Data alla quale vuoi vedere la situazione crediti/debiti."
-        )
-    with col_sp2:
-        saldo_cassa = st.number_input(
-            "Saldo cassa/conti alla data",
-            value=0.0,
-            step=100.0,
-            help="Inserisci il saldo totale di conto corrente / cassa alla data scelta."
-        )
+col_sp1, col_sp2 = st.columns(2)
+with col_sp1:
+    data_sp = st.date_input(
+        "Data di riferimento SP",
+        value=date.today(),
+        help="Data alla quale vuoi vedere la situazione crediti/debiti."
+    )
 
-    df_sp = build_balance_sheet(data_sp, saldo_cassa)
+with col_sp2:
+    # saldo calcolato automaticamente da conti, incassi, spese, fisco/INPS
+    saldo_cassa_auto = calcola_saldo_cassa(data_sp)
+    saldo_cassa = st.number_input(
+        "Saldo cassa/conti alla data",
+        value=float(saldo_cassa_auto),
+        step=100.0,
+        help="Valore proposto calcolato dal gestionale; puoi modificarlo se necessario."
+    )
+
+df_sp = build_balance_sheet(data_sp, saldo_cassa)
 
     st.dataframe(
         df_sp.style.format({"Importo": "{:,.2f}"})
