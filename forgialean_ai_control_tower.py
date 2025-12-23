@@ -4403,55 +4403,53 @@ def page_finance_dashboard():
     st.markdown("---")
     st.subheader("Stato Patrimoniale minimale")
 
-col_sp1, col_sp2 = st.columns(2)
-with col_sp1:
-    data_sp = st.date_input(
-        "Data di riferimento SP",
-        value=date.today(),
-        help="Data alla quale vuoi vedere la situazione crediti/debiti."
-    )
+    col_sp1, col_sp2 = st.columns(2)
+    with col_sp1:
+        data_sp = st.date_input(
+            "Data di riferimento SP",
+            value=date.today(),
+            help="Data alla quale vuoi vedere la situazione crediti/debiti.",
+        )
 
-with col_sp2:
-    # saldo calcolato automaticamente da conti, incassi, spese, fisco/INPS
-    saldo_cassa_auto = calcola_saldo_cassa(data_sp)
-    saldo_cassa = st.number_input(
-        "Saldo cassa/conti alla data",
-        value=float(saldo_cassa_auto),
-        step=100.0,
-        help="Valore proposto calcolato dal gestionale; puoi modificarlo se necessario."
-    )
+    with col_sp2:
+        # saldo calcolato automaticamente da conti, incassi, spese, fisco/INPS
+        saldo_cassa_auto = calcola_saldo_cassa(data_sp)
+        saldo_cassa = st.number_input(
+            "Saldo cassa/conti alla data",
+            value=float(saldo_cassa_auto),
+            step=100.0,
+            help="Valore proposto calcolato dal gestionale; puoi modificarlo se necessario.",
+        )
 
-df_sp = build_balance_sheet(data_sp, saldo_cassa)
+    df_sp = build_balance_sheet(data_sp, saldo_cassa)
 
-st.dataframe(
-        df_sp.style.format({"Importo": "{:,.2f}"})
-    )
+    st.dataframe(df_sp.style.format({"Importo": "{:,.2f}"}))
 
     # ---------- ENTRATE (Fatture incassate) ----------
-if not df_inv.empty:
-    df_inv["data_riferimento"] = df_inv["data_incasso"].fillna(df_inv["data_fattura"])
-    df_inv["data_riferimento"] = pd.to_datetime(df_inv["data_riferimento"], errors="coerce")
-    df_inv = df_inv.dropna(subset=["data_riferimento"])
-    df_inv = df_inv[
-        (df_inv["data_riferimento"] >= pd.to_datetime(data_da)) &
-        (df_inv["data_riferimento"] <= pd.to_datetime(data_a))
-    ]
-    df_inv["mese"] = df_inv["data_riferimento"].dt.to_period("M").dt.to_timestamp()
-    entrate_mensili = (
-        df_inv.groupby("mese")["importo_totale"].sum().rename("Entrate").reset_index()
-    )
-    totale_entrate = df_inv["importo_totale"].sum()
-else:
-    entrate_mensili = pd.DataFrame(columns=["mese", "Entrate"])
-    totale_entrate = 0.0
+    if not df_inv.empty:
+        df_inv["data_riferimento"] = df_inv["data_incasso"].fillna(df_inv["data_fattura"])
+        df_inv["data_riferimento"] = pd.to_datetime(df_inv["data_riferimento"], errors="coerce")
+        df_inv = df_inv.dropna(subset=["data_riferimento"])
+        df_inv = df_inv[
+            (df_inv["data_riferimento"] >= pd.to_datetime(data_da))
+            & (df_inv["data_riferimento"] <= pd.to_datetime(data_a))
+        ]
+        df_inv["mese"] = df_inv["data_riferimento"].dt.to_period("M").dt.to_timestamp()
+        entrate_mensili = (
+            df_inv.groupby("mese")["importo_totale"].sum().rename("Entrate").reset_index()
+        )
+        totale_entrate = df_inv["importo_totale"].sum()
+    else:
+        entrate_mensili = pd.DataFrame(columns=["mese", "Entrate"])
+        totale_entrate = 0.0
 
     # ---------- USCITE (Spese) ----------
     if not df_exp.empty:
         df_exp["data"] = pd.to_datetime(df_exp["data"], errors="coerce")
         df_exp = df_exp.dropna(subset=["data"])
         df_exp = df_exp[
-            (df_exp["data"] >= pd.to_datetime(data_da)) &
-            (df_exp["data"] <= pd.to_datetime(data_a))
+            (df_exp["data"] >= pd.to_datetime(data_da))
+            & (df_exp["data"] <= pd.to_datetime(data_a))
         ]
         df_exp["mese"] = df_exp["data"].dt.to_period("M").dt.to_timestamp()
         uscite_mensili = (
@@ -4502,6 +4500,7 @@ else:
         )
         fig_eu.update_layout(legend_title_text="")
         st.plotly_chart(fig_eu, use_container_width=True)
+
         st.subheader("Margine per mese")
         fig_m = px.line(
             df_kpi,
@@ -4597,7 +4596,6 @@ else:
     st.markdown("---")
     st.subheader("📦 Margine per commessa (periodo)")
 
-    # Servono commesse e almeno qualche fattura/spesa collegata
     if not df_inv.empty or not df_exp.empty:
         with get_session() as session:
             commesse_map = {
@@ -4631,7 +4629,6 @@ else:
         else:
             uscite_commessa = pd.DataFrame(columns=["commessa_id", "Commessa", "Uscite_commessa"])
 
-        # Merge entrate/uscite per commessa
         if not entrate_commessa.empty or not uscite_commessa.empty:
             df_comm = pd.merge(
                 entrate_commessa,
@@ -4641,8 +4638,6 @@ else:
             ).fillna(0.0)
 
             df_comm["Margine_commessa"] = df_comm["Entrate_commessa"] - df_comm["Uscite_commessa"]
-
-            # Ordina per margine decrescente
             df_comm = df_comm.sort_values("Margine_commessa", ascending=False)
 
             st.dataframe(
@@ -4657,7 +4652,6 @@ else:
                 )
             )
 
-            # Grafico barre margine per commessa
             fig_comm = px.bar(
                 df_comm,
                 x="Commessa",
@@ -4717,7 +4711,6 @@ else:
     st.markdown("---")
     st.subheader("📅 Sintesi Entrate / Uscite / Margine per anno")
 
-    # Ricalcolo versioni non filtrate per anno (su tutto il DB)
     with get_session() as session:
         invoices_all = session.exec(select(Invoice)).all()
         expenses_all = session.exec(select(Expense)).all()
@@ -4728,7 +4721,6 @@ else:
     if df_inv_all.empty and df_exp_all.empty:
         st.info("Nessun dato storico disponibile per la sintesi per anno.")
     else:
-        # Entrate per anno
         if not df_inv_all.empty:
             df_inv_all["data_riferimento"] = df_inv_all["data_incasso"].fillna(df_inv_all["data_fattura"])
             df_inv_all["data_riferimento"] = pd.to_datetime(df_inv_all["data_riferimento"], errors="coerce")
@@ -4743,7 +4735,6 @@ else:
         else:
             entrate_anno = pd.DataFrame(columns=["anno", "Entrate"])
 
-        # Uscite per anno
         if not df_exp_all.empty:
             df_exp_all["data"] = pd.to_datetime(df_exp_all["data"], errors="coerce")
             df_exp_all = df_exp_all.dropna(subset=["data"])
@@ -4757,7 +4748,6 @@ else:
         else:
             uscite_anno = pd.DataFrame(columns=["anno", "Uscite"])
 
-        # Merge e calcolo margine per anno
         df_year = pd.merge(entrate_anno, uscite_anno, on="anno", how="outer").fillna(0.0)
         if df_year.empty:
             st.info("Nessun dato aggregato per anno disponibile.")
