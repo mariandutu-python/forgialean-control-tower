@@ -1987,7 +1987,8 @@ def page_finance_invoices():
 
         # Progressivo invio
         prefisso = my.get("progressivo_invio_prefisso", "FL")
-        progressivo_invio = f"{prefisso}_{(inv.num_fattura or '1').replace('/', '_')}"
+        raw_prog = f"{prefisso}{inv.invoice_id:08d}"
+        progressivo_invio = raw_prog[:10] 
 
         aliquota_iva = (inv.iva / inv.importo_imponibile * 100) if inv.importo_imponibile else 22.0
 
