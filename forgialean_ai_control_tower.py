@@ -70,7 +70,8 @@ TELEGRAM_CHAT_ID = st.secrets["TELEGRAM_CHAT_ID"]
 def send_telegram_message(text: str):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     params = {"chat_id": TELEGRAM_CHAT_ID, "text": text}
-    requests.get(url, params=params, timeout=10)
+    resp = requests.get(url, params=params, timeout=10)
+    st.write("DEBUG telegram:", resp.status_code, resp.text)
 
 # === FUNZIONE SALDO CASSA GESTIONALE ===
 from datetime import date
@@ -5314,39 +5315,38 @@ def page_cashflow_forecast():
         )
         saldo = saldo_finale
 
-df_saldi = pd.DataFrame(saldi)
+    df_saldi = pd.DataFrame(saldi)
 
-# Join per tabella finale leggibile
-df_view = df_cf.merge(df_saldi, on="mese")
-df_view["Mese"] = df_view["mese"].apply(lambda m: f"{m:02d}/{anno_sel}")
+    # Join per tabella finale leggibile
+    df_view = df_cf.merge(df_saldi, on="mese")
+    df_view["Mese"] = df_view["mese"].apply(lambda m: f"{m:02d}/{anno_sel}")
 
-# >>> AGGIUNGI QUI LA COLONNA <<<
-df_view["Netto_forecast"] = (
-    df_view["Netto_operativo"]
-    + df_view["Netto_fisco_inps"]
-    + df_view["Netto_fisco_inps"]
-    + df_view["Netto_investimenti_altro"]
-)
+    # Colonna forecast (qui in realtà è già in df_cf, questa riga può anche non servire)
+    # df_view["Netto_forecast"] = (
+    #     df_view["Netto_operativo"]
+    #     + df_view["Netto_fisco_inps"]
+    #     + df_view["Netto_investimenti_altro"]
+    # )
 
-cols_show = [
-    "Mese",
-    "Entrate_actual",
-    "Uscite_actual",
-    "Netto_actual",
-    "Netto_budget",
-    "Events_netto",
-    "Netto_operativo",
-    "Netto_fisco_inps",
-    "Netto_investimenti_altro",
-    "Netto_forecast",
-    "Saldo_iniziale",
-    "Saldo_finale",
-]
+    cols_show = [
+        "Mese",
+        "Entrate_actual",
+        "Uscite_actual",
+        "Netto_actual",
+        "Netto_budget",
+        "Events_netto",
+        "Netto_operativo",
+        "Netto_fisco_inps",
+        "Netto_investimenti_altro",
+        "Netto_forecast",
+        "Saldo_iniziale",
+        "Saldo_finale",
+    ]
 
-df_view = df_view[cols_show]
+    df_view = df_view[cols_show]
 
-st.subheader("Tabella mensile Actual vs Budget + saldo proiettato")
-st.dataframe(df_view.style.format("{:,.2f}", subset=df_view.columns[1:]))
+    st.subheader("Tabella mensile Actual vs Budget + saldo proiettato")
+    st.dataframe(df_view.style.format("{:,.2f}", subset=df_view.columns[1:]))
 
     # ---------------------------
     # Grafico saldo proiettato
