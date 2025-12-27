@@ -116,7 +116,7 @@ def build_email_body(nome, azienda, oee_perc, perdita_euro_turno, fascia):
     perdita_annua_3t = perdita_euro_turno * 3 * turni_anno
 
     # URL della pagina/step successivo
-    cta_url = "https://forgialean.streamlit.app/?step=call_oee"
+    cta_url = "https://forgialean.streamlit.app/~/+/OEE_Presentation?step=call_oee"
 
     corpo = f"""
 <p>Ciao {nome},</p>
