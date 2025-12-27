@@ -109,7 +109,13 @@ def build_email_body(nome, azienda, oee_perc, perdita_euro_turno, fascia):
             "gestione mix e variabilità, concentrandosi dove ogni ora equivalente recuperata ha il massimo impatto economico."
         )
 
-    # URL della pagina/step successivo (quando avrai l’URL finale, sostituisci qui)
+    # Turni/anno ipotizzati (es. 250 giorni lavorativi)
+    turni_anno = 250
+    perdita_annua_1t = perdita_euro_turno * turni_anno
+    perdita_annua_2t = perdita_euro_turno * 2 * turni_anno
+    perdita_annua_3t = perdita_euro_turno * 3 * turni_anno
+
+    # URL della pagina/step successivo
     cta_url = "https://forgialean.streamlit.app/?step=call_oee"
 
     corpo = f"""
@@ -122,6 +128,9 @@ def build_email_body(nome, azienda, oee_perc, perdita_euro_turno, fascia):
 <ul>
   <li>OEE stimato: <b>{oee_perc:.1f}%</b></li>
   <li>Capacità persa: circa <b>€ {perdita_euro_turno:,.0f} per turno</b> su una macchina/linea</li>
+  <li>Se lavori a 1 turno (8 h): perdita annua ≈ <b>€ {perdita_annua_1t:,.0f}</b></li>
+  <li>Se lavori a 2 turni (16 h): perdita annua ≈ <b>€ {perdita_annua_2t:,.0f}</b></li>
+  <li>Se lavori a 3 turni (24 h): perdita annua ≈ <b>€ {perdita_annua_3t:,.0f}</b></li>
 </ul>
 
 <p>{intro_fascia}</p>
