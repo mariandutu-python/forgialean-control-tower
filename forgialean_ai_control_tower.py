@@ -5288,31 +5288,39 @@ def page_cashflow_forecast():
         )
         saldo = saldo_finale
 
-    df_saldi = pd.DataFrame(saldi)
+df_saldi = pd.DataFrame(saldi)
 
-    # Join per tabella finale leggibile
-    df_view = df_cf.merge(df_saldi, on="mese")
-    df_view["Mese"] = df_view["mese"].apply(lambda m: f"{m:02d}/{anno_sel}")
+# Join per tabella finale leggibile
+df_view = df_cf.merge(df_saldi, on="mese")
+df_view["Mese"] = df_view["mese"].apply(lambda m: f"{m:02d}/{anno_sel}")
 
-    cols_show = [
-        "Mese",
-        "Entrate_actual",
-        "Uscite_actual",
-        "Netto_actual",
-        "Netto_budget",
-        "Events_netto",
-        "Netto_operativo",
-        "Netto_fisco_inps",
-        "Netto_investimenti_altro",
-        "Netto_forecast",
-        "Saldo_iniziale",
-        "Saldo_finale",
-    ]
+# >>> AGGIUNGI QUI LA COLONNA <<<
+df_view["Netto_forecast"] = (
+    df_view["Netto_operativo"]
+    + df_view["Netto_fisco_inps"]
+    + df_view["Netto_fisco_inps"]
+    + df_view["Netto_investimenti_altro"]
+)
 
-    df_view = df_view[cols_show]
+cols_show = [
+    "Mese",
+    "Entrate_actual",
+    "Uscite_actual",
+    "Netto_actual",
+    "Netto_budget",
+    "Events_netto",
+    "Netto_operativo",
+    "Netto_fisco_inps",
+    "Netto_investimenti_altro",
+    "Netto_forecast",
+    "Saldo_iniziale",
+    "Saldo_finale",
+]
 
-    st.subheader("Tabella mensile Actual vs Budget + saldo proiettato")
-    st.dataframe(df_view.style.format("{:,.2f}", subset=df_view.columns[1:]))
+df_view = df_view[cols_show]
+
+st.subheader("Tabella mensile Actual vs Budget + saldo proiettato")
+st.dataframe(df_view.style.format("{:,.2f}", subset=df_view.columns[1:]))
 
     # ---------------------------
     # Grafico saldo proiettato
