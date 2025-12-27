@@ -1260,8 +1260,9 @@ se un progetto ForgiaLean può portarti **+16% OEE e più margine**, senza perde
     # =====================
     # PASSO SUCCESSIVO DA EMAIL (step=call_oee)
     # =====================
-    params = st.query_params
-    step = params.get("step", "")
+    params = st.experimental_get_query_params()
+    st.write("DEBUG PARAMS:", params)  # temporaneo, per vedere cosa arriva
+    step = params.get("step", [""])[0]
 
     if step == "call_oee":
         st.markdown("---")
