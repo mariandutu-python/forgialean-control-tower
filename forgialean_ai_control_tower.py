@@ -61,6 +61,17 @@ init_db()
 
 LOGO_PATH = Path("forgialean_logo.png")
 
+# --- Notifiche Telegram ---
+import requests
+
+TELEGRAM_BOT_TOKEN = st.secrets["TELEGRAM_BOT_TOKEN"]
+TELEGRAM_CHAT_ID = st.secrets["TELEGRAM_CHAT_ID"]
+
+def send_telegram_message(text: str):
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    params = {"chat_id": TELEGRAM_CHAT_ID, "text": text}
+    requests.get(url, params=params, timeout=10)
+
 # === FUNZIONE SALDO CASSA GESTIONALE ===
 from datetime import date
 from sqlmodel import select
@@ -903,6 +914,7 @@ tra direzione, produzione e miglioramento continuo.
         submitted = st.form_submit_button("Ottieni il mini‑report OEE")
 
     if submitted:
+        st.warning("DEBUG: submit mini‑report OEE eseguito")
         if not (nome and azienda and email):
             st.error("Nome, azienda ed email sono obbligatori.")
         else:
@@ -939,6 +951,20 @@ tra direzione, produzione e miglioramento continuo.
                     )
                     session.add(new_opp)
                     session.commit()
+
+                # 3) Notifica Telegram
+                msg = (
+                    "🟢 Nuova richiesta mini‑report OEE ForgiaLean\n"
+                    f"Nome: {nome}\n"
+                    f"Azienda: {azienda}\n"
+                    f"Email: {email}\n"
+                    f"Ore fermi/turno: {ore_fermi}\n"
+                    f"Scarti (%): {scarti}\n"
+                    f"Velocità reale vs nominale (%): {velocita}\n"
+                    f"Valore orario (€): {valore_orario}\n"
+                    f"Descrizione impianto: {descrizione[:200]}..."
+                )
+                send_telegram_message(msg)
 
                 st.success(
                     "Richiesta ricevuta. Riceverai via email il mini‑report OEE con la stima degli sprechi €/giorno per una macchina/linea, "
