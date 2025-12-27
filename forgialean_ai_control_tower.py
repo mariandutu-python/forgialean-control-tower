@@ -70,8 +70,11 @@ TELEGRAM_CHAT_ID = st.secrets["tracking"]["TELEGRAM_CHAT_ID"]
 def send_telegram_message(text: str):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     params = {"chat_id": TELEGRAM_CHAT_ID, "text": text}
-    resp = requests.get(url, params=params, timeout=10)
-    st.write("DEBUG telegram:", resp.status_code, resp.text)
+    try:
+        requests.get(url, params=params, timeout=10)
+    except Exception:
+        # opzionale: puoi loggare su file o ignorare in silenzio
+        pass
 
 # === FUNZIONE SALDO CASSA GESTIONALE ===
 from datetime import date
