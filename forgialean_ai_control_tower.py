@@ -76,6 +76,74 @@ def send_telegram_message(text: str):
         # opzionale: puoi loggare su file o ignorare in silenzio
         pass
 
+def build_email_body(nome, azienda, oee_perc, perdita_euro_turno, fascia):
+    if fascia == "critica":
+        intro_fascia = (
+            "Questo valore ti colloca in una **fascia critica**: una quota importante della capacità "
+            "della linea si sta perdendo ogni giorno tra fermi, velocità sotto target e scarti. "
+            "Di fatto stai pagando impianti, persone e straordinari per una capacità che non arriva mai al cliente."
+        )
+        proposta = (
+            "In casi come il tuo l’obiettivo è recuperare una parte significativa di questa perdita, "
+            "portando l’OEE verso valori più vicini al 75–80% e liberando ore equivalenti di produzione "
+            "senza nuovi investimenti in macchine."
+        )
+    elif fascia == "intermedia":
+        intro_fascia = (
+            "Questo valore ti colloca in una **fascia intermedia**: la linea lavora, ma ci sono ancora "
+            "margini importanti dovuti a setup, organizzazione del lavoro, micro‑fermi e variazioni di velocità. "
+            "Ogni giorno una parte della capacità che stai pagando non si traduce in pezzi buoni fatturabili."
+        )
+        proposta = (
+            "In situazioni come la tua il potenziale tipico è un +10–15 punti OEE, lavorando in modo mirato "
+            "sulle cause principali invece che su interventi generici."
+        )
+    else:
+        intro_fascia = (
+            "Questo valore ti colloca in una **fascia alta**: sei già in un contesto ben strutturato "
+            "e sopra la media di molte PMI del settore. Le perdite non sono più ‘disastrose’, ma ogni punto OEE "
+            "che riesci a recuperare vale molto in termini di €/anno."
+        )
+        proposta = (
+            "In questi contesti il lavoro non è spegnere incendi, ma fare fine‑tuning: stabilità, setup rapidi, "
+            "gestione mix e variabilità, concentrandosi dove ogni ora equivalente recuperata ha il massimo impatto economico."
+        )
+
+    corpo = f"""
+Ciao {nome},
+
+grazie per aver condiviso i dati della tua linea.
+
+In base alle informazioni che hai inserito, la stima è:
+
+- OEE stimato: **{oee_perc:.1f}%**
+- Capacità persa: circa **€ {perdita_euro_turno:,.0f} per turno** su una macchina/linea
+
+{intro_fascia}
+
+{proposta}
+
+A questo punto hai due opzioni:
+
+- **lasciare le cose come sono**, accettando che questi circa **€ {perdita_euro_turno:,.0f} per turno**
+  restino un costo fisso nascosto;
+- oppure **lavorarci in modo strutturato** per trasformare una parte di quella perdita in capacità e margine.
+
+
+Se vuoi valutare seriamente come recuperare una parte di questi importi,
+rispondi a questa mail indicando il tuo **numero di telefono diretto** e una **fascia oraria** in cui preferisci essere richiamato:
+imposteremo un confronto operativo di **30 minuti** focalizzato sulle tue linee e sui risultati raggiungibili nei prossimi 90 giorni.
+ 
+Se in questo momento decidi di non intervenire, puoi utilizzare il mini‑report come base di confronto interna
+e condividerlo con chi presidia budget e investimenti, per rendere chiaro l’impatto economico delle perdite di OEE.
+
+Un saluto,
+Marian Dutu
+ForgiaLean – Operations & OEE Improvement
+info@forgialean.it
+"""
+    return corpo
+
 # === FUNZIONE SALDO CASSA GESTIONALE ===
 from datetime import date
 from sqlmodel import select
@@ -921,7 +989,7 @@ tra direzione, produzione e miglioramento continuo.
         if not (nome and azienda and email):
             st.error("Nome, azienda ed email sono obbligatori.")
         else:
-            # 1) Notifica Telegram SUBITO (anche se il DB poi fallisce)
+            # 1) Notifica Telegram
             msg = (
                 "🟢 Nuova richiesta mini‑report OEE ForgiaLean\n"
                 f"Nome: {nome}\n"
@@ -937,7 +1005,7 @@ tra direzione, produzione e miglioramento continuo.
 
             try:
                 with get_session() as session:
-                    # 2) Crea il Client
+                    # 2) Crea Client
                     new_client = Client(
                         ragione_sociale=azienda,
                         email=email,
@@ -954,7 +1022,7 @@ tra direzione, produzione e miglioramento continuo.
                     session.commit()
                     session.refresh(new_client)
 
-                    # 3) Crea l'Opportunity collegata al client
+                    # 3) Crea Opportunity
                     new_opp = Opportunity(
                         client_id=new_client.client_id,
                         nome_opportunita=f"Lead OEE - {nome}",
@@ -968,6 +1036,21 @@ tra direzione, produzione e miglioramento continuo.
                     )
                     session.add(new_opp)
                     session.commit()
+
+                # 4) Calcolo OEE e perdita per il mini‑report
+                oee_perc, perdita_euro_turno, fascia = calcola_oee_e_perdita(
+                    ore_turno=8.0,
+                    ore_fermi=ore_fermi,
+                    scarti=scarti,
+                    velocita=velocita,
+                    valore_orario=valore_orario,
+                )
+
+                subject = "Il tuo mini‑report OEE e il prossimo passo"
+                body = build_email_body(nome, azienda, oee_perc, perdita_euro_turno, fascia)
+
+                # 5) Invio automatico email mini‑report
+                invia_minireport_oee(email, subject, body)
 
                 st.success(
                     "**GRAZIE!!!** Richiesta ricevuta. Riceverai entro **2 ore lavorative** una mail da "
