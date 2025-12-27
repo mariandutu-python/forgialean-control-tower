@@ -1252,12 +1252,50 @@ se un progetto ForgiaLean può portarti **+16% OEE e più margine**, senza perde
                     "⚠️ Nota: questi calcoli si riferiscono a **una macchina/linea**. "
                     "Se hai N macchine/linee simili, l'impatto potenziale è circa N× queste cifre."
                 )
-
                 if turni_anno > 0:
                     perdita_annua = perdita_euro_turno * turni_anno
                     st.write(f"Perdita economica stimata per anno (1 macchina/linea): **€ {perdita_annua:,.0f}**")
                     st.write("Per più macchine/linee simili moltiplica questa stima per il numero di asset.")
-     
+
+    # =====================
+    # PASSO SUCCESSIVO DA EMAIL (step=call_oee)
+    # =====================
+    params = st.query_params
+    step = params.get("step", "")
+
+    if step == "call_oee":
+        st.markdown("---")
+        st.subheader("📞 Passo successivo – richiesta call sulle tue linee")
+
+        st.markdown(
+            "Compila questi campi per essere richiamato in modo mirato sui dati del tuo mini‑report OEE."
+        )
+
+        with st.form("call_oee_form"):
+            telefono = st.text_input("Numero di telefono diretto")
+            fascia_oraria = st.text_input("Fascia oraria preferita (es. 9:00–11:00)")
+            note = st.text_area("Note opzionali (linea, impianto, urgenza)")
+            submitted_call = st.form_submit_button("Invia richiesta di call")
+
+        if submitted_call:
+            if not telefono.strip():
+                st.error("Il numero di telefono è obbligatorio.")
+            else:
+                msg_call = (
+                    "📞 Nuova richiesta CALL OEE (da mini‑report)\n"
+                    f"Nome: {nome}\n"
+                    f"Azienda: {azienda}\n"
+                    f"Telefono: {telefono}\n"
+                    f"Fascia oraria: {fascia_oraria}\n"
+                    f"Note: {note[:200]}..."
+                )
+                send_telegram_message(msg_call)
+
+                st.success(
+                    "Richiesta ricevuta. Verrai contattato nella fascia indicata, "
+                    "partendo dai dati del tuo mini‑report OEE."
+                )
+
 # =========================
 # PAGINA: OVERVIEW
 # =========================
