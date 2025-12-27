@@ -176,6 +176,29 @@ def calcola_oee_e_perdita(ore_turno, ore_fermi, scarti, velocita, valore_orario)
 
     return oee * 100.0, perdita_euro_turno, fascia
 
+import smtplib
+from email.mime.text import MIMEText
+
+def invia_minireport_oee(email_destinatario: str, subject: str, body: str):
+    """
+    Invia il mini‑report OEE via email in formato testo/HTML semplice.
+    """
+    smtp_server = st.secrets["email"]["SMTP_SERVER"]
+    smtp_port = st.secrets["email"]["SMTP_PORT"]
+    smtp_user = st.secrets["email"]["SMTP_USER"]
+    smtp_password = st.secrets["email"]["SMTP_PASSWORD"]
+    mittente = st.secrets["email"]["FROM_ADDRESS"]
+
+    msg = MIMEText(body, "html", "utf-8")
+    msg["Subject"] = subject
+    msg["From"] = mittente
+    msg["To"] = email_destinatario
+
+    with smtplib.SMTP(smtp_server, smtp_port) as server:
+        server.starttls()
+        server.login(smtp_user, smtp_password)
+        server.send_message(msg)
+
 # === FUNZIONE SALDO CASSA GESTIONALE ===
 from datetime import date
 from sqlmodel import select
