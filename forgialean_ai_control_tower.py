@@ -144,6 +144,38 @@ info@forgialean.it
 """
     return corpo
 
+def calcola_oee_e_perdita(ore_turno, ore_fermi, scarti, velocita, valore_orario):
+    """
+    Calcola:
+    - OEE in percentuale
+    - Perdita economica per turno in €
+    - Fascia OEE: 'critica', 'intermedia', 'alta'
+    """
+    if ore_turno <= 0:
+        return 0.0, 0.0, "critica"
+
+    # Availability, Performance, Quality
+    availability = max(0.0, 1.0 - (ore_fermi / ore_turno))
+    performance = velocita / 100.0
+    quality = max(0.0, 1.0 - scarti / 100.0)
+
+    oee = availability * performance * quality
+    oee_target = 0.85
+    gap_oee = max(0.0, oee_target - oee)
+
+    capacita_persa_turno = gap_oee * ore_turno
+    perdita_euro_turno = capacita_persa_turno * valore_orario
+
+    # Classificazione fascia OEE
+    if oee < 0.60:
+        fascia = "critica"
+    elif oee < 0.80:
+        fascia = "intermedia"
+    else:
+        fascia = "alta"
+
+    return oee * 100.0, perdita_euro_turno, fascia
+
 # === FUNZIONE SALDO CASSA GESTIONALE ===
 from datetime import date
 from sqlmodel import select
