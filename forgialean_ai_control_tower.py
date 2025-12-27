@@ -918,8 +918,7 @@ tra direzione, produzione e miglioramento continuo.
         submitted = st.form_submit_button("Ottieni il mini‑report OEE")
 
     if submitted:
-        st.warning("DEBUG: submit mini‑report OEE eseguito")
-
+        
         if not (nome and azienda and email):
             st.error("Nome, azienda ed email sono obbligatori.")
         else:
