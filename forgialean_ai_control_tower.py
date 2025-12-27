@@ -916,12 +916,27 @@ tra direzione, produzione e miglioramento continuo.
 
     if submitted:
         st.warning("DEBUG: submit mini‑report OEE eseguito")
+
         if not (nome and azienda and email):
             st.error("Nome, azienda ed email sono obbligatori.")
         else:
+            # 1) Notifica Telegram SUBITO (anche se il DB poi fallisce)
+            msg = (
+                "🟢 Nuova richiesta mini‑report OEE ForgiaLean\n"
+                f"Nome: {nome}\n"
+                f"Azienda: {azienda}\n"
+                f"Email: {email}\n"
+                f"Ore fermi/turno: {ore_fermi}\n"
+                f"Scarti (%): {scarti}\n"
+                f"Velocità reale vs nominale (%): {velocita}\n"
+                f"Valore orario (€): {valore_orario}\n"
+                f"Descrizione impianto: {descrizione[:200]}..."
+            )
+            send_telegram_message(msg)
+
             try:
                 with get_session() as session:
-                    # 1) Crea il Client
+                    # 2) Crea il Client
                     new_client = Client(
                         ragione_sociale=azienda,
                         email=email,
@@ -938,7 +953,7 @@ tra direzione, produzione e miglioramento continuo.
                     session.commit()
                     session.refresh(new_client)
 
-                    # 2) Crea l'Opportunity collegata al client
+                    # 3) Crea l'Opportunity collegata al client
                     new_opp = Opportunity(
                         client_id=new_client.client_id,
                         nome_opportunita=f"Lead OEE - {nome}",
@@ -952,20 +967,6 @@ tra direzione, produzione e miglioramento continuo.
                     )
                     session.add(new_opp)
                     session.commit()
-
-                # 3) Notifica Telegram
-                msg = (
-                    "🟢 Nuova richiesta mini‑report OEE ForgiaLean\n"
-                    f"Nome: {nome}\n"
-                    f"Azienda: {azienda}\n"
-                    f"Email: {email}\n"
-                    f"Ore fermi/turno: {ore_fermi}\n"
-                    f"Scarti (%): {scarti}\n"
-                    f"Velocità reale vs nominale (%): {velocita}\n"
-                    f"Valore orario (€): {valore_orario}\n"
-                    f"Descrizione impianto: {descrizione[:200]}..."
-                )
-                send_telegram_message(msg)
 
                 st.success(
                     "Richiesta ricevuta. Riceverai via email il mini‑report OEE con la stima degli sprechi €/giorno per una macchina/linea, "
