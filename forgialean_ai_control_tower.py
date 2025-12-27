@@ -109,6 +109,9 @@ def build_email_body(nome, azienda, oee_perc, perdita_euro_turno, fascia):
             "gestione mix e variabilità, concentrandosi dove ogni ora equivalente recuperata ha il massimo impatto economico."
         )
 
+    # URL della pagina/step successivo (quando avrai l’URL finale, sostituisci qui)
+    cta_url = "https://forgialean.streamlit.app/?step=call_oee"
+
     corpo = f"""
 <p>Ciao {nome},</p>
 
@@ -135,8 +138,21 @@ def build_email_body(nome, azienda, oee_perc, perdita_euro_turno, fascia):
 
 <p>
 Se vuoi valutare seriamente come recuperare una parte di questi importi,
-rispondi a questa mail indicando il tuo <b>numero di telefono diretto</b> e una <b>fascia oraria</b> in cui preferisci essere richiamato:
-imposteremo un confronto operativo di <b>30 minuti</b> focalizzato sulle tue linee e sui risultati raggiungibili nei prossimi 90 giorni.
+clicca sul pulsante qui sotto e compila il form con il tuo <b>numero diretto</b> e la <b>fascia oraria</b> in cui preferisci essere richiamato.
+</p>
+
+<p>
+  <a href="{cta_url}" style="
+      display:inline-block;
+      padding:10px 18px;
+      background-color:#27AE60;
+      color:#ffffff;
+      text-decoration:none;
+      border-radius:4px;
+      font-weight:bold;
+  " role="button">
+    Completa il passo successivo
+  </a>
 </p>
 
 <p>
