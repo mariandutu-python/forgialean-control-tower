@@ -79,7 +79,7 @@ def send_telegram_message(text: str):
 def build_email_body(nome, azienda, oee_perc, perdita_euro_turno, fascia):
     if fascia == "critica":
         intro_fascia = (
-            "Questo valore ti colloca in una **fascia critica**: una quota importante della capacità "
+            "Questo valore ti colloca in una <b>fascia critica</b>: una quota importante della capacità "
             "della linea si sta perdendo ogni giorno tra fermi, velocità sotto target e scarti. "
             "Di fatto stai pagando impianti, persone e straordinari per una capacità che non arriva mai al cliente."
         )
@@ -90,7 +90,7 @@ def build_email_body(nome, azienda, oee_perc, perdita_euro_turno, fascia):
         )
     elif fascia == "intermedia":
         intro_fascia = (
-            "Questo valore ti colloca in una **fascia intermedia**: la linea lavora, ma ci sono ancora "
+            "Questo valore ti colloca in una <b>fascia intermedia</b>: la linea lavora, ma ci sono ancora "
             "margini importanti dovuti a setup, organizzazione del lavoro, micro‑fermi e variazioni di velocità. "
             "Ogni giorno una parte della capacità che stai pagando non si traduce in pezzi buoni fatturabili."
         )
@@ -100,7 +100,7 @@ def build_email_body(nome, azienda, oee_perc, perdita_euro_turno, fascia):
         )
     else:
         intro_fascia = (
-            "Questo valore ti colloca in una **fascia alta**: sei già in un contesto ben strutturato "
+            "Questo valore ti colloca in una <b>fascia alta</b>: sei già in un contesto ben strutturato "
             "e sopra la media di molte PMI del settore. Le perdite non sono più ‘disastrose’, ma ogni punto OEE "
             "che riesci a recuperare vale molto in termini di €/anno."
         )
@@ -110,37 +110,45 @@ def build_email_body(nome, azienda, oee_perc, perdita_euro_turno, fascia):
         )
 
     corpo = f"""
-Ciao {nome},
+<p>Ciao {nome},</p>
 
-grazie per aver condiviso i dati della tua linea.
+<p>grazie per aver condiviso i dati della tua linea.</p>
 
-In base alle informazioni che hai inserito, la stima è:
+<p>In base alle informazioni che hai inserito, la stima è:</p>
 
-- OEE stimato: **{oee_perc:.1f}%**
-- Capacità persa: circa **€ {perdita_euro_turno:,.0f} per turno** su una macchina/linea
+<ul>
+  <li>OEE stimato: <b>{oee_perc:.1f}%</b></li>
+  <li>Capacità persa: circa <b>€ {perdita_euro_turno:,.0f} per turno</b> su una macchina/linea</li>
+</ul>
 
-{intro_fascia}
+<p>{intro_fascia}</p>
 
-{proposta}
+<p>{proposta}</p>
 
-A questo punto hai due opzioni:
+<p>A questo punto hai due opzioni:</p>
 
-- **lasciare le cose come sono**, accettando che questi circa **€ {perdita_euro_turno:,.0f} per turno**
-  restino un costo fisso nascosto;
-- oppure **lavorarci in modo strutturato** per trasformare una parte di quella perdita in capacità e margine.
+<ul>
+  <li><b>Lasciare le cose come sono</b>, accettando che questi circa <b>€ {perdita_euro_turno:,.0f} per turno</b>
+      restino un costo fisso nascosto.</li>
+  <li><b>Lavorarci in modo strutturato</b> per trasformare una parte di quella perdita in capacità e margine.</li>
+</ul>
 
-
+<p>
 Se vuoi valutare seriamente come recuperare una parte di questi importi,
-rispondi a questa mail indicando il tuo **numero di telefono diretto** e una **fascia oraria** in cui preferisci essere richiamato:
-imposteremo un confronto operativo di **30 minuti** focalizzato sulle tue linee e sui risultati raggiungibili nei prossimi 90 giorni.
- 
+rispondi a questa mail indicando il tuo <b>numero di telefono diretto</b> e una <b>fascia oraria</b> in cui preferisci essere richiamato:
+imposteremo un confronto operativo di <b>30 minuti</b> focalizzato sulle tue linee e sui risultati raggiungibili nei prossimi 90 giorni.
+</p>
+
+<p>
 Se in questo momento decidi di non intervenire, puoi utilizzare il mini‑report come base di confronto interna
 e condividerlo con chi presidia budget e investimenti, per rendere chiaro l’impatto economico delle perdite di OEE.
+</p>
 
-Un saluto,
-Marian Dutu
-ForgiaLean – Operations & OEE Improvement
-info@forgialean.it
+<p>Un saluto,<br>
+Marian Dutu<br>
+ForgiaLean – Operations &amp; OEE Improvement<br>
+<a href="mailto:info@forgialean.it">info@forgialean.it</a>
+</p>
 """
     return corpo
 
