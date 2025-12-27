@@ -918,7 +918,6 @@ tra direzione, produzione e miglioramento continuo.
         submitted = st.form_submit_button("Ottieni il mini‑report OEE")
 
     if submitted:
-        
         if not (nome and azienda and email):
             st.error("Nome, azienda ed email sono obbligatori.")
         else:
@@ -971,9 +970,20 @@ tra direzione, produzione e miglioramento continuo.
                     session.commit()
 
                 st.success(
-                    "Richiesta ricevuta. Riceverai via email il mini‑report OEE con la stima degli sprechi €/giorno per una macchina/linea, "
-                    "una proiezione per più asset simili e 3 leve di azione prioritarie."
+                    "**GRAZIE!!!** Richiesta ricevuta. Riceverai entro **2 ore lavorative** una mail da "
+                    "**info@forgialean.it** con il tuo mini‑report OEE: stima degli sprechi €/giorno "
+                    "per una macchina/linea e 3 leve operative su cui intervenire.\n\n"
+                    "_Se non la vedi in posta in arrivo, controlla anche la **cartella spam/indesiderata**._"
                 )
+
+                st.markdown("""
+Turni lunghi, impianti sotto il loro potenziale e margini che si assottigliano **non sono sostenibili a lungo**.
+
+Quando riceverai la mail da **info@forgialean.it**, se vuoi davvero intervenire su questi problemi,
+segui le istruzioni e completa il **passo successivo** lasciando i dati richiesti per essere contattato.
+È pensato per chi vuole trasformare il check OEE in un miglioramento concreto, non solo in un numero da guardare.
+""")
+
             except Exception as e:
                 st.error("Si è verificato un errore nel salvataggio del lead OEE.")
                 st.text(str(e))
