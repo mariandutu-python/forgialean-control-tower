@@ -175,8 +175,9 @@ e condividerlo con chi presidia budget e investimenti, per rendere chiaro l’im
 </p>
 
 <p>Un saluto,<br>
-Marian Dutu<br>
-ForgiaLean – Operations &amp; OEE Improvement<br>
+Marian Dutu – Operations &amp; OEE Improvement<br>
+ForgiaLean <br>
+P.IVA: 04336611209 <br>
 <a href="mailto:info@forgialean.it">info@forgialean.it</a>
 </p>
 """
