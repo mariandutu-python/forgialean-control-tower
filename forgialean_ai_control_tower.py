@@ -1074,6 +1074,7 @@ tra direzione, produzione e miglioramento continuo.
         submitted = st.form_submit_button("Ottieni il mini‑report OEE")
 
     if submitted:
+        st.write(f"🔍 DEBUG: nome='{nome}', ...")  # ← PRIMA RIGA
         if not (nome and azienda and email):
             st.error("Nome, azienda ed email sono obbligatori.")
         else:
