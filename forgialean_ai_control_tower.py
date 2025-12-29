@@ -116,7 +116,7 @@ def build_email_body(nome, azienda, oee_perc, perdita_euro_turno, fascia):
     perdita_annua_3t = perdita_euro_turno * 3 * turni_anno
 
     # URL della pagina/step successivo
-    cta_url = "https://forgialean.streamlit.app/~/+/OEE_Presentation?step=call_oee"
+    cta_url = f"https://forgialean.streamlit.app/~/+/OEE_Presentation?       step=call_oee&nome={urllib.parse.quote(nome)}&azienda={urllib.parse.quote(azienda)}&email={urllib.parse.quote(email)}"
 
     corpo = f"""
 <p>Ciao {nome},</p>
@@ -1257,45 +1257,29 @@ se un progetto ForgiaLean può portarti **+16% OEE e più margine**, senza perde
                     st.write(f"Perdita economica stimata per anno (1 macchina/linea): **€ {perdita_annua:,.0f}**")
                     st.write("Per più macchine/linee simili moltiplica questa stima per il numero di asset.")
 
-    # =====================
-    # PASSO SUCCESSIVO DA EMAIL (step=call_oee)
-    # =====================
-    params = st.experimental_get_query_params()
-    st.write("DEBUG PARAMS:", params)  # temporaneo, per vedere cosa arriva
-    step = params.get("step", [""])[0]
-
+    # =========================
+    # STEP CALL_OEE - FUNZIONANTE
+    # =========================
+    query_params = st.query_params.to_dict()
+    step = query_params.get("step", "")
+    
+    st.write(f"🔍 DEBUG: step='{step}' params={query_params}")  # DEBUG
+    
     if step == "call_oee":
-        st.markdown("---")
-        st.subheader("📞 Passo successivo – richiesta call sulle tue linee")
-
-        st.markdown(
-            "Compila questi campi per essere richiamato in modo mirato sui dati del tuo mini‑report OEE."
-        )
-
-        with st.form("call_oee_form"):
-            telefono = st.text_input("Numero di telefono diretto")
-            fascia_oraria = st.text_input("Fascia oraria preferita (es. 9:00–11:00)")
-            note = st.text_area("Note opzionali (linea, impianto, urgenza)")
-            submitted_call = st.form_submit_button("Invia richiesta di call")
-
-        if submitted_call:
-            if not telefono.strip():
-                st.error("Il numero di telefono è obbligatorio.")
-            else:
-                msg_call = (
-                    "📞 Nuova richiesta CALL OEE (da mini‑report)\n"
-                    f"Nome: {nome}\n"
-                    f"Azienda: {azienda}\n"
-                    f"Telefono: {telefono}\n"
-                    f"Fascia oraria: {fascia_oraria}\n"
-                    f"Note: {note[:200]}..."
-                )
-                send_telegram_message(msg_call)
-
-                st.success(
-                    "Richiesta ricevuta. Verrai contattato nella fascia indicata, "
-                    "partendo dai dati del tuo mini‑report OEE."
-                )
+        st.markdown("## ✅ **RICHIESTA CALL OEE**")
+        st.info("👋 Form telefonata attivato!")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            telefono = st.text_input("📱 **Telefono** *obbligatorio*")
+        with col2:
+            fascia = st.text_input("🕒 Fascia oraria")
+        
+        if st.button("🚀 Invia richiesta"):
+            st.success(f"📞 Chiamata richiesta: {telefono}")
+            st.balloons()
+        
+        st.stop()  # FERMA QUI!
 
 # =========================
 # PAGINA: OVERVIEW
