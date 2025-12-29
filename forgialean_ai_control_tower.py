@@ -1283,7 +1283,7 @@ se un progetto ForgiaLean può portarti **+16% OEE e più margine**, senza perde
             
             if st.form_submit_button("🚀 Contattami subito", type="primary"):
                 st.session_state.call_data = {
-                    'nome': nome, 'telefono': telefono, 'email': email,
+                    'nome': nome, 'telefono': telefono, 'email': email_contatto,
                     'disponibilita': disponibilita, 'note': note
                 }
                 st.success("✅ **Perfetto! Ti contatterò entro 24h** secondo la tua disponibilità!")
