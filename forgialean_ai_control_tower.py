@@ -76,7 +76,7 @@ def send_telegram_message(text: str):
         # opzionale: puoi loggare su file o ignorare in silenzio
         pass
 
-def build_email_body(nome, azienda, oee_perc, perdita_euro_turno, fascia):
+def build_email_body(nome, azienda, email, oee_perc, perdita_euro_turno, fascia):
     if fascia == "critica":
         intro_fascia = (
             "Questo valore ti colloca in una <b>fascia critica</b>: una quota importante della capacità "
@@ -1136,7 +1136,7 @@ tra direzione, produzione e miglioramento continuo.
                 )
 
                 subject = "Il tuo mini‑report OEE e il prossimo passo"
-                body = build_email_body(nome, azienda, oee_perc, perdita_euro_turno, fascia)
+                body = build_email_body(nome, azienda, email, oee_perc, perdita_euro_turno, fascia)
 
                 # 5) Invio automatico email mini‑report
                 invia_minireport_oee(email, subject, body)
@@ -1174,89 +1174,42 @@ se un progetto ForgiaLean può portarti **+16% OEE e più margine**, senza perde
 """)
         return
 
-    st.markdown("---")
-    st.subheader("Calcolatore rapido OEE e perdita economica (uso interno)")
+st.markdown("---")
+st.subheader("Calcolatore rapido OEE e perdita economica (uso interno)")
 
-    with st.expander("Calcolatore interno ForgiaLean"):
-        col1, col2 = st.columns(2)
-        with col1:
-            ore_turno = st.number_input(
-                "Ore teoriche per turno",
-                min_value=0.0,
-                value=8.0,
-                step=0.5,
-                key="oee_ore_turno",
-            )
-            ore_fermi_calc = st.number_input(
-                "Ore di fermo per turno",
-                min_value=0.0,
-                value=ore_fermi,
-                step=0.5,
-                key="oee_ore_fermi",
-            )
-        with col2:
-            scarti_calc = st.number_input(
-                "Scarti / rilavorazioni (%)",
-                min_value=0.0,
-                max_value=100.0,
-                value=scarti,
-                step=0.5,
-                key="oee_scarti",
-            )
-            velocita_calc = st.number_input(
-                "Velocità reale vs nominale (%)",
-                min_value=0.0,
-                max_value=200.0,
-                value=velocita,
-                step=1.0,
-                key="oee_velocita",
-            )
+with st.expander("Calcolatore interno ForgiaLean"):
+    col1, col2 = st.columns(2)
+    with col1:
+        ore_turno = st.number_input("Ore teoriche per turno", value=8.0, min_value=0.0, step=0.5, key="oee_ore_turno")
+        ore_fermi_calc = st.number_input("Ore di fermo per turno", **value=1.0**, min_value=0.0, step=0.5, key="oee_ore_fermi")
+    with col2:
+        scarti_calc = st.number_input("Scarti / rilavorazioni (%)", **value=2.0**, min_value=0.0, max_value=100.0, step=0.5, key="oee_scarti")
+        velocita_calc = st.number_input("Velocità reale vs nominale (%)", **value=90.0**, min_value=0.0, max_value=200.0, step=1.0, key="oee_velocita")
 
-        valore_orario_calc = st.number_input(
-            "Valore economico 1 ora produzione (€ / ora)",
-            min_value=0.0,
-            value=valore_orario if "valore_orario" in locals() else 0.0,
-            step=10.0,
-            key="oee_valore_orario",
-        )
+    valore_orario_calc = st.number_input("Valore economico 1 ora produzione (€ / ora)", **value=200.0**, min_value=0.0, step=10.0, key="oee_valore_orario")
+    turni_anno = st.number_input("Turni/anno (stima)", value=250, min_value=0, step=10, key="oee_turni_anno")
 
-        turni_anno = st.number_input(
-            "Turni/anno (stima)",
-            min_value=0,
-            value=250,
-            step=10,
-            key="oee_turni_anno",
-        )
+    if st.button("Calcola OEE e perdita in €", key="oee_calcola"):
+        if ore_turno <= 0 or valore_orario_calc <= 0:
+            st.warning("Imposta ore teoriche per turno e valore orario maggiori di zero.")
+        else:
+            availability = max(0.0, 1.0 - (ore_fermi_calc / ore_turno))
+            performance = velocita_calc / 100.0
+            quality = max(0.0, 1.0 - scarti_calc / 100.0)
 
-        if st.button("Calcola OEE e perdita in €", key="oee_calcola"):
-            if ore_turno <= 0 or valore_orario_calc <= 0:
-                st.warning("Imposta ore teoriche per turno e valore orario maggiori di zero.")
-            else:
-                availability = max(0.0, 1.0 - (ore_fermi_calc / ore_turno))
-                performance = velocita_calc / 100.0
-                quality = max(0.0, 1.0 - scarti_calc / 100.0)
+            oee = availability * performance * quality
+            oee_target = 0.85
+            gap_oee = max(0.0, oee_target - oee)
 
-                oee = availability * performance * quality
-                oee_target = 0.85
-                gap_oee = max(0.0, oee_target - oee)
+            capacita_persa_turno = gap_oee * ore_turno
+            perdita_euro_turno = capacita_persa_turno * valore_orario_calc
 
-                capacita_persa_turno = gap_oee * ore_turno
-                perdita_euro_turno = capacita_persa_turno * valore_orario_calc
-
-                st.write(f"OEE stimato: **{oee*100:.1f}%** (target {oee_target*100:.0f}%)")
-                st.write(f"Gap OEE: **{gap_oee*100:.1f} punti**")
-
-                st.write(f"Capacità persa per turno (1 macchina/linea): **{capacita_persa_turno:.2f} ore equivalenti**")
-                st.write(f"Perdita economica per turno (1 macchina/linea): **€ {perdita_euro_turno:,.0f}**")
-
-                st.write(
-                    "⚠️ Nota: questi calcoli si riferiscono a **una macchina/linea**. "
-                    "Se hai N macchine/linee simili, l'impatto potenziale è circa N× queste cifre."
-                )
-                if turni_anno > 0:
-                    perdita_annua = perdita_euro_turno * turni_anno
-                    st.write(f"Perdita economica stimata per anno (1 macchina/linea): **€ {perdita_annua:,.0f}**")
-                    st.write("Per più macchine/linee simili moltiplica questa stima per il numero di asset.")
+            st.success(f"✅ **OEE stimato: {oee*100:.1f}%** (target {oee_target*100:.0f}%)")
+            st.success(f"💰 **Perdita/turno: €{perdita_euro_turno:,.0f}** (1 macchina/linea)")
+            
+            if turni_anno > 0:
+                perdita_annua = perdita_euro_turno * turni_anno
+                st.success(f"📅 **Perdita/anno: €{perdita_annua:,.0f}** (1 macchina/linea)")
 
     # =========================
     # STEP CALL_OEE - FORM TELEFONO
@@ -1283,7 +1236,7 @@ se un progetto ForgiaLean può portarti **+16% OEE e più margine**, senza perde
             
             if st.form_submit_button("🚀 Contattami subito", type="primary"):
                 st.session_state.call_data = {
-                    'nome': nome, 'telefono': telefono, 'email': email_contatto,
+                    'nome': nome, 'telefono': telefono, 'email': email,
                     'disponibilita': disponibilita, 'note': note
                 }
                 st.success("✅ **Perfetto! Ti contatterò entro 24h** secondo la tua disponibilità!")
