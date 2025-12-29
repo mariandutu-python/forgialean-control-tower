@@ -116,7 +116,12 @@ def build_email_body(nome, azienda, email, oee_perc, perdita_euro_turno, fascia)
     perdita_annua_3t = perdita_euro_turno * 3 * turni_anno
 
     # URL della pagina/step successivo
-    cta_url = f"https://forgialean.streamlit.app/~/+/OEE_Presentation?       step=call_oee&nome={urllib.parse.quote(nome)}&azienda={urllib.parse.quote(azienda)}&email={urllib.parse.quote(email)}"
+    cta_url = (
+        "https://forgialean.streamlit.app/"
+        f"?step=call_oee&nome={urllib.parse.quote(nome)}"
+        f"&azienda={urllib.parse.quote(azienda)}"
+        f"&email={urllib.parse.quote(email)}"
+    )
 
     corpo = f"""
 <p>Ciao {nome},</p>
@@ -885,6 +890,49 @@ Le informazioni aggregate in questa Nota Integrativa gestionale, insieme ai pros
     )
 
 def page_presentation():
+    # 1) Leggo lo step dalla URL
+    query_params = st.query_params.to_dict()
+    step = query_params.get("step", "")
+
+    # 2) Se arrivo dallo step "call_oee" → mostro SOLO il form telefono
+    if step == "call_oee":
+        st.title("📞 Richiesta call OEE")
+        st.info("👋 Grazie per l'interesse! Inserisci i dati per essere ricontattato.")
+
+        with st.form("call_oee_form", clear_on_submit=True):
+            col1, col2 = st.columns(2)
+            with col1:
+                nome = st.text_input("👤 Nome completo *", placeholder="Mario Rossi")
+                telefono = st.text_input("📱 Telefono *", placeholder="+39 333 1234567")
+            with col2:
+                email = st.text_input("📧 Email *", placeholder="mario@azienda.it")
+                disponibilita = st.selectbox(
+                    "🕒 Quando chiamarmi?",
+                    ["Oggi entro le 18", "Domani mattina", "Domani pomeriggio", "Questa settimana"],
+                )
+
+            note = st.text_area("💬 Note / richieste", placeholder="Cosa ti interessa?")
+
+            if st.form_submit_button("🚀 Contattami subito", type="primary"):
+                st.session_state.call_data = {
+                    "nome": nome,
+                    "telefono": telefono,
+                    "email": email,
+                    "disponibilita": disponibilita,
+                    "note": note,
+                }
+                st.success("✅ Perfetto! Ti contatterò entro 24h secondo la tua disponibilità!")
+                st.balloons()
+                st.markdown(
+                    "### 📋 Prossimi passi:\n"
+                    "1. **Ricevi la chiamata**\n"
+                    "2. **Demo personalizzata**\n"
+                    "3. **Dashboard attiva**"
+                )
+                st.stop()
+        st.stop()
+        return
+
     # HERO: chi sei e che beneficio dai
     st.title("🏭 Turni lunghi, OEE basso e margini sotto pressione?")
 
