@@ -1259,27 +1259,37 @@ se un progetto ForgiaLean può portarti **+16% OEE e più margine**, senza perde
                     st.write("Per più macchine/linee simili moltiplica questa stima per il numero di asset.")
 
     # =========================
-    # STEP CALL_OEE - FUNZIONANTE
+    # STEP CALL_OEE - FORM TELEFONO
     # =========================
     query_params = st.query_params.to_dict()
     step = query_params.get("step", "")
     
-    st.write(f"🔍 DEBUG: step='{step}' params={query_params}")  # DEBUG
-    
     if step == "call_oee":
-        st.markdown("## ✅ **RICHIESTA CALL OEE**")
-        st.info("👋 Form telefonata attivato!")
+        st.markdown("## 📞 **RICHIESTA CALL OEE - Completa i dati**")
+        st.info("👋 Grazie per l'interesse! Inserisci i dati per essere ricontattato.")
         
-        col1, col2 = st.columns(2)
-        with col1:
-            telefono = st.text_input("📱 **Telefono** *obbligatorio*")
-        with col2:
-            fascia = st.text_input("🕒 Fascia oraria")
-        
-        if st.button("🚀 Invia richiesta"):
-            st.success(f"📞 Chiamata richiesta: {telefono}")
-            st.balloons()
-        
+        with st.form("call_oee_form", clear_on_submit=True):
+            col1, col2 = st.columns(2)
+            with col1:
+                nome = st.text_input("👤 Nome completo *", placeholder="Mario Rossi")
+                telefono = st.text_input("📱 Telefono *", placeholder="+39 333 1234567")
+            with col2:
+                email = st.text_input("📧 Email *", placeholder="mario@azienda.it")
+                disponibilita = st.selectbox("🕒 Quando chiamarmi?", [
+                    "Oggi entro le 18", "Domani mattina", "Domani pomeriggio", "Questa settimana"
+                ])
+            
+            note = st.text_area("💬 Note / richieste", placeholder="Cosa ti interessa?")
+            
+            if st.form_submit_button("🚀 Contattami subito", type="primary"):
+                st.session_state.call_data = {
+                    'nome': nome, 'telefono': telefono, 'email': email,
+                    'disponibilita': disponibilita, 'note': note
+                }
+                st.success("✅ **Perfetto! Ti contatterò entro 24h** secondo la tua disponibilità!")
+                st.balloons()
+                st.markdown("### 📋 Prossimi passi:\n1. **Ricevi la chiamata**\n2. **Demo personalizzata**\n3. **Dashboard attiva**")
+                st.stop()  # ← AGGIUNTO QUI
         st.stop()  # FERMA QUI!
 
 # =========================
