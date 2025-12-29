@@ -902,10 +902,10 @@ def page_presentation():
         with st.form("call_oee_form", clear_on_submit=True):
             col1, col2 = st.columns(2)
             with col1:
-                nome = st.text_input("👤 Nome completo *", placeholder="Mario Rossi")
-                telefono = st.text_input("📱 Telefono *", placeholder="+39 333 1234567")
+                nome = st.text_input("👤 Nome completo *", placeholder="Mario Rossi"   # solo placeholder, NO value=)
+                telefono = st.text_input("📱 Telefono *", placeholder="+39 333 1234567"  # solo placeholder)
             with col2:
-                email = st.text_input("📧 Email *", placeholder="mario@azienda.it")
+                email = st.text_input("📧 Email *", placeholder="mario@azienda.it"  # solo placeholder)
                 disponibilita = st.selectbox(
                     "🕒 Quando chiamarmi?",
                     ["Oggi entro le 18", "Domani mattina", "Domani pomeriggio", "Questa settimana"],
