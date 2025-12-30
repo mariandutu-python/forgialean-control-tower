@@ -891,6 +891,9 @@ Le informazioni aggregate in questa Nota Integrativa gestionale, insieme ai pros
     )
 
 def page_presentation():
+    from datetime import date, timedelta
+    from sqlmodel import select
+
     # 1) Leggo lo step dalla URL
     query_params = st.query_params.to_dict()
     step = query_params.get("step", "")
@@ -914,26 +917,69 @@ def page_presentation():
 
             note = st.text_area("💬 Note / richieste")
 
-            if st.form_submit_button("🚀 Contattami subito", type="primary"):
-                if not nome.strip() or not telefono.strip() or not email.strip():
-                    st.warning("Compila nome, telefono ed email per poter essere ricontattato.")
-                else:
-                    st.session_state.call_data = {
-                        "nome": nome,
-                        "telefono": telefono,
-                        "email": email,
-                        "disponibilita": disponibilita,
-                        "note": note,
-                    }
-                    st.success("✅ Perfetto! Ti contatterò entro 24h secondo la tua disponibilità!")
-                    st.balloons()
-                    st.markdown(
-                        "### 📋 Prossimi passi:\n"
-                        "1. **Ricevi la chiamata**\n"
-                        "2. **Demo personalizzata**\n"
-                        "3. **Dashboard attiva**"
-                    )
-                    st.stop()
+            submitted_call = st.form_submit_button("🚀 Contattami subito", type="primary")
+
+        if submitted_call:
+            if not nome.strip() or not telefono.strip() or not email.strip():
+                st.warning("Compila nome, telefono ed email per poter essere ricontattato.")
+            else:
+                with get_session() as session:
+                    # 1) Trova il client per email (se esiste)
+                    client = session.exec(
+                        select(Client).where(Client.email == email)
+                    ).first()
+
+                    # 2) Trova l'ultima Opportunity Lead OEE collegata a quel client
+                    opp = None
+                    if client:
+                        opp = session.exec(
+                            select(Opportunity)
+                            .where(Opportunity.client_id == client.client_id)
+                            .where(Opportunity.nome_opportunita.ilike("%Lead OEE%"))
+                            .order_by(Opportunity.data_apertura.desc())
+                        ).first()
+
+                    if opp:
+                        # Aggiorna a Lead qualificato (SQL)
+                        opp.fase_pipeline = "Lead qualificato (SQL)"
+                        opp.probabilita = 50.0
+                        opp.owner = "Marian Dutu"
+                        # se in modello hai data_prossima_azione, puoi usare disponibilita per decidere la data
+                        if hasattr(opp, "data_prossima_azione"):
+                            opp.data_prossima_azione = date.today()
+
+                        extra = (
+                            f"\n\n--- Step call OEE ---\n"
+                            f"Nome: {nome}\n"
+                            f"Telefono: {telefono}\n"
+                            f"Disponibilità: {disponibilita}\n"
+                        )
+                        if note.strip():
+                            extra += f"Note: {note.strip()}\n"
+
+                        if hasattr(opp, "note"):
+                            opp.note = (opp.note or "") + extra
+
+                        session.add(opp)
+                        session.commit()
+
+                st.session_state.call_data = {
+                    "nome": nome,
+                    "telefono": telefono,
+                    "email": email,
+                    "disponibilita": disponibilita,
+                    "note": note,
+                }
+
+                st.success("✅ Perfetto! Ti contatterò entro 24h secondo la tua disponibilità!")
+                st.balloons()
+                st.markdown(
+                    "### 📋 Prossimi passi:\n"
+                    "1. **Ricevi la chiamata**\n"
+                    "2. **Demo personalizzata**\n"
+                    "3. **Dashboard attiva**"
+                )
+                st.stop()
         st.stop()
         return
 
@@ -977,12 +1023,12 @@ ForgiaLean unisce **Black Belt Lean Six Sigma**, **Operations Management** e **D
 - Fermi **-82%**.
 - Circa **28.000 €/anno** di capacità recuperata, scarti dal 9% al 2%.
 """)
+
     # GRAFICI PRIMA / DOPO (esempio fittizio)
     st.subheader("Come cambia la situazione: prima e dopo il progetto")
 
     col_g1, col_g2 = st.columns(2)
 
-    # Dati fittizi per esempio
     df_oee = pd.DataFrame(
         {
             "Fase": ["Prima", "Dopo"],
@@ -1047,6 +1093,7 @@ Compilando il form qui sotto riceverai via email un **mini‑report OEE** con:
 
 Fai il primo passo: Prenotare un **Audit 30 minuti + piano personalizzato**.
 """)
+
     st.subheader("Un vantaggio in più: bandi e incentivi 4.0")
 
     st.markdown("""
@@ -1085,6 +1132,7 @@ In questo modo hai sia un **miglioramento operativo concreto**, sia la possibili
 Risultati ottenibili quando c'è impegno congiunto 
 tra direzione, produzione e miglioramento continuo.
 """)
+
     # =====================
     # FORM: RICHIEDI REPORT OEE (visibile a tutti)
     # =====================
@@ -1126,7 +1174,6 @@ tra direzione, produzione e miglioramento continuo.
         submitted = st.form_submit_button("Ottieni il mini‑report OEE")
 
     if submitted:
-        #st.write(f"🔍 DEBUG: nome='{nome}', ...")  # ← PRIMA RIGA
         if not (nome and azienda and email):
             st.error("Nome, azienda ed email sono obbligatori.")
         else:
@@ -1146,31 +1193,36 @@ tra direzione, produzione e miglioramento continuo.
 
             try:
                 with get_session() as session:
-                    # 2) Crea Client
-                    new_client = Client(
-                        ragione_sociale=azienda,
-                        email=email,
-                        canale_acquisizione="Landing OEE",
-                        segmento_cliente="PMI manifatturiera",
-                        data_creazione=date.today(),
-                        stato_cliente="prospect",
-                        paese=None,
-                        settore=None,
-                        piva=None,
-                        cod_fiscale=None,
-                    )
-                    session.add(new_client)
-                    session.commit()
-                    session.refresh(new_client)
+                    # 2) Trova o crea Client
+                    client = session.exec(
+                        select(Client).where(Client.email == email)
+                    ).first()
 
-                    # 3) Crea Opportunity
+                    if not client:
+                        client = Client(
+                            ragione_sociale=azienda,
+                            email=email,
+                            canale_acquisizione="Landing OEE",
+                            segmento_cliente="PMI manifatturiera",
+                            data_creazione=date.today(),
+                            stato_cliente="prospect",
+                            paese=None,
+                            settore=None,
+                            piva=None,
+                            cod_fiscale=None,
+                        )
+                        session.add(client)
+                        session.commit()
+                        session.refresh(client)
+
+                    # 3) Crea Opportunity come lead pre-qualificato (MQL)
                     new_opp = Opportunity(
-                        client_id=new_client.client_id,
+                        client_id=client.client_id,
                         nome_opportunita=f"Lead OEE - {nome}",
-                        fase_pipeline="Lead",
+                        fase_pipeline="Lead pre-qualificato (MQL)",
                         owner="Marian Dutu",
                         valore_stimato=0.0,
-                        probabilita=10.0,
+                        probabilita=30.0,
                         data_apertura=date.today(),
                         stato_opportunita="aperta",
                         data_chiusura_prevista=None,
@@ -1217,7 +1269,6 @@ segui le istruzioni e completa il **passo successivo** lasciando i dati richiest
     # =====================
     role = st.session_state.get("role", "user")
     if role != "admin":
-        # Il cliente vede solo landing + form
         st.markdown("""
 Se hai linee o impianti che lavorano sotto l'80% di OEE, **continuare così è la scelta più costosa**.
 
