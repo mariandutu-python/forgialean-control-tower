@@ -1920,14 +1920,6 @@ def page_crm_sales():
 
     # === QUI SOTTO AGGIUNGIAMO LA PARTE COMMESSE DA OPPORTUNITÀ VINTA ===
 
-    if delete_opp:
-        with get_session() as session:
-            obj = session.get(Opportunity, opp_id_sel)
-            if obj:
-                session.delete(obj)
-                session.commit()
-        st.success("Opportunità eliminata.")
-        st.rerun()
     st.markdown("---")
     st.subheader("📦 Crea commessa da opportunità vinta")
 
@@ -1937,7 +1929,7 @@ def page_crm_sales():
             select(Opportunity).where(Opportunity.fase_pipeline == "Vinta")
         ).all()
         commesse = session.exec(select(ProjectCommessa)).all()
-
+    ...
     # Mappa delle commesse già legate a un'opportunity (se hai il campo opportunity_id)
     commesse_by_opp = set()
     if commesse and hasattr(ProjectCommessa, "opportunity_id"):
