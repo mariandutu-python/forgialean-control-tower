@@ -1589,6 +1589,7 @@ def page_clients():
 def page_crm_sales():
     st.title("🤝 CRM & Vendite (SQLite)")
     role = st.session_state.get("role", "user")
+
     # =========================
     # FORM INSERIMENTO OPPORTUNITÀ
     # =========================
@@ -1611,7 +1612,15 @@ def page_crm_sales():
                 nome_opportunita = st.text_input("Nome opportunità", "")
                 fase_pipeline = st.selectbox(
                     "Fase pipeline",
-                    ["Lead", "Offerta", "Negoziazione", "Vinta", "Persa"],
+                    [
+                        "Lead pre-qualificato (MQL)",
+                        "Lead qualificato (SQL)",
+                        "Lead",
+                        "Offerta",
+                        "Negoziazione",
+                        "Vinta",
+                        "Persa",
+                    ],
                     index=0,
                 )
                 owner = st.text_input("Owner (commerciale)", "")
@@ -1635,7 +1644,6 @@ def page_crm_sales():
             else:
                 client_id_sel = int(client_label.split(" - ")[0])
 
-                # Recupero info cliente per avere il nome nel tracking
                 client_row = df_clients[df_clients["client_id"] == client_id_sel].iloc[0]
                 client_name = client_row["ragione_sociale"]
 
@@ -1655,7 +1663,6 @@ def page_crm_sales():
                     session.commit()
                     session.refresh(new_opp)
 
-                # === TRACKING GA4 ===
                 track_ga4_event(
                     "lead_generato",
                     {
@@ -1668,10 +1675,9 @@ def page_crm_sales():
                         "probability": float(new_opp.probabilita or 0),
                         "status": new_opp.stato_opportunita,
                     },
-                    client_id=None,  # per ora usiamo un fallback server
+                    client_id=None,
                 )
 
-                # === TRACKING FACEBOOK (Conversions API) ===
                 track_facebook_event(
                     "Lead",
                     {
@@ -1689,8 +1695,6 @@ def page_crm_sales():
 
     st.markdown("---")
 
-    st.markdown("---")
-
     # =========================
     # VISTA / FILTRI OPPORTUNITÀ
     # =========================
@@ -1698,14 +1702,18 @@ def page_crm_sales():
 
     with get_session() as session:
         opps = session.exec(select(Opportunity)).all()
+        clients_all = session.exec(select(Client)).all()
 
     if not opps:
         st.info("Nessuna opportunità presente.")
         return
 
     df_opps = pd.DataFrame([o.__dict__ for o in opps])
+    df_clients_all = pd.DataFrame([c.__dict__ for c in clients_all]) if clients_all else pd.DataFrame()
+    client_map = {c["client_id"]: c["ragione_sociale"] for _, c in df_clients_all.iterrows()} if not df_clients_all.empty else {}
 
-    # --- KPI di sintesi pipeline (solo opportunità aperte) ---
+    df_opps["Cliente"] = df_opps["client_id"].map(client_map).fillna(df_opps["client_id"])
+
     df_open = df_opps[df_opps["stato_opportunita"] == "aperta"].copy()
 
     if not df_open.empty:
@@ -1745,7 +1753,7 @@ def page_crm_sales():
     st.subheader("📂 Opportunità filtrate")
     st.dataframe(df_f)
 
-    if "fase_pipeline" in df_f.columns and "valore_stimato" in df_f.columns and not df_f.empty:
+    if {"fase_pipeline", "valore_stimato"}.issubset(df_f.columns) and not df_f.empty:
         st.subheader("📈 Valore opportunità per fase")
         pivot = df_f.groupby("fase_pipeline")["valore_stimato"].sum().reset_index()
         fig_fase = px.bar(
@@ -1760,23 +1768,48 @@ def page_crm_sales():
         st.plotly_chart(fig_fase, use_container_width=True)
 
     # =========================
+    # AGENDA VENDITORE (tutti i ruoli)
+    # =========================
+    st.markdown("---")
+    st.subheader("📞 Agenda venditore")
+
+    if "data_prossima_azione" in df_opps.columns:
+        oggi = date.today()
+        df_agenda = df_opps.copy()
+        df_agenda = df_agenda.dropna(subset=["data_prossima_azione"])
+        df_agenda = df_agenda[df_agenda["data_prossima_azione"] >= oggi]
+        df_agenda = df_agenda.sort_values("data_prossima_azione")
+
+        cols_agenda = [
+            "opportunity_id",
+            "Cliente",
+            "nome_opportunita",
+            "fase_pipeline",
+            "probabilita",
+            "owner",
+            "data_prossima_azione",
+        ]
+        if "note" in df_agenda.columns:
+            cols_agenda.append("note")
+
+        st.dataframe(df_agenda[cols_agenda])
+    else:
+        st.info("Per usare l’agenda venditore aggiungi il campo 'data_prossima_azione' al modello Opportunity.")
+
+    # =========================
     # SEZIONE EDIT / DELETE (SOLO ADMIN)
     # =========================
     if role != "admin":
-        return  # niente edit/delete per utenti normali
+        return
 
     st.markdown("---")
     st.subheader("✏️ Modifica / elimina opportunità (solo admin)")
 
-    with get_session() as session:
-        opp_all = session.exec(select(Opportunity)).all()
-        clients_all = session.exec(select(Client)).all()
-
-    if not opp_all:
+    if not opps:
         st.info("Nessuna opportunità da modificare/eliminare.")
         return
 
-    df_opp_all = pd.DataFrame([o.__dict__ for o in opp_all])
+    df_opp_all = pd.DataFrame([o.__dict__ for o in opps])
     opp_ids = df_opp_all["opportunity_id"].tolist()
     opp_id_sel = st.selectbox("ID opportunità", opp_ids, key="crm_opp_sel")
 
@@ -1787,8 +1820,6 @@ def page_crm_sales():
         st.warning("Opportunità non trovata.")
         return
 
-    # client label per select
-    df_clients_all = pd.DataFrame([c.__dict__ for c in clients_all]) if clients_all else pd.DataFrame()
     if not df_clients_all.empty:
         df_clients_all["label"] = df_clients_all["client_id"].astype(str) + " - " + df_clients_all["ragione_sociale"]
         try:
@@ -1811,8 +1842,24 @@ def page_crm_sales():
             nome_opportunita_e = st.text_input("Nome opportunità", opp_obj.nome_opportunita or "")
             fase_pipeline_e = st.selectbox(
                 "Fase pipeline",
-                ["Lead", "Offerta", "Negoziazione", "Vinta", "Persa"],
-                index=["Lead", "Offerta", "Negoziazione", "Vinta", "Persa"].index(opp_obj.fase_pipeline or "Lead"),
+                [
+                    "Lead pre-qualificato (MQL)",
+                    "Lead qualificato (SQL)",
+                    "Lead",
+                    "Offerta",
+                    "Negoziazione",
+                    "Vinta",
+                    "Persa",
+                ],
+                index=[
+                    "Lead pre-qualificato (MQL)",
+                    "Lead qualificato (SQL)",
+                    "Lead",
+                    "Offerta",
+                    "Negoziazione",
+                    "Vinta",
+                    "Persa",
+                ].index(opp_obj.fase_pipeline or "Lead"),
             )
             owner_e = st.text_input("Owner", opp_obj.owner or "")
         with col2:
@@ -1862,6 +1909,16 @@ def page_crm_sales():
                 session.commit()
         st.success("Opportunità aggiornata.")
         st.rerun()
+    if delete_opp:
+        with get_session() as session:
+            obj = session.get(Opportunity, opp_id_sel)
+            if obj:
+                session.delete(obj)
+                session.commit()
+        st.success("Opportunità eliminata.")
+        st.rerun()
+
+    # === QUI SOTTO AGGIUNGIAMO LA PARTE COMMESSE DA OPPORTUNITÀ VINTA ===
 
     if delete_opp:
         with get_session() as session:
@@ -1870,6 +1927,93 @@ def page_crm_sales():
                 session.delete(obj)
                 session.commit()
         st.success("Opportunità eliminata.")
+        st.rerun()
+    st.markdown("---")
+    st.subheader("📦 Crea commessa da opportunità vinta")
+
+    with get_session() as session:
+        # Opportunità vinte
+        opp_vinte = session.exec(
+            select(Opportunity).where(Opportunity.fase_pipeline == "Vinta")
+        ).all()
+        commesse = session.exec(select(ProjectCommessa)).all()
+
+    # Mappa delle commesse già legate a un'opportunity (se hai il campo opportunity_id)
+    commesse_by_opp = set()
+    if commesse and hasattr(ProjectCommessa, "opportunity_id"):
+        for c in commesse:
+            if getattr(c, "opportunity_id", None) is not None:
+                commesse_by_opp.add(c.opportunity_id)
+
+    # Filtra solo le opportunity vinte che NON hanno ancora una commessa collegata
+    opp_vinte_creabili = [
+        o for o in opp_vinte
+        if (not hasattr(ProjectCommessa, "opportunity_id") or o.opportunity_id not in commesse_by_opp)
+    ]
+
+    if not opp_vinte_creabili:
+        st.info("Nessuna opportunità 'Vinta' disponibile per creare una nuova commessa.")
+        return
+
+    # Selectbox per scegliere l'opportunity vinta
+    opp_options = [
+        f"{o.opportunity_id} - {o.nome_opportunita}" for o in opp_vinte_creabili
+    ]
+    sel_opp_label = st.selectbox(
+        "Seleziona un'opportunità vinta per creare la commessa",
+        opp_options,
+        key="opp_vinta_sel",
+    )
+    sel_opp_id = int(sel_opp_label.split(" - ")[0])
+
+    # Form di creazione commessa da opportunity
+    with get_session() as session:
+        opp_sel = session.get(Opportunity, sel_opp_id)
+        client_sel = session.get(Client, opp_sel.client_id) if opp_sel else None
+
+    default_cod = f"COM-{sel_opp_id}"
+    default_desc = opp_sel.nome_opportunita if opp_sel else ""
+
+    with st.form("create_commessa_from_opp"):
+        colc1, colc2 = st.columns(2)
+        with colc1:
+            cod_commessa = st.text_input("Codice commessa", default_cod)
+            descr_commessa = st.text_input("Descrizione commessa", default_desc)
+        with colc2:
+            data_ini_prev = st.date_input(
+                "Data inizio prevista",
+                value=date.today(),
+            )
+            data_fine_prev = st.date_input(
+                "Data fine prevista",
+                value=date.today(),
+            )
+
+        crea_commessa = st.form_submit_button("Crea commessa")
+
+    if crea_commessa and opp_sel and client_sel:
+        with get_session() as session:
+            # ricarico l'opportunity e il client per essere sicuro
+            opp_db = session.get(Opportunity, opp_sel.opportunity_id)
+            client_db = session.get(Client, client_sel.client_id)
+
+            new_comm = ProjectCommessa(
+                client_id=client_db.client_id,
+                cod_commessa=cod_commessa.strip() or default_cod,
+                descrizione=descr_commessa.strip() or default_desc,
+                data_inizio_prevista=data_ini_prev,
+                data_fine_prevista=data_fine_prev,
+            )
+
+            # se il modello ha opportunity_id, lo valorizzo
+            if hasattr(ProjectCommessa, "opportunity_id"):
+                new_comm.opportunity_id = opp_db.opportunity_id
+
+            session.add(new_comm)
+            session.commit()
+            session.refresh(new_comm)
+
+        st.success(f"Commessa creata da opportunità {opp_db.opportunity_id} con ID {new_comm.commessa_id}.")
         st.rerun()
 
 def get_next_invoice_number(session, year=None, prefix="FL"):
