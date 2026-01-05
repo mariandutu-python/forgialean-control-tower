@@ -60,6 +60,10 @@ class Opportunity(SQLModel, table=True):
     stato_opportunita: Optional[str] = "aperta"
     note: Optional[str] = None          # <--- AGGIUNTO
 
+    utm_source: Optional[str] = None
+    utm_medium: Optional[str] = None
+    utm_campaign: Optional[str] = None
+    utm_content: Optional[str] = None
 
 class Invoice(SQLModel, table=True):
     invoice_id: Optional[int] = Field(default=None, primary_key=True)

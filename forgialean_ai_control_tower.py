@@ -9,8 +9,12 @@ import plotly.express as px
 import pdfplumber
 from sqlmodel import SQLModel, Field, Session, select, delete
 from finance_utils import build_full_management_balance
-from enum import Enum
 from config import CACHE_TTL, PAGES_BY_ROLE, APP_NAME, LOGO_PATH, MY_COMPANY_DATA
+from enum import Enum
+
+import streamlit as st
+import pandas as pd
+from sqlmodel import select
 
 from db import (
     init_db,
@@ -61,6 +65,15 @@ from tracking import track_ga4_event, track_facebook_event
 init_db()
 
 LOGO_PATH = Path("forgialean_logo.png")
+
+def capture_utm_params():
+    """Legge i parametri UTM dall'URL e li mette in session_state."""
+    params = st.query_params
+    st.session_state["utm_source"] = params.get("utm_source", [""])[0]
+    st.session_state["utm_medium"] = params.get("utm_medium", [""])[0]
+    st.session_state["utm_campaign"] = params.get("utm_campaign", [""])[0]
+    st.session_state["utm_content"] = params.get("utm_content", [""])[0]
+
 
 # --- Notifiche Telegram ---
 import requests
@@ -1648,6 +1661,12 @@ def page_crm_sales():
                 client_row = df_clients[df_clients["client_id"] == client_id_sel].iloc[0]
                 client_name = client_row["ragione_sociale"]
 
+                # 👉 leggi UTM da session_state (riempiti da capture_utm_params)
+                utm_source = st.session_state.get("utm_source") or None
+                utm_medium = st.session_state.get("utm_medium") or None
+                utm_campaign = st.session_state.get("utm_campaign") or None
+                utm_content = st.session_state.get("utm_content") or None
+
                 with get_session() as session:
                     new_opp = Opportunity(
                         client_id=client_id_sel,
@@ -1659,6 +1678,10 @@ def page_crm_sales():
                         data_apertura=data_apertura,
                         data_chiusura_prevista=data_chiusura_prevista,
                         stato_opportunita=stato_opportunita,
+                        utm_source=utm_source,
+                        utm_medium=utm_medium,
+                        utm_campaign=utm_campaign,
+                        utm_content=utm_content,
                     )
                     session.add(new_opp)
                     session.commit()
@@ -2013,13 +2036,6 @@ def page_crm_sales():
         # 👉 FUORI DAL WITH USA SOLO LE VARIABILI SEMPLICI
         st.success(f"Commessa creata da opportunità {opp_id} con ID {comm_id}.")
         st.rerun()
-from enum import Enum
-from datetime import datetime, date, timedelta
-
-import streamlit as st
-import pandas as pd
-from sqlmodel import select
-
 
 class StepOutcome(str, Enum):
     OK = "ok"
@@ -6574,6 +6590,9 @@ def check_login_sidebar():
 
 
 def main():
+    # 👉 chiamata subito all'inizio
+    capture_utm_params()
+
     # ---------- Inizializzazione stato ----------
     if "authenticated" not in st.session_state:
         st.session_state["authenticated"] = False
