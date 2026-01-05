@@ -1919,7 +1919,7 @@ def page_crm_sales():
         # 📅 CALENDARIO PROSSIME AZIONI
         st.subheader("📅 Calendario prossime azioni")
 
-        base_url = "https://forgialean-control-tower.streamlit.app"  # metti il tuo URL
+        base_url = "https://forgialean.streamlit.app"
 
         events = []
         for _, row in df_agenda_f.iterrows():
