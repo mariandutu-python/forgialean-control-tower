@@ -1863,71 +1863,72 @@ def page_crm_sales():
         fig_fase.update_layout(yaxis_title="Valore (€)")
         st.plotly_chart(fig_fase, use_container_width=True)
 
-# =========================
-# AGENDA VENDITORE (tutti i ruoli)
-# =========================
-st.markdown("---")
-st.subheader("📞 Agenda venditore")
+    # =========================
+    # AGENDA VENDITORE (tutti i ruoli)
+    # =========================
+    st.markdown("---")
+    st.subheader("📞 Agenda venditore")
 
-if "data_prossima_azione" in df_opps.columns:
-    oggi = date.today()
-    df_agenda = df_opps.copy()
-    df_agenda = df_agenda.dropna(subset=["data_prossima_azione"])
-    df_agenda = df_agenda[df_agenda["data_prossima_azione"] >= oggi]
-    df_agenda = df_agenda.sort_values("data_prossima_azione")
+    if "data_prossima_azione" in df_opps.columns:
+        oggi = date.today()
+        df_agenda = df_opps.copy()
+        df_agenda = df_agenda.dropna(subset=["data_prossima_azione"])
+        df_agenda = df_agenda[df_agenda["data_prossima_azione"] >= oggi]
+        df_agenda = df_agenda.sort_values("data_prossima_azione")
 
-    cols_agenda = [
-        "data_prossima_azione",
-        "Cliente",
-        "nome_opportunita",
-        "tipo_prossima_azione",
-        "note_prossima_azione",
-        "fase_pipeline",
-        "probabilita",
-        "owner",
-    ]
+        cols_agenda = [
+            "data_prossima_azione",
+            "Cliente",
+            "nome_opportunita",
+            "tipo_prossima_azione",
+            "note_prossima_azione",
+            "fase_pipeline",
+            "probabilita",
+            "owner",
+        ]
 
-    st.dataframe(df_agenda[cols_agenda])
+        st.dataframe(df_agenda[cols_agenda])
 
-    # 🔔 bottone test notifica Telegram
-    if st.button("🔔 Invia agenda di oggi su Telegram"):
-        send_agenda_oggi_telegram()
-        st.success("Agenda di oggi inviata su Telegram (se ci sono azioni).")
+        # 🔔 bottone test notifica Telegram
+        if st.button("🔔 Invia agenda di oggi su Telegram"):
+            send_agenda_oggi_telegram()
+            st.success("Agenda di oggi inviata su Telegram (se ci sono azioni).")
 
-    # 📅 CALENDARIO PROSSIME AZIONI
-    st.subheader("📅 Calendario prossime azioni")
+        # 📅 CALENDARIO PROSSIME AZIONI
+        st.subheader("📅 Calendario prossime azioni")
 
-    events = []
-    for _, row in df_agenda.iterrows():
-        if pd.notnull(row["data_prossima_azione"]):
-            events.append(
-                {
-                    "title": f"{row['Cliente']} – {row['nome_opportunita']} ({row.get('tipo_prossima_azione', '')})",
-                    "start": row["data_prossima_azione"].strftime("%Y-%m-%d"),
-                }
-            )
+        events = []
+        for _, row in df_agenda.iterrows():
+            if pd.notnull(row["data_prossima_azione"]):
+                events.append(
+                    {
+                        "title": f"{row['Cliente']} – {row['nome_opportunita']} ({row.get('tipo_prossima_azione', '')})",
+                        "start": row["data_prossima_azione"].strftime("%Y-%m-%d"),
+                    }
+                )
 
-    options = {
-        "initialView": "dayGridMonth",
-        "headerToolbar": {
-            "left": "prev,next today",
-            "center": "title",
-            "right": "dayGridMonth,timeGridWeek,listWeek",
-        },
-    }
+        options = {
+            "initialView": "dayGridMonth",
+            "headerToolbar": {
+                "left": "prev,next today",
+                "center": "title",
+                "right": "dayGridMonth,timeGridWeek,listWeek",
+            },
+        }
 
-    calendar(events=events, options=options, key="crm_calendar")
+        calendar(events=events, options=options, key="crm_calendar")
 
-else:
-    st.info(
-        "Per usare l’agenda venditore aggiungi i campi 'data_prossima_azione', "
-        "'tipo_prossima_azione' e 'note_prossima_azione' al modello Opportunity."
-    )
+    else:
+        st.info(
+            "Per usare l’agenda venditore aggiungi i campi 'data_prossima_azione', "
+            "'tipo_prossima_azione' e 'note_prossima_azione' al modello Opportunity."
+        )
+
     # =========================
     # SEZIONE EDIT / DELETE (SOLO ADMIN)
     # =========================
     if role != "admin":
-            return
+        return
 
     st.markdown("---")
     st.subheader("✏️ Modifica / elimina opportunità (solo admin)")
@@ -2091,7 +2092,7 @@ else:
         st.success("Opportunità eliminata.")
         st.rerun()
 
-    # === QUI SOTTO AGGIUNGIAMO LA PARTE COMMESSE DA OPPORTUNITÀ VINTA ===
+    # === COMMESSE DA OPPORTUNITÀ VINTA ===
 
     st.markdown("---")
     st.subheader("📦 Crea commessa da opportunità vinta")
@@ -2102,7 +2103,7 @@ else:
             select(Opportunity).where(Opportunity.fase_pipeline == "Vinta")
         ).all()
         commesse = session.exec(select(ProjectCommessa)).all()
-    ...
+
     # Mappa delle commesse già legate a un'opportunity (se hai il campo opportunity_id)
     commesse_by_opp = set()
     if commesse and hasattr(ProjectCommessa, "opportunity_id"):
@@ -2185,6 +2186,7 @@ else:
         # 👉 FUORI DAL WITH USA SOLO LE VARIABILI SEMPLICI
         st.success(f"Commessa creata da opportunità {opp_id} con ID {comm_id}.")
         st.rerun()
+
 
 class StepOutcome(str, Enum):
     OK = "ok"
