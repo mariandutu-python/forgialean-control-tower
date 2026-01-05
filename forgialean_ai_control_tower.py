@@ -1876,6 +1876,28 @@ def page_crm_sales():
         df_agenda = df_agenda[df_agenda["data_prossima_azione"] >= oggi]
         df_agenda = df_agenda.sort_values("data_prossima_azione")
 
+        # --- FILTRI AGENDA ---
+        col_f1, col_f2 = st.columns(2)
+        with col_f1:
+            owner_opt = ["Tutti"] + sorted(
+                df_agenda["owner"].dropna().astype(str).unique().tolist()
+            )
+            f_owner_ag = st.selectbox("Filtro owner agenda", owner_opt)
+
+        with col_f2:
+            tipo_opt = ["Tutti"] + sorted(
+                df_agenda["tipo_prossima_azione"].dropna().astype(str).unique().tolist()
+            )
+            f_tipo_ag = st.selectbox("Filtro tipo azione", tipo_opt)
+
+        df_agenda_f = df_agenda.copy()
+        if f_owner_ag != "Tutti":
+            df_agenda_f = df_agenda_f[df_agenda_f["owner"] == f_owner_ag]
+        if f_tipo_ag != "Tutti":
+            df_agenda_f = df_agenda_f[
+                df_agenda_f["tipo_prossima_azione"] == f_tipo_ag
+            ]
+
         cols_agenda = [
             "data_prossima_azione",
             "Cliente",
@@ -1887,7 +1909,7 @@ def page_crm_sales():
             "owner",
         ]
 
-        st.dataframe(df_agenda[cols_agenda])
+        st.dataframe(df_agenda_f[cols_agenda])
 
         # 🔔 bottone test notifica Telegram
         if st.button("🔔 Invia agenda di oggi su Telegram"):
@@ -1897,13 +1919,19 @@ def page_crm_sales():
         # 📅 CALENDARIO PROSSIME AZIONI
         st.subheader("📅 Calendario prossime azioni")
 
+        base_url = "https://forgialean-control-tower.streamlit.app"  # metti il tuo URL
+
         events = []
-        for _, row in df_agenda.iterrows():
+        for _, row in df_agenda_f.iterrows():
             if pd.notnull(row["data_prossima_azione"]):
+                opp_id = row["opportunity_id"]
+                event_url = f"{base_url}?page=crm&opp_id={opp_id}"
+
                 events.append(
                     {
                         "title": f"{row['Cliente']} – {row['nome_opportunita']} ({row.get('tipo_prossima_azione', '')})",
                         "start": row["data_prossima_azione"].strftime("%Y-%m-%d"),
+                        "url": event_url,
                     }
                 )
 
@@ -1923,7 +1951,6 @@ def page_crm_sales():
             "Per usare l’agenda venditore aggiungi i campi 'data_prossima_azione', "
             "'tipo_prossima_azione' e 'note_prossima_azione' al modello Opportunity."
         )
-
     # =========================
     # SEZIONE EDIT / DELETE (SOLO ADMIN)
     # =========================
