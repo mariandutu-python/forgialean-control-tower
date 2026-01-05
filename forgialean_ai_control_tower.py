@@ -1927,7 +1927,7 @@ else:
     # SEZIONE EDIT / DELETE (SOLO ADMIN)
     # =========================
     if role != "admin":
-        return
+           return
 
     st.markdown("---")
     st.subheader("✏️ Modifica / elimina opportunità (solo admin)")
