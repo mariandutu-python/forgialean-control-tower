@@ -79,10 +79,11 @@ LOGO_PATH = Path("forgialean_logo.png")
 def capture_utm_params():
     """Legge i parametri UTM dall'URL e li mette in session_state."""
     params = st.query_params
-    st.session_state["utm_source"] = params.get("utm_source", [""])[0]
-    st.session_state["utm_medium"] = params.get("utm_medium", [""])[0]
-    st.session_state["utm_campaign"] = params.get("utm_campaign", [""])[0]
-    st.session_state["utm_content"] = params.get("utm_content", [""])[0]
+
+    st.session_state["utm_source"] = params.get("utm_source", "")
+    st.session_state["utm_medium"] = params.get("utm_medium", "")
+    st.session_state["utm_campaign"] = params.get("utm_campaign", "")
+    st.session_state["utm_content"] = params.get("utm_content", "")
 
 
 def send_telegram_message(text: str):
@@ -1809,8 +1810,14 @@ def page_crm_sales():
 
     df_opps["Cliente"] = df_opps["client_id"].map(client_map).fillna(df_opps["client_id"])
 
-    df_open = df_opps[df_opps["stato_opportunita"] == "aperta"].copy()
+    # Se ho opp_id da querystring, salvo la riga selezionata
+    selected_opp = None
+    if opp_id is not None and not df_opps.empty:
+        df_match = df_opps[df_opps["opportunity_id"] == opp_id]
+        if not df_match.empty:
+            selected_opp = df_match.iloc[0]
 
+    df_open = df_opps[df_opps["stato_opportunita"] == "aperta"].copy()
     if not df_open.empty:
         df_open["valore_ponderato"] = (
             df_open["valore_stimato"] * df_open["probabilita"] / 100.0
@@ -1855,7 +1862,26 @@ def page_crm_sales():
         df_f = df_f[df_f["owner"] == f_owner]
 
     st.subheader("📂 Opportunità filtrate")
-    st.dataframe(df_f)
+
+    if df_f.empty:
+        st.info("Nessuna opportunità trovata con i filtri selezionati.")
+    else:
+        for _, row in df_f.iterrows():
+            expanded_default = bool(
+                selected_opp is not None and row["opportunity_id"] == opp_id
+            )
+
+            header = f"{row['opportunity_id']} – {row['Cliente']} – {row['nome_opportunita']} ({row['stato_opportunita']})"
+            with st.expander(header, expanded=expanded_default):
+                st.write(f"Fase pipeline: {row['fase_pipeline']}")
+                st.write(f"Owner: {row.get('owner', '')}")
+                st.write(f"Valore stimato: {row['valore_stimato']} €")
+                st.write(f"Probabilità: {row['probabilita']} %")
+                st.write(f"Data apertura: {row['data_apertura']}")
+                st.write(f"Data chiusura prevista: {row['data_chiusura_prevista']}")
+                st.write(f"Data prossima azione: {row.get('data_prossima_azione', '')}")
+                st.write(f"Tipo prossima azione: {row.get('tipo_prossima_azione', '')}")
+                st.write(f"Note prossima azione: {row.get('note_prossima_azione', '')}")
 
     if {"fase_pipeline", "valore_stimato"}.issubset(df_f.columns) and not df_f.empty:
         st.subheader("📈 Valore opportunità per fase")
