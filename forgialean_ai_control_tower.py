@@ -2012,9 +2012,37 @@ def page_crm_sales():
 def page_sales_train():
     """
     Treno Venditore Vincente - checklist guidata 7 vagoni
-    collegata a una Opportunity esistente.
+    collegata a una Opportunity esistente con script per ogni step.
     """
     st.title("🚂 Treno Venditore Vincente - Live Tracking")
+
+    # --- definizione script per tipo di step ---
+    script_map = {
+        "Apertura": (
+            "Obiettivo: rompere il ghiaccio e dare contesto.\n"
+            "- Salutalo per nome e presentati.\n"
+            "- Ricorda come siete entrati in contatto.\n"
+            "- Chiedi conferma del tempo a disposizione (es. 'Hai 20 minuti?')."
+        ),
+        "Segnale": (
+            "Obiettivo: capire perché ti sta ascoltando.\n"
+            "- Domanda chiave: 'Cosa ti ha spinto a contattarmi / ad accettare questa call?'\n"
+            "- Fai 2–3 domande aperte su problema/obiettivo.\n"
+            "- Ascolta senza interrompere."
+        ),
+        "Conferma": (
+            "Obiettivo: allinearti sul problema e sull'urgenza.\n"
+            "- Riassumi con le tue parole cosa hai capito.\n"
+            "- Chiedi: 'È corretto? Vuoi aggiungere altro?'\n"
+            "- Valuta livello di urgenza (alta / media / bassa)."
+        ),
+        "Transizione": (
+            "Obiettivo: passare alla fase successiva in modo naturale.\n"
+            "- Proponi il passo successivo (analisi dati, demo, visita).\n"
+            "- Concorda data/ora concreta.\n"
+            "- Chiedi chi altro deve essere coinvolto."
+        ),
+    }
 
     # --- selezione Opportunity a cui agganciare la call ---
     with get_session() as session:
@@ -2080,7 +2108,7 @@ def page_sales_train():
 
     st.markdown("---")
 
-    # --- checklist 7 vagoni ---
+    # --- checklist 7 vagoni con script ---
     for vagone in range(1, 8):
         vagone_df = steps_df[steps_df["Vagone"] == vagone]
         vagone_success = vagone_df["OK"].mean() if not vagone_df.empty else 0.0
@@ -2090,15 +2118,24 @@ def page_sales_train():
 
             with col_v1:
                 for idx, row in vagone_df.iterrows():
+                    step_label = f"Step {int(row.Step)}: {row.Descrizione}"
                     step_ok = st.checkbox(
-                        f"Step {int(row.Step)}: {row.Descrizione}",
+                        step_label,
                         key=f"train_step_{idx}",
                         value=bool(row.OK),
                     )
                     st.session_state.train_steps_df.at[idx, "OK"] = step_ok
 
-                    note = st.text_input(
-                        f"Nota step {int(row.Step)}",
+                    # script di guida per questo step
+                    script_text = script_map.get(
+                        row.Descrizione,
+                        "Usa questo spazio per guidare la conversazione sul problema e sul prossimo passo.",
+                    )
+                    with st.expander(f"Guida step {int(row.Step)}", expanded=False):
+                        st.markdown(script_text)
+
+                    note = st.text_area(
+                        f"Appunti step {int(row.Step)}",
                         row.Note,
                         key=f"train_note_{idx}",
                     )
@@ -2114,7 +2151,6 @@ def page_sales_train():
     col_s1, col_s2 = st.columns(2)
     with col_s1:
         if st.button("💾 Salva note su Opportunity"):
-            # Append delle note nella opportunity (se il modello ha 'note')
             with get_session() as session:
                 opp = session.get(Opportunity, sel_opp_id)
                 if opp:
@@ -2141,11 +2177,11 @@ def page_sales_train():
 
     with col_s2:
         if st.button("⬇️ Esporta call in CSV"):
-            steps_df = st.session_state.train_steps_df.copy()
-            steps_df["opportunity_id"] = sel_opp_id
-            steps_df["timestamp"] = datetime.now()
+            steps_df_exp = st.session_state.train_steps_df.copy()
+            steps_df_exp["opportunity_id"] = sel_opp_id
+            steps_df_exp["timestamp"] = datetime.now()
             filename = f"treno_call_opp{sel_opp_id}_{datetime.now().strftime('%Y%m%d_%H%M')}.csv"
-            steps_df.to_csv(filename, index=False)
+            steps_df_exp.to_csv(filename, index=False)
             st.success(f"CSV salvato: {filename}")
             st.balloons()
 
