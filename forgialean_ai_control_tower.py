@@ -1625,9 +1625,17 @@ def page_clients():
 
 
 def page_crm_sales():
+    # Lettura querystring per deep-link da calendario
+    params = st.query_params
+    opp_id = params.get("opp_id", None)
+    if opp_id:
+        try:
+            opp_id = int(opp_id)
+        except ValueError:
+            opp_id = None
+
     st.title("🤝 CRM & Vendite (SQLite)")
     role = st.session_state.get("role", "user")
-
     # =========================
     # FORM INSERIMENTO OPPORTUNITÀ
     # =========================
