@@ -1612,7 +1612,11 @@ def page_crm_sales():
         st.info("Prima crea almeno un cliente nella pagina 'Clienti'.")
     else:
         df_clients = pd.DataFrame([c.__dict__ for c in clients])
-        df_clients["label"] = df_clients["client_id"].astype(str) + " - " + df_clients["ragione_sociale"]
+        df_clients["label"] = (
+            df_clients["client_id"].astype(str)
+            + " - "
+            + df_clients["ragione_sociale"]
+        )
 
         with st.form("new_opportunity"):
             col1, col2 = st.columns(2)
@@ -1634,10 +1638,34 @@ def page_crm_sales():
                 )
                 owner = st.text_input("Owner (commerciale)", "")
             with col2:
-                valore_stimato = st.number_input("Valore stimato (€)", min_value=0.0, step=100.0)
-                probabilita = st.slider("Probabilità (%)", min_value=0, max_value=100, value=50)
+                valore_stimato = st.number_input(
+                    "Valore stimato (€)", min_value=0.0, step=100.0
+                )
+                probabilita = st.slider(
+                    "Probabilità (%)", min_value=0, max_value=100, value=50
+                )
                 data_apertura = st.date_input("Data apertura", value=date.today())
-                data_chiusura_prevista = st.date_input("Data chiusura prevista", value=date.today())
+                data_chiusura_prevista = st.date_input(
+                    "Data chiusura prevista", value=date.today()
+                )
+
+            # --- PROSSIMA AZIONE ---
+            col_a1, col_a2 = st.columns(2)
+            with col_a1:
+                data_prossima_azione = st.date_input(
+                    "📅 Data prossima azione",
+                    value=date.today(),
+                )
+            with col_a2:
+                tipo_prossima_azione = st.selectbox(
+                    "📌 Tipo prossima azione",
+                    ["", "Telefonata", "Email", "Visita", "Preventivo", "Follow‑up"],
+                )
+
+            note_prossima_azione = st.text_area(
+                "📝 Note prossima azione",
+                value="",
+            )
 
             stato_opportunita = st.selectbox(
                 "Stato opportunità",
@@ -1653,10 +1681,12 @@ def page_crm_sales():
             else:
                 client_id_sel = int(client_label.split(" - ")[0])
 
-                client_row = df_clients[df_clients["client_id"] == client_id_sel].iloc[0]
+                client_row = df_clients[
+                    df_clients["client_id"] == client_id_sel
+                ].iloc[0]
                 client_name = client_row["ragione_sociale"]
 
-                # 👉 leggi UTM da session_state (riempiti da capture_utm_params)
+                # UTM da session_state
                 utm_source = st.session_state.get("utm_source") or None
                 utm_medium = st.session_state.get("utm_medium") or None
                 utm_campaign = st.session_state.get("utm_campaign") or None
@@ -1672,6 +1702,9 @@ def page_crm_sales():
                         probabilita=float(probabilita),
                         data_apertura=data_apertura,
                         data_chiusura_prevista=data_chiusura_prevista,
+                        data_prossima_azione=data_prossima_azione,
+                        tipo_prossima_azione=tipo_prossima_azione or None,
+                        note_prossima_azione=note_prossima_azione or None,
                         stato_opportunita=stato_opportunita,
                         utm_source=utm_source,
                         utm_medium=utm_medium,
@@ -1728,15 +1761,23 @@ def page_crm_sales():
         return
 
     df_opps = pd.DataFrame([o.__dict__ for o in opps])
-    df_clients_all = pd.DataFrame([c.__dict__ for c in clients_all]) if clients_all else pd.DataFrame()
-    client_map = {c["client_id"]: c["ragione_sociale"] for _, c in df_clients_all.iterrows()} if not df_clients_all.empty else {}
+    df_clients_all = (
+        pd.DataFrame([c.__dict__ for c in clients_all]) if clients_all else pd.DataFrame()
+    )
+    client_map = (
+        {c["client_id"]: c["ragione_sociale"] for _, c in df_clients_all.iterrows()}
+        if not df_clients_all.empty
+        else {}
+    )
 
     df_opps["Cliente"] = df_opps["client_id"].map(client_map).fillna(df_opps["client_id"])
 
     df_open = df_opps[df_opps["stato_opportunita"] == "aperta"].copy()
 
     if not df_open.empty:
-        df_open["valore_ponderato"] = df_open["valore_stimato"] * df_open["probabilita"] / 100.0
+        df_open["valore_ponderato"] = (
+            df_open["valore_stimato"] * df_open["probabilita"] / 100.0
+        )
 
         col_k1, col_k2, col_k3 = st.columns(3)
         with col_k1:
@@ -1757,10 +1798,17 @@ def page_crm_sales():
 
     col1, col2 = st.columns(2)
     with col1:
-        fase_opt = ["Tutte"] + sorted(df_opps["fase_pipeline"].dropna().unique().tolist())
+        fase_opt = ["Tutte"] + sorted(
+            df_opps["fase_pipeline"].dropna().unique().tolist()
+        )
         f_fase = st.selectbox("Filtro fase pipeline", fase_opt)
     with col2:
-        owner_opt = ["Tutti"] + sorted(df_opps["owner"].dropna().unique().tolist()) if "owner" in df_opps.columns else ["Tutti"]
+        owner_opt = (
+            ["Tutti"]
+            + sorted(df_opps["owner"].dropna().unique().tolist())
+            if "owner" in df_opps.columns
+            else ["Tutti"]
+        )
         f_owner = st.selectbox("Filtro owner", owner_opt)
 
     df_f = df_opps.copy()
@@ -1800,20 +1848,21 @@ def page_crm_sales():
         df_agenda = df_agenda.sort_values("data_prossima_azione")
 
         cols_agenda = [
-            "opportunity_id",
+            "data_prossima_azione",
             "Cliente",
             "nome_opportunita",
+            "tipo_prossima_azione",
+            "note_prossima_azione",
             "fase_pipeline",
             "probabilita",
             "owner",
-            "data_prossima_azione",
         ]
-        if "note" in df_agenda.columns:
-            cols_agenda.append("note")
 
         st.dataframe(df_agenda[cols_agenda])
     else:
-        st.info("Per usare l’agenda venditore aggiungi il campo 'data_prossima_azione' al modello Opportunity.")
+        st.info(
+            "Per usare l’agenda venditore aggiungi i campi 'data_prossima_azione', 'tipo_prossima_azione' e 'note_prossima_azione' al modello Opportunity."
+        )
 
     # =========================
     # SEZIONE EDIT / DELETE (SOLO ADMIN)
@@ -1840,7 +1889,11 @@ def page_crm_sales():
         return
 
     if not df_clients_all.empty:
-        df_clients_all["label"] = df_clients_all["client_id"].astype(str) + " - " + df_clients_all["ragione_sociale"]
+        df_clients_all["label"] = (
+            df_clients_all["client_id"].astype(str)
+            + " - "
+            + df_clients_all["ragione_sociale"]
+        )
         try:
             current_client_label = df_clients_all[
                 df_clients_all["client_id"] == opp_obj.client_id
@@ -1853,12 +1906,24 @@ def page_crm_sales():
     with st.form(f"edit_opp_{opp_id_sel}"):
         col1, col2 = st.columns(2)
         with col1:
-            client_label_e = st.selectbox(
-                "Cliente",
-                df_clients_all["label"].tolist() if not df_clients_all.empty else [],
-                index=df_clients_all["label"].tolist().index(current_client_label) if current_client_label else 0,
-            ) if not df_clients_all.empty else ("",)
-            nome_opportunita_e = st.text_input("Nome opportunità", opp_obj.nome_opportunita or "")
+            client_label_e = (
+                st.selectbox(
+                    "Cliente",
+                    df_clients_all["label"].tolist()
+                    if not df_clients_all.empty
+                    else [],
+                    index=df_clients_all["label"].tolist().index(
+                        current_client_label
+                    )
+                    if current_client_label
+                    else 0,
+                )
+                if not df_clients_all.empty
+                else ("",)
+            )
+            nome_opportunita_e = st.text_input(
+                "Nome opportunità", opp_obj.nome_opportunita or ""
+            )
             fase_pipeline_e = st.selectbox(
                 "Fase pipeline",
                 [
@@ -1904,6 +1969,32 @@ def page_crm_sales():
                 value=opp_obj.data_chiusura_prevista or date.today(),
             )
 
+        # --- PROSSIMA AZIONE (EDIT) ---
+        col_a1_e, col_a2_e = st.columns(2)
+        with col_a1_e:
+            data_prossima_azione_e = st.date_input(
+                "📅 Data prossima azione",
+                value=opp_obj.data_prossima_azione or date.today(),
+            )
+        with col_a2_e:
+            tipo_prossima_azione_e = st.selectbox(
+                "📌 Tipo prossima azione",
+                ["", "Telefonata", "Email", "Visita", "Preventivo", "Follow‑up"],
+                index=(
+                    ["", "Telefonata", "Email", "Visita", "Preventivo", "Follow‑up"].index(
+                        opp_obj.tipo_prossima_azione
+                    )
+                    if opp_obj.tipo_prossima_azione
+                    in ["Telefonata", "Email", "Visita", "Preventivo", "Follow‑up"]
+                    else 0
+                ),
+            )
+
+        note_prossima_azione_e = st.text_area(
+            "📝 Note prossima azione",
+            value=opp_obj.note_prossima_azione or "",
+        )
+
         colb1, colb2 = st.columns(2)
         with colb1:
             update_opp = st.form_submit_button("💾 Aggiorna opportunità")
@@ -1924,10 +2015,14 @@ def page_crm_sales():
                 obj.probabilita = probabilita_e
                 obj.data_apertura = data_apertura_e
                 obj.data_chiusura_prevista = data_chiusura_prevista_e
+                obj.data_prossima_azione = data_prossima_azione_e
+                obj.tipo_prossima_azione = tipo_prossima_azione_e or None
+                obj.note_prossima_azione = note_prossima_azione_e or None
                 session.add(obj)
                 session.commit()
         st.success("Opportunità aggiornata.")
         st.rerun()
+
     if delete_opp:
         with get_session() as session:
             obj = session.get(Opportunity, opp_id_sel)
