@@ -12,10 +12,6 @@ from finance_utils import build_full_management_balance
 from config import CACHE_TTL, PAGES_BY_ROLE, APP_NAME, LOGO_PATH, MY_COMPANY_DATA
 from enum import Enum
 
-import streamlit as st
-import pandas as pd
-from sqlmodel import select
-
 from db import (
     init_db,
     get_session,
@@ -62,6 +58,20 @@ from cache_functions import (
 
 from tracking import track_ga4_event, track_facebook_event
 
+import requests
+import smtplib
+from email.mime.text import MIMEText
+
+# === LETTURA SECRETS ===
+TELEGRAM_BOT_TOKEN = st.secrets["tracking"]["TELEGRAM_BOT_TOKEN"]
+TELEGRAM_CHAT_ID = st.secrets["tracking"]["TELEGRAM_CHAT_ID"]
+
+SMTP_SERVER = st.secrets["email"]["SMTP_SERVER"]
+SMTP_PORT = int(st.secrets["email"]["SMTP_PORT"])
+SMTP_USER = st.secrets["email"]["SMTP_USER"]
+SMTP_PASSWORD = st.secrets["email"]["SMTP_PASSWORD"]
+FROM_ADDRESS = st.secrets["email"]["FROM_ADDRESS"]
+
 init_db()
 
 LOGO_PATH = Path("forgialean_logo.png")
@@ -74,12 +84,6 @@ def capture_utm_params():
     st.session_state["utm_campaign"] = params.get("utm_campaign", [""])[0]
     st.session_state["utm_content"] = params.get("utm_content", [""])[0]
 
-
-# --- Notifiche Telegram ---
-import requests
-
-TELEGRAM_BOT_TOKEN = st.secrets["tracking"]["TELEGRAM_BOT_TOKEN"]
-TELEGRAM_CHAT_ID = st.secrets["tracking"]["TELEGRAM_CHAT_ID"]
 
 def send_telegram_message(text: str):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
@@ -229,27 +233,18 @@ def calcola_oee_e_perdita(ore_turno, ore_fermi, scarti, velocita, valore_orario)
 
     return oee * 100.0, perdita_euro_turno, fascia
 
-import smtplib
-from email.mime.text import MIMEText
-
 def invia_minireport_oee(email_destinatario: str, subject: str, body: str):
     """
     Invia il mini‑report OEE via email in formato testo/HTML semplice.
     """
-    smtp_server = st.secrets["email"]["SMTP_SERVER"]
-    smtp_port = st.secrets["email"]["SMTP_PORT"]
-    smtp_user = st.secrets["email"]["SMTP_USER"]
-    smtp_password = st.secrets["email"]["SMTP_PASSWORD"]
-    mittente = st.secrets["email"]["FROM_ADDRESS"]
-
     msg = MIMEText(body, "html", "utf-8")
     msg["Subject"] = subject
-    msg["From"] = mittente
+    msg["From"] = FROM_ADDRESS
     msg["To"] = email_destinatario
 
-    with smtplib.SMTP(smtp_server, smtp_port) as server:
+    with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
         server.starttls()
-        server.login(smtp_user, smtp_password)
+        server.login(SMTP_USER, SMTP_PASSWORD)
         server.send_message(msg)
 
 # === FUNZIONE SALDO CASSA GESTIONALE ===

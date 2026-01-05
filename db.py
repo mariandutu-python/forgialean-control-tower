@@ -58,6 +58,8 @@ class Opportunity(SQLModel, table=True):
     data_apertura: Optional[date] = None
     data_chiusura_prevista: Optional[date] = None
     data_prossima_azione: Optional[date] = None
+    tipo_prossima_azione: Optional[str] = None
+    note_prossima_azione: Optional[str] = None
     stato_opportunita: Optional[str] = "aperta"
     note: Optional[str] = None          # <--- AGGIUNTO
 
