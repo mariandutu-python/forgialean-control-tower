@@ -57,6 +57,7 @@ class Opportunity(SQLModel, table=True):
     probabilita: Optional[float] = 0.0
     data_apertura: Optional[date] = None
     data_chiusura_prevista: Optional[date] = None
+    data_prossima_azione: Optional[date] = None
     stato_opportunita: Optional[str] = "aperta"
     note: Optional[str] = None          # <--- AGGIUNTO
 
