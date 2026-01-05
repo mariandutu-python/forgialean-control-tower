@@ -58,6 +58,7 @@ class Opportunity(SQLModel, table=True):
     data_apertura: Optional[date] = None
     data_chiusura_prevista: Optional[date] = None
     stato_opportunita: Optional[str] = "aperta"
+    note: Optional[str] = None          # <--- AGGIUNTO
 
 
 class Invoice(SQLModel, table=True):
