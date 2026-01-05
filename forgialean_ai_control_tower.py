@@ -2006,7 +2006,12 @@ def page_crm_sales():
             session.commit()
             session.refresh(new_comm)
 
-        st.success(f"Commessa creata da opportunità {opp_db.opportunity_id} con ID {new_comm.commessa_id}.")
+            # 👉 SALVA GLI ID PRIMA DI USCIRE DAL WITH
+            opp_id = opp_db.opportunity_id
+            comm_id = new_comm.commessa_id
+
+        # 👉 FUORI DAL WITH USA SOLO LE VARIABILI SEMPLICI
+        st.success(f"Commessa creata da opportunità {opp_id} con ID {comm_id}.")
         st.rerun()
 from enum import Enum
 from datetime import datetime, date, timedelta
