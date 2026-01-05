@@ -7,3 +7,5 @@ pdfplumber
 matplotlib
 python-dotenv
 xlsxwriter
+streamlit-calendar
+
