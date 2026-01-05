@@ -2008,6 +2008,150 @@ def page_crm_sales():
         st.success(f"Commessa creata da opportunità {opp_db.opportunity_id} con ID {new_comm.commessa_id}.")
         st.rerun()
 
+def page_sales_train():
+    """
+    Treno Venditore Vincente - checklist guidata 7 vagoni
+    collegata a una Opportunity esistente.
+    """
+    st.title("🚂 Treno Venditore Vincente - Live Tracking")
+
+    # --- selezione Opportunity a cui agganciare la call ---
+    with get_session() as session:
+        opps = session.exec(select(Opportunity)).all()
+        clients = session.exec(select(Client)).all()
+
+    if not opps:
+        st.info("Nessuna opportunità presente. Crea prima almeno una opportunità nel CRM.")
+        return
+
+    df_opps = pd.DataFrame([o.__dict__ for o in opps])
+    df_clients = pd.DataFrame([c.__dict__ for c in clients]) if clients else pd.DataFrame()
+    client_map = {c["client_id"]: c["ragione_sociale"] for _, c in df_clients.iterrows()} if not df_clients.empty else {}
+
+    df_opps["Cliente"] = df_opps["client_id"].map(client_map).fillna(df_opps["client_id"])
+
+    opp_labels = [
+        f"{row['opportunity_id']} - {row['Cliente']} - {row['nome_opportunita']}"
+        for _, row in df_opps.iterrows()
+    ]
+    sel_opp_label = st.selectbox("Seleziona opportunità per questa call", opp_labels, key="train_opp_sel")
+    sel_opp_id = int(sel_opp_label.split(" - ")[0])
+
+    # --- inizializzazione stato treno ---
+    if "train_steps_df" not in st.session_state or st.session_state.get("train_opp_id") != sel_opp_id:
+        steps_data = {
+            "Vagone": list(range(1, 8)) * 4,
+            "Step": [1, 2, 3, 4] * 7,
+            "Descrizione": ["Apertura", "Segnale", "Conferma", "Transizione"] * 7,
+            "OK": [False] * 28,
+            "Note": [""] * 28,
+            "Tempo": [0] * 28,
+        }
+        st.session_state.train_steps_df = pd.DataFrame(steps_data)
+        st.session_state.train_opp_id = sel_opp_id
+        st.session_state.train_start_time = time.time()
+
+    steps_df = st.session_state.train_steps_df
+
+    # --- sidebar info call ---
+    with st.sidebar:
+        st.markdown("### 📞 Info call")
+        st.write(f"Opportunity ID: **{sel_opp_id}**")
+        sel_opp_row = df_opps[df_opps["opportunity_id"] == sel_opp_id].iloc[0]
+        st.write(f"Cliente: **{sel_opp_row['Cliente']}**")
+        st.write(f"Nome opp.: **{sel_opp_row['nome_opportunita']}**")
+
+        if st.button("🔁 Inizia nuova call su questa opportunity"):
+            steps_df["OK"] = False
+            steps_df["Note"] = ""
+            st.session_state.train_start_time = time.time()
+
+        call_duration = int(time.time() - st.session_state.train_start_time)
+        st.metric("Durata Call", f"{call_duration // 60}:{call_duration % 60:02d}")
+
+    # --- KPI sintetici ---
+    success_rate = steps_df["OK"].mean()
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        st.metric("Successo Step", f"{success_rate:.1%}")
+    with col2:
+        st.metric("Prob. chiusura (stima)", f"{min(95, 60 + success_rate * 40):.0f}%")
+
+    st.markdown("---")
+
+    # --- checklist 7 vagoni ---
+    for vagone in range(1, 8):
+        vagone_df = steps_df[steps_df["Vagone"] == vagone]
+        vagone_success = vagone_df["OK"].mean() if not vagone_df.empty else 0.0
+
+        with st.expander(f"Vagone {vagone}", expanded=(vagone == 1)):
+            col_v1, col_v2, col_v3 = st.columns([4, 1, 1])
+
+            with col_v1:
+                for idx, row in vagone_df.iterrows():
+                    step_ok = st.checkbox(
+                        f"Step {int(row.Step)}: {row.Descrizione}",
+                        key=f"train_step_{idx}",
+                        value=bool(row.OK),
+                    )
+                    st.session_state.train_steps_df.at[idx, "OK"] = step_ok
+
+                    note = st.text_input(
+                        f"Nota step {int(row.Step)}",
+                        row.Note,
+                        key=f"train_note_{idx}",
+                    )
+                    st.session_state.train_steps_df.at[idx, "Note"] = note
+
+            with col_v2:
+                st.metric("Vagone OK", f"{vagone_success:.0%}")
+            with col_v3:
+                st.caption(f"Target: {'✅' if vagone_success >= 0.8 else '❌'}")
+
+    # --- salva nel CRM / export ---
+    st.markdown("---")
+    col_s1, col_s2 = st.columns(2)
+    with col_s1:
+        if st.button("💾 Salva note su Opportunity"):
+            # Append delle note nella opportunity (se il modello ha 'note')
+            with get_session() as session:
+                opp = session.get(Opportunity, sel_opp_id)
+                if opp:
+                    if hasattr(opp, "note"):
+                        testo = f"\n\n=== Call treno vendite {datetime.now().strftime('%Y-%m-%d %H:%M')} ===\n"
+                        for vagone in range(1, 8):
+                            vag_df = st.session_state.train_steps_df[
+                                st.session_state.train_steps_df["Vagone"] == vagone
+                            ]
+                            completati = vag_df[vag_df["OK"] == True]
+                            if not completati.empty:
+                                testo += f"Vagone {vagone}:\n"
+                                for _, r in completati.iterrows():
+                                    if r["Note"]:
+                                        testo += f"- Step {int(r['Step'])} {r['Descrizione']}: {r['Note']}\n"
+                                    else:
+                                        testo += f"- Step {int(r['Step'])} {r['Descrizione']}: OK\n"
+                        opp.note = (opp.note or "") + testo
+                        session.add(opp)
+                        session.commit()
+                    st.success("Note call salvate sull'opportunity.")
+                else:
+                    st.error("Opportunity non trovata.")
+
+    with col_s2:
+        if st.button("⬇️ Esporta call in CSV"):
+            steps_df = st.session_state.train_steps_df.copy()
+            steps_df["opportunity_id"] = sel_opp_id
+            steps_df["timestamp"] = datetime.now()
+            filename = f"treno_call_opp{sel_opp_id}_{datetime.now().strftime('%Y%m%d_%H%M')}.csv"
+            steps_df.to_csv(filename, index=False)
+            st.success(f"CSV salvato: {filename}")
+            st.balloons()
+
+    st.subheader("📊 Performance per vagone")
+    fig_data = st.session_state.train_steps_df.groupby("Vagone")["OK"].mean()
+    st.bar_chart(fig_data)
+
 def get_next_invoice_number(session, year=None, prefix="FL"):
     year = year or date.today().year
     res = session.exec(
@@ -5789,6 +5933,7 @@ PAGES = {
     "Overview": page_overview,
     "Clienti": page_clients,
     "CRM & Vendite": page_crm_sales,
+    "Treno vendite": page_sales_train,
     "Finanza / Fatture": page_finance_invoices,    # pagina fatture
     "Finanza / Pagamenti": page_finance_payments,  # se è una pagina distinta
     "Incassi / Scadenze": page_payments,
