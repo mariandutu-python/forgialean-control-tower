@@ -2110,7 +2110,9 @@ def page_sales_train():
 
     # --- checklist 7 vagoni con script ---
     for vagone in range(1, 8):
-        vagone_df = steps_df[steps_df["Vagone"] == vagone]
+        vagone_df = steps_df[steps_df["Vagone"] == vagone].copy()
+        # ORDINA PER STEP
+        vagone_df = vagone_df.sort_values("Step")
         vagone_success = vagone_df["OK"].mean() if not vagone_df.empty else 0.0
 
         with st.expander(f"Vagone {vagone}", expanded=(vagone == 1)):
@@ -2126,7 +2128,6 @@ def page_sales_train():
                     )
                     st.session_state.train_steps_df.at[idx, "OK"] = step_ok
 
-                    # script di guida per questo step
                     script_text = script_map.get(
                         row.Descrizione,
                         "Usa questo spazio per guidare la conversazione sul problema e sul prossimo passo.",
