@@ -1861,43 +1861,43 @@ def page_crm_sales():
     if f_owner != "Tutti":
         df_f = df_f[df_f["owner"] == f_owner]
 
-st.subheader("📂 Opportunità filtrate")
+    st.subheader("📂 Opportunità filtrate")
 
-if df_f.empty:
-    st.info("Nessuna opportunità trovata con i filtri selezionati.")
-else:
-    for _, row in df_f.iterrows():
-        expanded_default = bool(
-            selected_opp is not None and row["opportunity_id"] == opp_id
-        )
+    if df_f.empty:
+        st.info("Nessuna opportunità trovata con i filtri selezionati.")
+    else:
+        for _, row in df_f.iterrows():
+            expanded_default = bool(
+                selected_opp is not None and row["opportunity_id"] == opp_id
+            )
 
-        header = f"{row['opportunity_id']} – {row['Cliente']} – {row['nome_opportunita']} ({row['stato_opportunita']})"
-        with st.expander(header, expanded=expanded_default):
-            st.write(f"Fase pipeline: {row['fase_pipeline']}")
-            st.write(f"Owner: {row.get('owner', '')}")
-            st.write(f"Valore stimato: {row['valore_stimato']} €")
-            st.write(f"Probabilità: {row['probabilita']} %")
-            st.write(f"Data apertura: {row['data_apertura']}")
-            st.write(f"Data chiusura prevista: {row['data_chiusura_prevista']}")
-            st.write(f"Data prossima azione: {row.get('data_prossima_azione', '')}")
-            st.write(f"Tipo prossima azione: {row.get('tipo_prossima_azione', '')}")
-            st.write(f"Note prossima azione: {row.get('note_prossima_azione', '')}")
+            header = f"{row['opportunity_id']} – {row['Cliente']} – {row['nome_opportunita']} ({row['stato_opportunita']})"
+            with st.expander(header, expanded=expanded_default):
+                st.write(f"Fase pipeline: {row['fase_pipeline']}")
+                st.write(f"Owner: {row.get('owner', '')}")
+                st.write(f"Valore stimato: {row['valore_stimato']} €")
+                st.write(f"Probabilità: {row['probabilita']} %")
+                st.write(f"Data apertura: {row['data_apertura']}")
+                st.write(f"Data chiusura prevista: {row['data_chiusura_prevista']}")
+                st.write(f"Data prossima azione: {row.get('data_prossima_azione', '')}")
+                st.write(f"Tipo prossima azione: {row.get('tipo_prossima_azione', '')}")
+                st.write(f"Note prossima azione: {row.get('note_prossima_azione', '')}")
 
-            # 🔽 Bottone per completare l'azione
-            if st.button(
-                "✅ Segna azione come fatta",
-                key=f"done_{row['opportunity_id']}",
-            ):
-                with get_session() as session:
-                    opp_db = session.get(Opportunity, row["opportunity_id"])
-                    if opp_db:
-                        opp_db.data_prossima_azione = None
-                        opp_db.tipo_prossima_azione = None
-                        opp_db.note_prossima_azione = None
-                        session.add(opp_db)
-                        session.commit()
-                st.success("Azione segnata come completata.")
-                st.rerun()
+                # 🔽 Bottone per completare l'azione
+                if st.button(
+                    "✅ Segna azione come fatta",
+                    key=f"done_{row['opportunity_id']}",
+                ):
+                    with get_session() as session:
+                        opp_db = session.get(Opportunity, row["opportunity_id"])
+                        if opp_db:
+                            opp_db.data_prossima_azione = None
+                            opp_db.tipo_prossima_azione = None
+                            opp_db.note_prossima_azione = None
+                            session.add(opp_db)
+                            session.commit()
+                    st.success("Azione segnata come completata.")
+                    st.rerun()
 
     if {"fase_pipeline", "valore_stimato"}.issubset(df_f.columns) and not df_f.empty:
         st.subheader("📈 Valore opportunità per fase")
@@ -1974,8 +1974,8 @@ else:
         events = []
         for _, row in df_agenda_f.iterrows():
             if pd.notnull(row["data_prossima_azione"]):
-                opp_id = row["opportunity_id"]
-                event_url = f"{base_url}?page=crm&opp_id={opp_id}"
+                opp_id_event = row["opportunity_id"]
+                event_url = f"{base_url}?page=crm&opp_id={opp_id_event}"
 
                 events.append(
                     {
@@ -2001,6 +2001,7 @@ else:
             "Per usare l’agenda venditore aggiungi i campi 'data_prossima_azione', "
             "'tipo_prossima_azione' e 'note_prossima_azione' al modello Opportunity."
         )
+
     # =========================
     # SEZIONE EDIT / DELETE (SOLO ADMIN)
     # =========================
