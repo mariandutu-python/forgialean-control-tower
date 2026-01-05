@@ -9,7 +9,7 @@ import plotly.express as px
 import pdfplumber
 from sqlmodel import SQLModel, Field, Session, select, delete
 from finance_utils import build_full_management_balance
-
+from enum import Enum
 from config import CACHE_TTL, PAGES_BY_ROLE, APP_NAME, LOGO_PATH, MY_COMPANY_DATA
 
 from db import (
@@ -2009,21 +2009,22 @@ def page_crm_sales():
         st.success(f"Commessa creata da opportunità {opp_db.opportunity_id} con ID {new_comm.commessa_id}.")
         st.rerun()
 from enum import Enum
+from datetime import datetime, date, timedelta
+
+import streamlit as st
+import pandas as pd
+from sqlmodel import select
+
 
 class StepOutcome(str, Enum):
     OK = "ok"
     APPROFONDISCI = "approfondisci"
     RINVIA = "rinvia"
 
-from datetime import datetime, date, timedelta
-import streamlit as st
-import pandas as pd
-from sqlmodel import select
 
 # --------------------------------------------------------------------
 # PAGINA: TRENO VENDITE GUIDATO (7 VAGONI) + UPDATE CRM
 # --------------------------------------------------------------------
-
 def page_sales_train():
     st.title("Treno vendite – Call guidata")
     st.write(
@@ -2052,7 +2053,11 @@ def page_sales_train():
         f"{row['opportunity_id']} - {row['Cliente']} - {row['nome_opportunita']}"
         for _, row in df_opps.iterrows()
     ]
-    sel_opp_label = st.selectbox("Aggancia questa call a un'opportunity CRM", opp_labels, key="train_opp_sel_guidata")
+    sel_opp_label = st.selectbox(
+        "Aggancia questa call a un'opportunity CRM",
+        opp_labels,
+        key="train_opp_sel_guidata",
+    )
     sel_opp_id = int(sel_opp_label.split(" - ")[0])
 
     # ------------------------------
@@ -2124,7 +2129,7 @@ def page_sales_train():
                         "Prima di chiudere la call, concorda un follow-up con data/orario."
                     )
 
-            st.session_state["v1_note_1"] = st.text_area("Appunti apertura", key="v1_note_1")
+            st.text_area("Appunti apertura", key="v1_note_1")
             if st.checkbox("Step 1 completato", key="v1_done_1"):
                 st.session_state.v1_step = 2
 
@@ -2159,7 +2164,7 @@ def page_sales_train():
                         "o chiudere con eleganza proponendo solo contenuti."
                     )
 
-            st.session_state["v1_note_2"] = st.text_area("Appunti motivo / contesto", key="v1_note_2")
+            st.text_area("Appunti motivo / contesto", key="v1_note_2")
             if st.checkbox("Step 2 completato", key="v1_done_2"):
                 st.session_state.v1_step = 3
 
@@ -2193,7 +2198,7 @@ def page_sales_train():
                         "(contenuti, newsletter, check periodico)."
                     )
 
-            st.session_state["v1_note_3"] = st.text_area("Appunti impatto / priorità", key="v1_note_3")
+            st.text_area("Appunti impatto / priorità", key="v1_note_3")
             if st.checkbox("Step 3 completato", key="v1_done_3"):
                 st.session_state.v1_step = 4
 
@@ -2228,7 +2233,7 @@ def page_sales_train():
                         "o un check tra qualche mese."
                     )
 
-            st.session_state["v1_note_4"] = st.text_area("Appunti next step / decisione", key="v1_note_4")
+            st.text_area("Appunti next step / decisione", key="v1_note_4")
             if st.checkbox("Vagone 1 completato", key="v1_done_4"):
                 st.success("Vagone 1 completato: puoi passare al vagone successivo.")
 
@@ -2260,7 +2265,7 @@ def page_sales_train():
                         "*\"Quindi, se ho capito bene, l’ordine fa così…\"*"
                     )
 
-            st.session_state["v2_note_1"] = st.text_area("Appunti flusso attuale", key="v2_note_1")
+            st.text_area("Appunti flusso attuale", key="v2_note_1")
             if st.checkbox("Step 1 completato (V2)", key="v2_done_1"):
                 st.session_state.v2_step = 2
 
@@ -2286,7 +2291,7 @@ def page_sales_train():
                 if st.button("Nessun collo evidente", key="v2_s2_none"):
                     st.warning("Probabile percezione diffusa di caos: indaga su ritardi e straordinari.")
 
-            st.session_state["v2_note_2"] = st.text_area("Appunti colli di bottiglia", key="v2_note_2")
+            st.text_area("Appunti colli di bottiglia", key="v2_note_2")
             if st.checkbox("Step 2 completato (V2)", key="v2_done_2"):
                 st.session_state.v2_step = 3
 
@@ -2308,7 +2313,7 @@ def page_sales_train():
                 if st.button("Flussi confusi / silos", key="v2_s3_silos"):
                     st.info("Evidenzia il rischio di errori, ritardi e mancanza di visione d’insieme.")
 
-            st.session_state["v2_note_3"] = st.text_area("Appunti flussi informativi", key="v2_note_3")
+            st.text_area("Appunti flussi informativi", key="v2_note_3")
             if st.checkbox("Vagone 2 completato", key="v2_done_3"):
                 st.success("Vagone 2 completato: puoi passare al Vagone 3.")
 
@@ -2337,7 +2342,7 @@ def page_sales_train():
                 if st.button("Misure scarse/confuse", key="v3_s1_poor"):
                     st.info("Punto di forza per te: senza misure affidabili è difficile migliorare davvero.")
 
-            st.session_state["v3_note_1"] = st.text_area("Appunti KPI attuali", key="v3_note_1")
+            st.text_area("Appunti KPI attuali", key="v3_note_1")
             if st.checkbox("Step 1 completato (V3)", key="v3_done_1"):
                 st.session_state.v3_step = 2
 
@@ -2363,7 +2368,7 @@ def page_sales_train():
                 if st.button("Dati sparsi in più sistemi", key="v3_s2_scattered"):
                     st.warning("Ottimo gancio per proporre un cruscotto unico e integrato.")
 
-            st.session_state["v3_note_2"] = st.text_area("Appunti fonti dati", key="v3_note_2")
+            st.text_area("Appunti fonti dati", key="v3_note_2")
             if st.checkbox("Step 2 completato (V3)", key="v3_done_2"):
                 st.session_state.v3_step = 3
 
@@ -2385,7 +2390,7 @@ def page_sales_train():
                 if st.button("Dati poco usati", key="v3_s3_unused"):
                     st.info("Sottolinea il gap tra sforzo di raccolta e valore ottenuto, proponendo casi pratici.")
 
-            st.session_state["v3_note_3"] = st.text_area("Appunti uso dei dati", key="v3_note_3")
+            st.text_area("Appunti uso dei dati", key="v3_note_3")
             if st.checkbox("Vagone 3 completato", key="v3_done_3"):
                 st.success("Vagone 3 completato: puoi passare al Vagone 4.")
 
@@ -2414,7 +2419,7 @@ def page_sales_train():
                 if st.button("Impatto limitato", key="v4_s1_low"):
                     st.info("Concentrati su costi interni: scarti, straordinari, stock, stress organizzativo.")
 
-            st.session_state["v4_note_1"] = st.text_area("Appunti impatto cliente", key="v4_note_1")
+            st.text_area("Appunti impatto cliente", key="v4_note_1")
             if st.checkbox("Step 1 completato (V4)", key="v4_done_1"):
                 st.session_state.v4_step = 2
 
@@ -2440,7 +2445,7 @@ def page_sales_train():
                 if st.button("Nessuna idea dei costi", key="v4_s2_none"):
                     st.warning("Grande opportunità: far vedere al cliente quanto sta lasciando sul tavolo.")
 
-            st.session_state["v4_note_2"] = st.text_area("Appunti costi / sprechi", key="v4_note_2")
+            st.text_area("Appunti costi / sprechi", key="v4_note_2")
             if st.checkbox("Step 2 completato (V4)", key="v4_done_2"):
                 st.session_state.v4_step = 3
 
@@ -2462,7 +2467,7 @@ def page_sales_train():
                 if st.button("Potenziale poco chiaro", key="v4_s3_unclear"):
                     st.info("Suggerisci una fase di analisi numerica per quantificare in modo più preciso.")
 
-            st.session_state["v4_note_3"] = st.text_area("Appunti potenziale economico", key="v4_note_3")
+            st.text_area("Appunti potenziale economico", key="v4_note_3")
             if st.checkbox("Vagone 4 completato", key="v4_done_3"):
                 st.success("Vagone 4 completato: puoi passare al Vagone 5.")
 
@@ -2491,7 +2496,7 @@ def page_sales_train():
                 if st.button("Mappa confusa", key="v5_s1_confused"):
                     st.info("Proponi una call successiva con produzione + qualità + controllo gestione insieme.")
 
-            st.session_state["v5_note_1"] = st.text_area("Appunti persone coinvolte", key="v5_note_1")
+            st.text_area("Appunti persone coinvolte", key="v5_note_1")
             if st.checkbox("Step 1 completato (V5)", key="v5_done_1"):
                 st.session_state.v5_step = 2
 
@@ -2517,7 +2522,7 @@ def page_sales_train():
                 if st.button("Processo poco chiaro", key="v5_s2_unknown"):
                     st.warning("Rischio di stallo: torna su questo punto prima di formulare un’offerta completa.")
 
-            st.session_state["v5_note_2"] = st.text_area("Appunti processo decisionale", key="v5_note_2")
+            st.text_area("Appunti processo decisionale", key="v5_note_2")
             if st.checkbox("Step 2 completato (V5)", key="v5_done_2"):
                 st.session_state.v5_step = 3
 
@@ -2539,7 +2544,7 @@ def page_sales_train():
                 if st.button("Resistenza alta", key="v5_s3_resist"):
                     st.info("Meglio partire da un pilota piccolo, con risultati veloci e visibili.")
 
-            st.session_state["v5_note_3"] = st.text_area("Appunti cultura / cambiamento", key="v5_note_3")
+            st.text_area("Appunti cultura / cambiamento", key="v5_note_3")
             if st.checkbox("Vagone 5 completato", key="v5_done_3"):
                 st.success("Vagone 5 completato: puoi passare al Vagone 6.")
 
@@ -2568,7 +2573,7 @@ def page_sales_train():
                 if st.button("Allineamento da rivedere", key="v6_s1_weak"):
                     st.info("Chiedi cosa manca o cosa è meno rilevante, e ritarare la proposta.")
 
-            st.session_state["v6_note_1"] = st.text_area("Appunti collegamento problemi-soluzione", key="v6_note_1")
+            st.text_area("Appunti collegamento problemi-soluzione", key="v6_note_1")
             if st.checkbox("Step 1 completato (V6)", key="v6_done_1"):
                 st.session_state.v6_step = 2
 
@@ -2591,7 +2596,7 @@ def page_sales_train():
                 if st.button("Cliente confuso / scettico", key="v6_s2_no"):
                     st.info("Fermati e chiedi: *\"Cosa non ti torna o non è chiaro?\"*")
 
-            st.session_state["v6_note_2"] = st.text_area("Appunti descrizione soluzione", key="v6_note_2")
+            st.text_area("Appunti descrizione soluzione", key="v6_note_2")
             if st.checkbox("Step 2 completato (V6)", key="v6_done_2"):
                 st.session_state.v6_step = 3
 
@@ -2613,7 +2618,7 @@ def page_sales_train():
                 if st.button("Cliente preoccupato per effort", key="v6_s3_effort"):
                     st.info("Ridimensiona il primo step (pilota più piccolo, focus su una linea/reparto).")
 
-            st.session_state["v6_note_3"] = st.text_area("Appunti tempi / rischi", key="v6_note_3")
+            st.text_area("Appunti tempi / rischi", key="v6_note_3")
             if st.checkbox("Vagone 6 completato", key="v6_done_3"):
                 st.success("Vagone 6 completato: puoi passare al Vagone 7.")
 
@@ -2637,7 +2642,7 @@ def page_sales_train():
                 st.success("Bene: ora definisci insieme il prossimo passo concreto.")
                 st.session_state.v7_step = 2
 
-            st.session_state["v7_note_1"] = st.text_area("Appunti riepilogo", key="v7_note_1")
+            st.text_area("Appunti riepilogo", key="v7_note_1")
             if st.checkbox("Step 1 completato (V7)", key="v7_done_1"):
                 st.session_state.v7_step = 2
 
@@ -2663,7 +2668,7 @@ def page_sales_train():
                 if st.button("No decision ora", key="v7_s2_nodec"):
                     st.warning("Chiudi lasciando la porta aperta, con un check leggero a data futura.")
 
-            st.session_state["v7_note_2"] = st.text_area("Appunti prossimo passo", key="v7_note_2")
+            st.text_area("Appunti prossimo passo", key="v7_note_2")
             if st.checkbox("Vagone 7 completato", key="v7_done_2"):
                 st.success("Call completata. Ricorda di aggiornare CRM / dashboard dopo la call.")
 
@@ -2677,7 +2682,6 @@ def page_sales_train():
     col_save1, col_save2 = st.columns(2)
     with col_save1:
         if st.button("💾 Salva questa call sull'opportunity"):
-            # costruisci testo da salvare
             testo = f"\n\n=== Call treno vendite del {data_call.strftime('%Y-%m-%d')} ===\n"
             testo += f"Cliente: {cliente} – Referente: {referente}\n"
             testo += "Vagone 1:\n"
@@ -2714,13 +2718,9 @@ def page_sales_train():
                 if not opp:
                     st.error("Opportunity non trovata.")
                 else:
-                    # append note
                     opp.note = (opp.note or "") + testo
 
-                    # logica semplice per aggiornare fase/probabilità
-                    # (puoi raffinarla a gusto)
                     fase_attuale = (opp.fase_pipeline or "").strip()
-                    # se hai completato almeno Vagone 1 e 4 → consideriamo qualificata
                     v1_ok = st.session_state.get("v1_done_4", False)
                     v4_ok = st.session_state.get("v4_done_3", False)
 
@@ -2730,7 +2730,6 @@ def page_sales_train():
                         elif fase_attuale in ("Lead qualificato (SQL)", "Analisi"):
                             opp.fase_pipeline = "Proposta / Trattativa"
 
-                    # probabilità: se hai completato il treno, alza fino a max 80–90%
                     v7_ok = st.session_state.get("v7_done_2", False)
                     prob_attuale = float(opp.probabilita or 0.0)
                     if v7_ok:
