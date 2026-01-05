@@ -2008,43 +2008,32 @@ def page_crm_sales():
 
         st.success(f"Commessa creata da opportunità {opp_db.opportunity_id} con ID {new_comm.commessa_id}.")
         st.rerun()
+from enum import Enum
+
+class StepOutcome(str, Enum):
+    OK = "ok"
+    APPROFONDISCI = "approfondisci"
+    RINVIA = "rinvia"
+
+from datetime import datetime, date, timedelta
+import streamlit as st
+import pandas as pd
+from sqlmodel import select
+
+# --------------------------------------------------------------------
+# PAGINA: TRENO VENDITE GUIDATO (7 VAGONI) + UPDATE CRM
+# --------------------------------------------------------------------
 
 def page_sales_train():
-    """
-    Treno Venditore Vincente - checklist guidata 7 vagoni
-    collegata a una Opportunity esistente con script per ogni step.
-    """
-    st.title("🚂 Treno Venditore Vincente - Live Tracking")
+    st.title("Treno vendite – Call guidata")
+    st.write(
+        "Usa i 7 vagoni per seguire la call in modo guidato, "
+        "restando entro 30–40 minuti complessivi."
+    )
 
-    # --- definizione script per tipo di step ---
-    script_map = {
-        "Apertura": (
-            "Obiettivo: rompere il ghiaccio e dare contesto.\n"
-            "- Salutalo per nome e presentati.\n"
-            "- Ricorda come siete entrati in contatto.\n"
-            "- Chiedi conferma del tempo a disposizione (es. 'Hai 20 minuti?')."
-        ),
-        "Segnale": (
-            "Obiettivo: capire perché ti sta ascoltando.\n"
-            "- Domanda chiave: 'Cosa ti ha spinto a contattarmi / ad accettare questa call?'\n"
-            "- Fai 2–3 domande aperte su problema/obiettivo.\n"
-            "- Ascolta senza interrompere."
-        ),
-        "Conferma": (
-            "Obiettivo: allinearti sul problema e sull'urgenza.\n"
-            "- Riassumi con le tue parole cosa hai capito.\n"
-            "- Chiedi: 'È corretto? Vuoi aggiungere altro?'\n"
-            "- Valuta livello di urgenza (alta / media / bassa)."
-        ),
-        "Transizione": (
-            "Obiettivo: passare alla fase successiva in modo naturale.\n"
-            "- Proponi il passo successivo (analisi dati, demo, visita).\n"
-            "- Concorda data/ora concreta.\n"
-            "- Chiedi chi altro deve essere coinvolto."
-        ),
-    }
-
-    # --- selezione Opportunity a cui agganciare la call ---
+    # ------------------------------
+    # 1) Selezione Opportunity CRM
+    # ------------------------------
     with get_session() as session:
         opps = session.exec(select(Opportunity)).all()
         clients = session.exec(select(Client)).all()
@@ -2063,153 +2052,703 @@ def page_sales_train():
         f"{row['opportunity_id']} - {row['Cliente']} - {row['nome_opportunita']}"
         for _, row in df_opps.iterrows()
     ]
-    sel_opp_label = st.selectbox("Seleziona opportunità per questa call", opp_labels, key="train_opp_sel")
+    sel_opp_label = st.selectbox("Aggancia questa call a un'opportunity CRM", opp_labels, key="train_opp_sel_guidata")
     sel_opp_id = int(sel_opp_label.split(" - ")[0])
 
-    # --- inizializzazione stato treno ---
-    if "train_steps_df" not in st.session_state or st.session_state.get("train_opp_id") != sel_opp_id:
-        steps_data = {
-            "Vagone": list(range(1, 8)) * 4,
-            "Step": [1, 2, 3, 4] * 7,
-            "Descrizione": ["Apertura", "Segnale", "Conferma", "Transizione"] * 7,
-            "OK": [False] * 28,
-            "Note": [""] * 28,
-            "Tempo": [0] * 28,
-        }
-        st.session_state.train_steps_df = pd.DataFrame(steps_data)
-        st.session_state.train_opp_id = sel_opp_id
-        st.session_state.train_start_time = time.time()
+    # ------------------------------
+    # 2) Session state per gli step
+    # ------------------------------
+    for key in ["v1_step", "v2_step", "v3_step", "v4_step", "v5_step", "v6_step", "v7_step"]:
+        if key not in st.session_state:
+            st.session_state[key] = 1
 
-    steps_df = st.session_state.train_steps_df
+    # Appunti globali per ogni vagone (per costruire il testo da salvare)
+    note_keys = [
+        "v1_note_1", "v1_note_2", "v1_note_3", "v1_note_4",
+        "v2_note_1", "v2_note_2", "v2_note_3",
+        "v3_note_1", "v3_note_2", "v3_note_3",
+        "v4_note_1", "v4_note_2", "v4_note_3",
+        "v5_note_1", "v5_note_2", "v5_note_3",
+        "v6_note_1", "v6_note_2", "v6_note_3",
+        "v7_note_1", "v7_note_2",
+    ]
+    for nk in note_keys:
+        if nk not in st.session_state:
+            st.session_state[nk] = ""
 
-    # --- sidebar info call ---
+    # ------------------------------
+    # Sidebar – info chiamata
+    # ------------------------------
     with st.sidebar:
-        st.markdown("### 📞 Info call")
-        st.write(f"Opportunity ID: **{sel_opp_id}**")
-        sel_opp_row = df_opps[df_opps["opportunity_id"] == sel_opp_id].iloc[0]
-        st.write(f"Cliente: **{sel_opp_row['Cliente']}**")
-        st.write(f"Nome opp.: **{sel_opp_row['nome_opportunita']}**")
+        st.markdown("### Dati chiamata")
+        cliente = st.text_input("Cliente / Azienda", key="train_cliente")
+        referente = st.text_input("Referente", key="train_referente")
+        data_call = st.date_input("Data call", value=datetime.today())
+        durata_prevista = st.selectbox(
+            "Durata prevista",
+            ["30 minuti", "40 minuti", "Altro"],
+            index=0,
+        )
+        st.write("Suggerito: usa i vagoni in ordine da 1 a 7.")
+        st.caption(f"Opportunity ID collegata: {sel_opp_id}")
 
-        if st.button("🔁 Inizia nuova call su questa opportunity"):
-            steps_df["OK"] = False
-            steps_df["Note"] = ""
-            st.session_state.train_start_time = time.time()
+    # ==================================================================
+    # VAGONE 1 – PRIMO CONTATTO
+    # ==================================================================
+    with st.expander("Vagone 1 – Primo contatto", expanded=True):
+        step = st.session_state.v1_step
 
-        call_duration = int(time.time() - st.session_state.train_start_time)
-        st.metric("Durata Call", f"{call_duration // 60}:{call_duration % 60:02d}")
+        if step == 1:
+            st.markdown("### Step 1 – Apertura")
+            st.write("Obiettivo: rompere il ghiaccio e dare contesto (3–4 minuti).")
+            st.markdown(
+                "- Presentati per nome e ruolo.\n"
+                "- Ricorda come vi siete conosciuti / chi vi ha messi in contatto.\n"
+                "- Chiedi: **\"Hai circa 20–30 minuti per parlare ora?\"**"
+            )
 
-    # --- KPI sintetici ---
-    success_rate = steps_df["OK"].mean()
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        st.metric("Successo Step", f"{success_rate:.1%}")
-    with col2:
-        st.metric("Prob. chiusura (stima)", f"{min(95, 60 + success_rate * 40):.0f}%")
+            col_a1, col_a2, col_a3 = st.columns(3)
+            with col_a1:
+                if st.button("Ha tempo (sì)", key="v1_s1_yes"):
+                    st.success("Perfetto: puoi passare al motivo della call.")
+                    st.session_state.v1_step = 2
+            with col_a2:
+                if st.button("Ha poco tempo", key="v1_s1_short"):
+                    st.info(
+                        "Concorda subito un momento preciso per una call completa "
+                        "(data, ora, durata) e valuta se fare una mini scoperta ora."
+                    )
+            with col_a3:
+                if st.button("Non è il momento", key="v1_s1_no"):
+                    st.warning(
+                        "Prima di chiudere la call, concorda un follow-up con data/orario."
+                    )
+
+            st.session_state["v1_note_1"] = st.text_area("Appunti apertura", key="v1_note_1")
+            if st.checkbox("Step 1 completato", key="v1_done_1"):
+                st.session_state.v1_step = 2
+
+        elif step == 2:
+            st.markdown("### Step 2 – Motivo della call")
+            st.write("Obiettivo: capire perché sta parlando con te (5 minuti).")
+            st.markdown(
+                "Domande chiave:\n"
+                "- *\"Cosa ti ha spinto a confrontarti su questo tema adesso?\"*\n"
+                "- *\"Cosa non ti sta funzionando oggi su produzione / OEE / margini?\"*\n"
+                "- *\"Come gestite attualmente questa situazione?\"*"
+            )
+
+            st.markdown("**Come percepisci la risposta?**")
+            col_b1, col_b2, col_b3 = st.columns(3)
+            with col_b1:
+                if st.button("Dolore chiaro e concreto", key="v1_s2_pain"):
+                    st.success(
+                        "Bene: segnati esempi, numeri e reparti coinvolti. "
+                        "Puoi passare all’impatto."
+                    )
+                    st.session_state.v1_step = 3
+            with col_b2:
+                if st.button("Vago / superficiale", key="v1_s2_vague"):
+                    st.info(
+                        "Approfondisci con: *\"Puoi farmi un esempio pratico degli ultimi 30 giorni?\"*"
+                    )
+            with col_b3:
+                if st.button("Nessun vero problema", key="v1_s2_none"):
+                    st.warning(
+                        "Probabile curiosità: valuta se vale la pena proseguire "
+                        "o chiudere con eleganza proponendo solo contenuti."
+                    )
+
+            st.session_state["v1_note_2"] = st.text_area("Appunti motivo / contesto", key="v1_note_2")
+            if st.checkbox("Step 2 completato", key="v1_done_2"):
+                st.session_state.v1_step = 3
+
+        elif step == 3:
+            st.markdown("### Step 3 – Impatto e priorità")
+            st.write("Obiettivo: misurare impatto su numeri e priorità (8–10 minuti).")
+            st.markdown(
+                "Domande chiave:\n"
+                "- *\"Che impatto ha questo problema su tempi, OEE o margini?\"*\n"
+                "- *\"Se non fate nulla per 6–12 mesi, cosa succede?\"*\n"
+                "- *\"Rispetto ad altri progetti in corso, dove lo metteresti come priorità?\"*"
+            )
+
+            st.markdown("**Come reagisce?**")
+            col_c1, col_c2, col_c3 = st.columns(3)
+            with col_c1:
+                if st.button("Impatto alto e urgente", key="v1_s3_high"):
+                    st.success(
+                        "È un problema strategico: preparati a proporre un prossimo passo concreto."
+                    )
+                    st.session_state.v1_step = 4
+            with col_c2:
+                if st.button("Impatto medio", key="v1_s3_mid"):
+                    st.info(
+                        "Aiutalo a capire il costo di non fare nulla con esempi o benchmark."
+                    )
+            with col_c3:
+                if st.button("Impatto basso", key="v1_s3_low"):
+                    st.warning(
+                        "Potrebbe non essere prioritario: valuta un follow-up leggero "
+                        "(contenuti, newsletter, check periodico)."
+                    )
+
+            st.session_state["v1_note_3"] = st.text_area("Appunti impatto / priorità", key="v1_note_3")
+            if st.checkbox("Step 3 completato", key="v1_done_3"):
+                st.session_state.v1_step = 4
+
+        elif step == 4:
+            st.markdown("### Step 4 – Prossimo passo")
+            st.write("Obiettivo: chiudere con un next step chiaro (5–7 minuti).")
+            st.markdown(
+                "Opzioni tipiche di prossimo passo:\n"
+                "- Analisi dati OEE / margini su un campione di commesse.\n"
+                "- Sopralluogo in stabilimento.\n"
+                "- Demo del cruscotto ForgiaLean su dati di test.\n"
+                "- Call operativa con produzione + qualità + controllo di gestione."
+            )
+
+            st.markdown("**Cosa accetta il cliente?**")
+            col_d1, col_d2, col_d3 = st.columns(3)
+            with col_d1:
+                if st.button("Accetta un passo concreto", key="v1_s4_yes"):
+                    st.success(
+                        "Concorda data/ora, definisci chi deve esserci e invia un riepilogo per email."
+                    )
+            with col_d2:
+                if st.button("Deve parlarne internamente", key="v1_s4_internal"):
+                    st.info(
+                        "Fissa comunque un tentativo di follow-up con data/orario "
+                        "prima di chiudere la call."
+                    )
+            with col_d3:
+                if st.button("Non vuole impegnarsi", key="v1_s4_no"):
+                    st.warning(
+                        "Chiudi con eleganza, lascia la porta aperta e proponi solo contenuti "
+                        "o un check tra qualche mese."
+                    )
+
+            st.session_state["v1_note_4"] = st.text_area("Appunti next step / decisione", key="v1_note_4")
+            if st.checkbox("Vagone 1 completato", key="v1_done_4"):
+                st.success("Vagone 1 completato: puoi passare al vagone successivo.")
+
+    # ==================================================================
+    # VAGONE 2 – PROCESSO / FLUSSO
+    # ==================================================================
+    with st.expander("Vagone 2 – Processo / flusso", expanded=False):
+        step = st.session_state.v2_step
+
+        if step == 1:
+            st.markdown("### Step 1 – Come lavorate oggi?")
+            st.write("Obiettivo: capire il flusso produttivo e informativo attuale (5 minuti).")
+            st.markdown(
+                "Domande chiave:\n"
+                "- *\"Mi racconti in breve il flusso tipico: dall’ordine alla consegna?\"*\n"
+                "- *\"Dove vedi oggi più intoppi: pianificazione, produzione, logistica?\"*\n"
+                "- *\"Che strumenti usate: ERP, Excel, fogli cartacei?\"*"
+            )
+
+            col_a1, col_a2 = st.columns(2)
+            with col_a1:
+                if st.button("Flusso chiaro", key="v2_s1_clear"):
+                    st.success("Bene: prendi nota delle fasi chiave e passa ai colli di bottiglia.")
+                    st.session_state.v2_step = 2
+            with col_a2:
+                if st.button("Flusso confuso", key="v2_s1_confused"):
+                    st.info(
+                        "Ridisegna a voce un flusso semplice e chiedi conferma: "
+                        "*\"Quindi, se ho capito bene, l’ordine fa così…\"*"
+                    )
+
+            st.session_state["v2_note_1"] = st.text_area("Appunti flusso attuale", key="v2_note_1")
+            if st.checkbox("Step 1 completato (V2)", key="v2_done_1"):
+                st.session_state.v2_step = 2
+
+        elif step == 2:
+            st.markdown("### Step 2 – Colli di bottiglia")
+            st.write("Obiettivo: identificare dove si perde tempo o qualità (5–7 minuti).")
+            st.markdown(
+                "Domande chiave:\n"
+                "- *\"In quale punto del flusso si accumulano più ritardi?\"*\n"
+                "- *\"Ci sono reparti o macchine che aspettano spesso informazioni o materiale?\"*\n"
+                "- *\"Dove nascono più rilavorazioni o scarti?\"*"
+            )
+
+            col_b1, col_b2, col_b3 = st.columns(3)
+            with col_b1:
+                if st.button("Bottleneck chiaro", key="v2_s2_bneck"):
+                    st.success("Perfetto: collega questo bottleneck ai numeri (OEE, ritardi, margini).")
+                    st.session_state.v2_step = 3
+            with col_b2:
+                if st.button("Più punti critici", key="v2_s2_multi"):
+                    st.info("Chiedi di priorizzare: *\"Se dovessi scegliere uno solo da risolvere ora?\"*")
+            with col_b3:
+                if st.button("Nessun collo evidente", key="v2_s2_none"):
+                    st.warning("Probabile percezione diffusa di caos: indaga su ritardi e straordinari.")
+
+            st.session_state["v2_note_2"] = st.text_area("Appunti colli di bottiglia", key="v2_note_2")
+            if st.checkbox("Step 2 completato (V2)", key="v2_done_2"):
+                st.session_state.v2_step = 3
+
+        elif step == 3:
+            st.markdown("### Step 3 – Flussi informativi")
+            st.write("Obiettivo: capire come girano le informazioni (5 minuti).")
+            st.markdown(
+                "Domande chiave:\n"
+                "- *\"Chi vede cosa, e con che strumenti (monitor, report, Excel)?\"*\n"
+                "- *\"Quando un problema succede in linea, chi lo vede e con che ritardo?\"*\n"
+                "- *\"Ci sono doppi inserimenti o copia/incolla tra sistemi?\"*"
+            )
+
+            col_c1, col_c2 = st.columns(2)
+            with col_c1:
+                if st.button("Flussi chiari ma manuali", key="v2_s3_manual"):
+                    st.success("Ottimo gancio per digitalizzare e centralizzare i dati in un cruscotto.")
+            with col_c2:
+                if st.button("Flussi confusi / silos", key="v2_s3_silos"):
+                    st.info("Evidenzia il rischio di errori, ritardi e mancanza di visione d’insieme.")
+
+            st.session_state["v2_note_3"] = st.text_area("Appunti flussi informativi", key="v2_note_3")
+            if st.checkbox("Vagone 2 completato", key="v2_done_3"):
+                st.success("Vagone 2 completato: puoi passare al Vagone 3.")
+
+    # ==================================================================
+    # VAGONE 3 – DATI E MISURE
+    # ==================================================================
+    with st.expander("Vagone 3 – Dati e misure", expanded=False):
+        step = st.session_state.v3_step
+
+        if step == 1:
+            st.markdown("### Step 1 – Cosa misurate oggi")
+            st.write("Obiettivo: capire quali KPI esistono e quanto sono affidabili (5 minuti).")
+            st.markdown(
+                "Domande chiave:\n"
+                "- *\"Che indicatori usate oggi (OEE, scarti, tempi setup, ritardi consegna)?\"*\n"
+                "- *\"Con che frequenza li guardate e chi li vede?\"*\n"
+                "- *\"Vi fidate dei numeri o avete dubbi sulla qualità del dato?\"*"
+            )
+
+            col_a1, col_a2 = st.columns(2)
+            with col_a1:
+                if st.button("Misure chiare", key="v3_s1_clear"):
+                    st.success("Bene: chiedi qualche valore tipico e trend recente.")
+                    st.session_state.v3_step = 2
+            with col_a2:
+                if st.button("Misure scarse/confuse", key="v3_s1_poor"):
+                    st.info("Punto di forza per te: senza misure affidabili è difficile migliorare davvero.")
+
+            st.session_state["v3_note_1"] = st.text_area("Appunti KPI attuali", key="v3_note_1")
+            if st.checkbox("Step 1 completato (V3)", key="v3_done_1"):
+                st.session_state.v3_step = 2
+
+        elif step == 2:
+            st.markdown("### Step 2 – Fonti dati")
+            st.write("Obiettivo: capire da dove arrivano i dati (ERP, macchine, Excel).")
+            st.markdown(
+                "Domande chiave:\n"
+                "- *\"Da dove arrivano questi numeri: ERP, MES, fogli manuali?\"*\n"
+                "- *\"Quanta parte è input manuale operatore?\"*\n"
+                "- *\"Quanto tempo passa tra l’evento e la disponibilità del dato?\"*"
+            )
+
+            col_b1, col_b2, col_b3 = st.columns(3)
+            with col_b1:
+                if st.button("Dati quasi automatici", key="v3_s2_auto"):
+                    st.success("Buona base: puoi concentrarti su analisi e azioni, non solo raccolta.")
+                    st.session_state.v3_step = 3
+            with col_b2:
+                if st.button("Dati molto manuali", key="v3_s2_manual"):
+                    st.info("Stressa il tema errori, ritardi e tempo perso in data entry.")
+            with col_b3:
+                if st.button("Dati sparsi in più sistemi", key="v3_s2_scattered"):
+                    st.warning("Ottimo gancio per proporre un cruscotto unico e integrato.")
+
+            st.session_state["v3_note_2"] = st.text_area("Appunti fonti dati", key="v3_note_2")
+            if st.checkbox("Step 2 completato (V3)", key="v3_done_2"):
+                st.session_state.v3_step = 3
+
+        elif step == 3:
+            st.markdown("### Step 3 – Uso dei dati")
+            st.write("Obiettivo: capire se i dati guidano davvero decisioni e miglioramenti.")
+            st.markdown(
+                "Domande chiave:\n"
+                "- *\"Che decisioni prendete oggi grazie a questi dati?\"*\n"
+                "- *\"Vi capita di scoprire i problemi solo a fine mese?\"*\n"
+                "- *\"Coinvolgete i capi turno / operatori nella lettura dei numeri?\"*"
+            )
+
+            col_c1, col_c2 = st.columns(2)
+            with col_c1:
+                if st.button("Dati usati per decisioni", key="v3_s3_used"):
+                    st.success("Puoi proporre di rendere più veloce e visiva l’analisi (cruscotti real-time).")
+            with col_c2:
+                if st.button("Dati poco usati", key="v3_s3_unused"):
+                    st.info("Sottolinea il gap tra sforzo di raccolta e valore ottenuto, proponendo casi pratici.")
+
+            st.session_state["v3_note_3"] = st.text_area("Appunti uso dei dati", key="v3_note_3")
+            if st.checkbox("Vagone 3 completato", key="v3_done_3"):
+                st.success("Vagone 3 completato: puoi passare al Vagone 4.")
+
+    # ==================================================================
+    # VAGONE 4 – IMPATTO ECONOMICO
+    # ==================================================================
+    with st.expander("Vagone 4 – Impatto economico", expanded=False):
+        step = st.session_state.v4_step
+
+        if step == 1:
+            st.markdown("### Step 1 – Effetti sul cliente finale")
+            st.write("Obiettivo: collegare i problemi interni a clienti e fatturato.")
+            st.markdown(
+                "Domande chiave:\n"
+                "- *\"Questi problemi come impattano consegne, qualità percepita, reclami?\"*\n"
+                "- *\"Vi capita di consegnare in ritardo o fuori specifica?\"*\n"
+                "- *\"Avete perso ordini o clienti per questi motivi?\"*"
+            )
+
+            col_a1, col_a2 = st.columns(2)
+            with col_a1:
+                if st.button("Impatto forte sui clienti", key="v4_s1_high"):
+                    st.success("Ottimo: stai collegando il tuo lavoro a fatturato e soddisfazione cliente.")
+                    st.session_state.v4_step = 2
+            with col_a2:
+                if st.button("Impatto limitato", key="v4_s1_low"):
+                    st.info("Concentrati su costi interni: scarti, straordinari, stock, stress organizzativo.")
+
+            st.session_state["v4_note_1"] = st.text_area("Appunti impatto cliente", key="v4_note_1")
+            if st.checkbox("Step 1 completato (V4)", key="v4_done_1"):
+                st.session_state.v4_step = 2
+
+        elif step == 2:
+            st.markdown("### Step 2 – Costi e sprechi")
+            st.write("Obiettivo: far emergere costi nascosti e potenziale di recupero.")
+            st.markdown(
+                "Domande chiave:\n"
+                "- *\"Dove vedi più sprechi di tempo o denaro (scarti, rework, attese)?\"*\n"
+                "- *\"Quanto incidono straordinari o turni aggiuntivi per inseguire i ritardi?\"*\n"
+                "- *\"Avete un’idea di quanto varrebbe risolvere il problema (% o €)?\"*"
+            )
+
+            col_b1, col_b2, col_b3 = st.columns(3)
+            with col_b1:
+                if st.button("Costi ben noti", key="v4_s2_known"):
+                    st.success("Puoi già abbozzare un business case di miglioramento.")
+                    st.session_state.v4_step = 3
+            with col_b2:
+                if st.button("Costi percepiti ma non misurati", key="v4_s2_guess"):
+                    st.info("Proponi una fase di quantificazione con dati reali (diagnostica).")
+            with col_b3:
+                if st.button("Nessuna idea dei costi", key="v4_s2_none"):
+                    st.warning("Grande opportunità: far vedere al cliente quanto sta lasciando sul tavolo.")
+
+            st.session_state["v4_note_2"] = st.text_area("Appunti costi / sprechi", key="v4_note_2")
+            if st.checkbox("Step 2 completato (V4)", key="v4_done_2"):
+                st.session_state.v4_step = 3
+
+        elif step == 3:
+            st.markdown("### Step 3 – Potenziale di miglioramento")
+            st.write("Obiettivo: far intravedere il valore economico di una soluzione.")
+            st.markdown(
+                "Domande chiave:\n"
+                "- *\"Se riduceste scarti / fermi / ritardi del 20–30%, cosa cambierebbe?\"*\n"
+                "- *\"Ci sono obiettivi aziendali già fissati (OEE, margine, OTIF)?\"*\n"
+                "- *\"C’è già un budget o un piano per migliorare questo ambito?\"*"
+            )
+
+            col_c1, col_c2 = st.columns(2)
+            with col_c1:
+                if st.button("Potenziale chiaro e importante", key="v4_s3_high"):
+                    st.success("Collega direttamente questi obiettivi alla tua proposta nella parte soluzione.")
+            with col_c2:
+                if st.button("Potenziale poco chiaro", key="v4_s3_unclear"):
+                    st.info("Suggerisci una fase di analisi numerica per quantificare in modo più preciso.")
+
+            st.session_state["v4_note_3"] = st.text_area("Appunti potenziale economico", key="v4_note_3")
+            if st.checkbox("Vagone 4 completato", key="v4_done_3"):
+                st.success("Vagone 4 completato: puoi passare al Vagone 5.")
+
+    # ==================================================================
+    # VAGONE 5 – PERSONE E RUOLI
+    # ==================================================================
+    with st.expander("Vagone 5 – Persone e ruoli", expanded=False):
+        step = st.session_state.v5_step
+
+        if step == 1:
+            st.markdown("### Step 1 – Chi è coinvolto")
+            st.write("Obiettivo: mappare la squadra interna coinvolta nel problema e nella soluzione.")
+            st.markdown(
+                "Domande chiave:\n"
+                "- *\"Chi vive il problema tutti i giorni (reparti, ruoli)?\"*\n"
+                "- *\"Chi dovrà usare la soluzione quotidianamente?\"*\n"
+                "- *\"Chi potrebbe ostacolare il cambiamento?\"*"
+            )
+
+            col_a1, col_a2 = st.columns(2)
+            with col_a1:
+                if st.button("Mappa chiara", key="v5_s1_clear"):
+                    st.success("Perfetto: puoi preparare una proposta che tenga conto di tutti gli attori.")
+                    st.session_state.v5_step = 2
+            with col_a2:
+                if st.button("Mappa confusa", key="v5_s1_confused"):
+                    st.info("Proponi una call successiva con produzione + qualità + controllo gestione insieme.")
+
+            st.session_state["v5_note_1"] = st.text_area("Appunti persone coinvolte", key="v5_note_1")
+            if st.checkbox("Step 1 completato (V5)", key="v5_done_1"):
+                st.session_state.v5_step = 2
+
+        elif step == 2:
+            st.markdown("### Step 2 – Processo decisionale")
+            st.write("Obiettivo: capire come si prende la decisione di acquisto.")
+            st.markdown(
+                "Domande chiave:\n"
+                "- *\"Chi decide alla fine se partire o no con un progetto così?\"*\n"
+                "- *\"Quali passi dovete fare internamente per approvare un investimento?\"*\n"
+                "- *\"Avete già fatto progetti simili? Come avete deciso allora?\"*"
+            )
+
+            col_b1, col_b2, col_b3 = st.columns(3)
+            with col_b1:
+                if st.button("Decision maker chiaro", key="v5_s2_dm_clear"):
+                    st.success("Ottimo: coinvolgilo presto nelle prossime call.")
+                    st.session_state.v5_step = 3
+            with col_b2:
+                if st.button("Comitato / più persone", key="v5_s2_committee"):
+                    st.info("Identifica un champion interno che ti aiuti a far circolare il valore del progetto.")
+            with col_b3:
+                if st.button("Processo poco chiaro", key="v5_s2_unknown"):
+                    st.warning("Rischio di stallo: torna su questo punto prima di formulare un’offerta completa.")
+
+            st.session_state["v5_note_2"] = st.text_area("Appunti processo decisionale", key="v5_note_2")
+            if st.checkbox("Step 2 completato (V5)", key="v5_done_2"):
+                st.session_state.v5_step = 3
+
+        elif step == 3:
+            st.markdown("### Step 3 – Cultura e cambiamento")
+            st.write("Obiettivo: capire quanto l’azienda è pronta a cambiare modo di lavorare.")
+            st.markdown(
+                "Domande chiave:\n"
+                "- *\"Avete già fatto progetti di miglioramento (Lean, digitalizzazione, ecc.)?\"*\n"
+                "- *\"Come sono andati?\"*\n"
+                "- *\"Cosa dovrebbe succedere perché questo progetto venga considerato un successo?\"*"
+            )
+
+            col_c1, col_c2 = st.columns(2)
+            with col_c1:
+                if st.button("Apertura al cambiamento alta", key="v5_s3_open"):
+                    st.success("Puoi proporre un percorso più ambizioso (roadmap a step).")
+            with col_c2:
+                if st.button("Resistenza alta", key="v5_s3_resist"):
+                    st.info("Meglio partire da un pilota piccolo, con risultati veloci e visibili.")
+
+            st.session_state["v5_note_3"] = st.text_area("Appunti cultura / cambiamento", key="v5_note_3")
+            if st.checkbox("Vagone 5 completato", key="v5_done_3"):
+                st.success("Vagone 5 completato: puoi passare al Vagone 6.")
+
+    # ==================================================================
+    # VAGONE 6 – SOLUZIONE PROPOSTA
+    # ==================================================================
+    with st.expander("Vagone 6 – Soluzione proposta", expanded=False):
+        step = st.session_state.v6_step
+
+        if step == 1:
+            st.markdown("### Step 1 – Collegare problemi e moduli")
+            st.write("Obiettivo: collegare quanto emerso con i pezzi della tua soluzione.")
+            st.markdown(
+                "Checklist:\n"
+                "- Richiama in 1 minuto i problemi chiave emersi (OEE, flussi, dati, costi).\n"
+                "- Mappa i problemi sui moduli / servizi che puoi offrire.\n"
+                "- Verifica che il cliente si ritrovi in questo collegamento."
+            )
+
+            col_a1, col_a2 = st.columns(2)
+            with col_a1:
+                if st.button("Allineamento forte", key="v6_s1_fit"):
+                    st.success("Puoi passare a descrivere la soluzione in 2–3 step chiari.")
+                    st.session_state.v6_step = 2
+            with col_a2:
+                if st.button("Allineamento da rivedere", key="v6_s1_weak"):
+                    st.info("Chiedi cosa manca o cosa è meno rilevante, e ritarare la proposta.")
+
+            st.session_state["v6_note_1"] = st.text_area("Appunti collegamento problemi-soluzione", key="v6_note_1")
+            if st.checkbox("Step 1 completato (V6)", key="v6_done_1"):
+                st.session_state.v6_step = 2
+
+        elif step == 2:
+            st.markdown("### Step 2 – Descrizione ad alto livello")
+            st.write("Obiettivo: spiegare la soluzione senza perdersi nei dettagli tecnici.")
+            st.markdown(
+                "Checklist:\n"
+                "- Descrivi la soluzione in 2–3 blocchi (es. Raccolta dati → Cruscotto → Miglioramento).\n"
+                "- Usa il linguaggio del cliente (turni, linee, commesse, ecc.).\n"
+                "- Mostra 1–2 esempi concreti di cosa vedrà/otterrà."
+            )
+
+            col_b1, col_b2 = st.columns(2)
+            with col_b1:
+                if st.button("Cliente segue e annuisce", key="v6_s2_yes"):
+                    st.success("Perfetto: puoi accennare a tempi, effort e impatto.")
+                    st.session_state.v6_step = 3
+            with col_b2:
+                if st.button("Cliente confuso / scettico", key="v6_s2_no"):
+                    st.info("Fermati e chiedi: *\"Cosa non ti torna o non è chiaro?\"*")
+
+            st.session_state["v6_note_2"] = st.text_area("Appunti descrizione soluzione", key="v6_note_2")
+            if st.checkbox("Step 2 completato (V6)", key="v6_done_2"):
+                st.session_state.v6_step = 3
+
+        elif step == 3:
+            st.markdown("### Step 3 – Tempi, rischi, impegno")
+            st.write("Obiettivo: dare un’idea realistica di tempi e impegno richiesti.")
+            st.markdown(
+                "Checklist:\n"
+                "- Indica durata tipica del progetto o della fase pilota.\n"
+                "- Sii chiaro sulle attività del cliente (chi deve fare cosa, e per quanto tempo).\n"
+                "- Evidenzia come riduci i rischi (pilota, step incrementali, supporto)."
+            )
+
+            col_c1, col_c2 = st.columns(2)
+            with col_c1:
+                if st.button("Cliente vede fattibile", key="v6_s3_ok"):
+                    st.success("Puoi portarlo verso il prossimo passo concreto nel Vagone 7.")
+            with col_c2:
+                if st.button("Cliente preoccupato per effort", key="v6_s3_effort"):
+                    st.info("Ridimensiona il primo step (pilota più piccolo, focus su una linea/reparto).")
+
+            st.session_state["v6_note_3"] = st.text_area("Appunti tempi / rischi", key="v6_note_3")
+            if st.checkbox("Vagone 6 completato", key="v6_done_3"):
+                st.success("Vagone 6 completato: puoi passare al Vagone 7.")
+
+    # ==================================================================
+    # VAGONE 7 – CHIUSURA / RECAP
+    # ==================================================================
+    with st.expander("Vagone 7 – Chiusura / recap", expanded=False):
+        step = st.session_state.v7_step
+
+        if step == 1:
+            st.markdown("### Step 1 – Riepilogo condiviso")
+            st.write("Obiettivo: chiudere con una fotografia condivisa di problemi e soluzione.")
+            st.markdown(
+                "Checklist:\n"
+                "- Riepiloga in 1–2 minuti cosa hai capito: problemi, impatti, priorità.\n"
+                "- Chiedi conferma: *\"Mi confermi che è una sintesi corretta?\"*\n"
+                "- Se serve, correggi la sintesi insieme a lui."
+            )
+
+            if st.button("Riepilogo confermato", key="v7_s1_ok"):
+                st.success("Bene: ora definisci insieme il prossimo passo concreto.")
+                st.session_state.v7_step = 2
+
+            st.session_state["v7_note_1"] = st.text_area("Appunti riepilogo", key="v7_note_1")
+            if st.checkbox("Step 1 completato (V7)", key="v7_done_1"):
+                st.session_state.v7_step = 2
+
+        elif step == 2:
+            st.markdown("### Step 2 – Next step e commit")
+            st.write("Obiettivo: chiudere la call con un impegno chiaro, non solo 'ci sentiamo'.")
+            st.markdown(
+                "Opzioni tipiche:\n"
+                "- Invio proposta con call già fissata per discuterla.\n"
+                "- Analisi dati / diagnosi con accesso a storici.\n"
+                "- Sopralluogo operativo.\n"
+                "- Workshop con team interno."
+            )
+
+            col_b1, col_b2, col_b3 = st.columns(3)
+            with col_b1:
+                if st.button("Accordo su step concreto", key="v7_s2_yes"):
+                    st.success("Concorda data/ora e chi partecipa, e prometti un riepilogo scritto.")
+            with col_b2:
+                if st.button("Deve allinearsi internamente", key="v7_s2_internal"):
+                    st.info("Fissa comunque una data indicativa per aggiornarsi.")
+            with col_b3:
+                if st.button("No decision ora", key="v7_s2_nodec"):
+                    st.warning("Chiudi lasciando la porta aperta, con un check leggero a data futura.")
+
+            st.session_state["v7_note_2"] = st.text_area("Appunti prossimo passo", key="v7_note_2")
+            if st.checkbox("Vagone 7 completato", key="v7_done_2"):
+                st.success("Call completata. Ricorda di aggiornare CRM / dashboard dopo la call.")
 
     st.markdown("---")
 
-    # --- checklist 7 vagoni con script ---
-    for vagone in range(1, 8):
-        vagone_df = steps_df[steps_df["Vagone"] == vagone].copy()
-        # ORDINA PER STEP
-        vagone_df = vagone_df.sort_values("Step")
-        vagone_success = vagone_df["OK"].mean() if not vagone_df.empty else 0.0
+    # =========================================================
+    # SALVATAGGIO SU CRM: NOTE + FASE + PROBABILITÀ
+    # =========================================================
+    st.subheader("Aggiorna CRM da questa call")
 
-        with st.expander(f"Vagone {vagone}", expanded=(vagone == 1)):
-            col_v1, col_v2, col_v3 = st.columns([4, 1, 1])
+    col_save1, col_save2 = st.columns(2)
+    with col_save1:
+        if st.button("💾 Salva questa call sull'opportunity"):
+            # costruisci testo da salvare
+            testo = f"\n\n=== Call treno vendite del {data_call.strftime('%Y-%m-%d')} ===\n"
+            testo += f"Cliente: {cliente} – Referente: {referente}\n"
+            testo += "Vagone 1:\n"
+            testo += f"- Apertura: {st.session_state['v1_note_1']}\n"
+            testo += f"- Motivo: {st.session_state['v1_note_2']}\n"
+            testo += f"- Impatto: {st.session_state['v1_note_3']}\n"
+            testo += f"- Next step: {st.session_state['v1_note_4']}\n"
+            testo += "Vagone 2:\n"
+            testo += f"- Flusso: {st.session_state['v2_note_1']}\n"
+            testo += f"- Colli di bottiglia: {st.session_state['v2_note_2']}\n"
+            testo += f"- Flussi informativi: {st.session_state['v2_note_3']}\n"
+            testo += "Vagone 3:\n"
+            testo += f"- KPI: {st.session_state['v3_note_1']}\n"
+            testo += f"- Fonti dati: {st.session_state['v3_note_2']}\n"
+            testo += f"- Uso dei dati: {st.session_state['v3_note_3']}\n"
+            testo += "Vagone 4:\n"
+            testo += f"- Impatto cliente: {st.session_state['v4_note_1']}\n"
+            testo += f"- Costi/sprechi: {st.session_state['v4_note_2']}\n"
+            testo += f"- Potenziale: {st.session_state['v4_note_3']}\n"
+            testo += "Vagone 5:\n"
+            testo += f"- Persone coinvolte: {st.session_state['v5_note_1']}\n"
+            testo += f"- Processo decisionale: {st.session_state['v5_note_2']}\n"
+            testo += f"- Cultura/cambiamento: {st.session_state['v5_note_3']}\n"
+            testo += "Vagone 6:\n"
+            testo += f"- Collegamento problemi-soluzione: {st.session_state['v6_note_1']}\n"
+            testo += f"- Descrizione soluzione: {st.session_state['v6_note_2']}\n"
+            testo += f"- Tempi/rischi: {st.session_state['v6_note_3']}\n"
+            testo += "Vagone 7:\n"
+            testo += f"- Riepilogo: {st.session_state['v7_note_1']}\n"
+            testo += f"- Prossimo passo: {st.session_state['v7_note_2']}\n"
 
-            with col_v1:
-                for idx, row in vagone_df.iterrows():
-                    step_label = f"Step {int(row.Step)}: {row.Descrizione}"
-                    step_ok = st.checkbox(
-                        step_label,
-                        key=f"train_step_{idx}",
-                        value=bool(row.OK),
-                    )
-                    st.session_state.train_steps_df.at[idx, "OK"] = step_ok
-
-                    script_text = script_map.get(
-                        row.Descrizione,
-                        "Usa questo spazio per guidare la conversazione sul problema e sul prossimo passo.",
-                    )
-                    with st.expander(f"Guida step {int(row.Step)}", expanded=False):
-                        st.markdown(script_text)
-
-                    note = st.text_area(
-                        f"Appunti step {int(row.Step)}",
-                        row.Note,
-                        key=f"train_note_{idx}",
-                    )
-                    st.session_state.train_steps_df.at[idx, "Note"] = note
-
-            with col_v2:
-                st.metric("Vagone OK", f"{vagone_success:.0%}")
-            with col_v3:
-                st.caption(f"Target: {'✅' if vagone_success >= 0.8 else '❌'}")
-
-    # --- salva nel CRM / export ---
-    st.markdown("---")
-    col_s1, col_s2 = st.columns(2)
-    with col_s1:
-        if st.button("💾 Salva note su Opportunity"):
             with get_session() as session:
                 opp = session.get(Opportunity, sel_opp_id)
-                if opp:
-                    if hasattr(opp, "note"):
-                        testo = f"\n\n=== Call treno vendite {datetime.now().strftime('%Y-%m-%d %H:%M')} ===\n"
-                        for vagone in range(1, 8):
-                            vag_df = st.session_state.train_steps_df[
-                                st.session_state.train_steps_df["Vagone"] == vagone
-                            ]
-                            completati = vag_df[vag_df["OK"] == True]
-                            if not completati.empty:
-                                testo += f"Vagone {vagone}:\n"
-                                for _, r in completati.iterrows():
-                                    if r["Note"]:
-                                        testo += f"- Step {int(r['Step'])} {r['Descrizione']}: {r['Note']}\n"
-                                    else:
-                                        testo += f"- Step {int(r['Step'])} {r['Descrizione']}: OK\n"
-                        opp.note = (opp.note or "") + testo
-                        session.add(opp)
-                        session.commit()
-                    st.success("Note call salvate sull'opportunity.")
-                else:
+                if not opp:
                     st.error("Opportunity non trovata.")
+                else:
+                    # append note
+                    opp.note = (opp.note or "") + testo
 
-    with col_s2:
-        if st.button("⬇️ Esporta call in CSV"):
-            steps_df_exp = st.session_state.train_steps_df.copy()
-            steps_df_exp["opportunity_id"] = sel_opp_id
-            steps_df_exp["timestamp"] = datetime.now()
-            filename = f"treno_call_opp{sel_opp_id}_{datetime.now().strftime('%Y%m%d_%H%M')}.csv"
-            steps_df_exp.to_csv(filename, index=False)
-            st.success(f"CSV salvato: {filename}")
-            st.balloons()
+                    # logica semplice per aggiornare fase/probabilità
+                    # (puoi raffinarla a gusto)
+                    fase_attuale = (opp.fase_pipeline or "").strip()
+                    # se hai completato almeno Vagone 1 e 4 → consideriamo qualificata
+                    v1_ok = st.session_state.get("v1_done_4", False)
+                    v4_ok = st.session_state.get("v4_done_3", False)
 
-    st.subheader("📊 Performance per vagone")
-    fig_data = st.session_state.train_steps_df.groupby("Vagone")["OK"].mean()
-    st.bar_chart(fig_data)
+                    if v1_ok and v4_ok:
+                        if fase_attuale in ("Lead", "Lead pre-qualificato (MQL)", ""):
+                            opp.fase_pipeline = "Lead qualificato (SQL)"
+                        elif fase_attuale in ("Lead qualificato (SQL)", "Analisi"):
+                            opp.fase_pipeline = "Proposta / Trattativa"
 
-def get_next_invoice_number(session, year=None, prefix="FL"):
-    year = year or date.today().year
-    res = session.exec(
-        select(Invoice.num_fattura).where(
-            Invoice.data_fattura.between(date(year, 1, 1), date(year, 12, 31))
-        )
-    ).all()
-    nums = []
-    for r in res:
-        if not r:
-            continue
-        try:
-            base = str(r).split("/")[0]  # "12/2025-FL" -> "12"
-            nums.append(int(base))
-        except ValueError:
-            continue
-    next_seq = (max(nums) + 1) if nums else 1
-    return f"{next_seq}/{year}-" + prefix
+                    # probabilità: se hai completato il treno, alza fino a max 80–90%
+                    v7_ok = st.session_state.get("v7_done_2", False)
+                    prob_attuale = float(opp.probabilita or 0.0)
+                    if v7_ok:
+                        nuova_prob = max(prob_attuale, 70.0)
+                    elif v1_ok and v4_ok:
+                        nuova_prob = max(prob_attuale, 50.0)
+                    else:
+                        nuova_prob = prob_attuale
+                    opp.probabilita = nuova_prob
 
-from datetime import date, datetime
+                    session.add(opp)
+                    session.commit()
+                    st.success("Call salvata sull'opportunity e campi CRM aggiornati.")
+
+    with col_save2:
+        st.caption("Dopo il salvataggio trovi subito note e stato aggiornato nella pagina CRM / Opportunità.")
+
+    st.caption("Treno vendite guidato per call di 30–40 minuti, integrato con il CRM.")
 
 def get_next_invoice_number(session, year=None, prefix="FL"):
     year = year or date.today().year
