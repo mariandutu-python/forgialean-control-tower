@@ -57,7 +57,7 @@ from cache_functions import (
 )
 
 from tracking import track_ga4_event, track_facebook_event
-
+from streamlit_calendar import calendar
 import requests
 import smtplib
 from email.mime.text import MIMEText
@@ -93,6 +93,35 @@ def send_telegram_message(text: str):
     except Exception:
         # opzionale: puoi loggare su file o ignorare in silenzio
         pass
+
+from datetime import date
+
+def get_opps_di_oggi(session):
+    """Opportunità con data_prossima_azione oggi."""
+    return session.exec(
+        select(Opportunity).where(
+            Opportunity.data_prossima_azione == date.today()
+        )
+    ).all()
+def send_agenda_oggi_telegram():
+    """Manda su Telegram la lista delle azioni di oggi."""
+    with get_session() as session:
+        opps_oggi = get_opps_di_oggi(session)
+
+    if not opps_oggi:
+        return
+
+    lines = []
+    for o in opps_oggi:
+        riga = f"- {o.nome_opportunita} ({o.data_prossima_azione})"
+        if o.tipo_prossima_azione:
+            riga += f" – {o.tipo_prossima_azione}"
+        if o.note_prossima_azione:
+            riga += f" – {o.note_prossima_azione}"
+        lines.append(riga)
+
+    testo = "Agenda CRM di oggi:\n" + "\n".join(lines)
+    send_telegram_message(testo)
 
 def build_email_body(nome, azienda, email, oee_perc, perdita_euro_turno, fascia):
     if fascia == "critica":
@@ -1834,36 +1863,66 @@ def page_crm_sales():
         fig_fase.update_layout(yaxis_title="Valore (€)")
         st.plotly_chart(fig_fase, use_container_width=True)
 
-    # =========================
-    # AGENDA VENDITORE (tutti i ruoli)
-    # =========================
-    st.markdown("---")
-    st.subheader("📞 Agenda venditore")
+# =========================
+# AGENDA VENDITORE (tutti i ruoli)
+# =========================
+st.markdown("---")
+st.subheader("📞 Agenda venditore")
 
-    if "data_prossima_azione" in df_opps.columns:
-        oggi = date.today()
-        df_agenda = df_opps.copy()
-        df_agenda = df_agenda.dropna(subset=["data_prossima_azione"])
-        df_agenda = df_agenda[df_agenda["data_prossima_azione"] >= oggi]
-        df_agenda = df_agenda.sort_values("data_prossima_azione")
+if "data_prossima_azione" in df_opps.columns:
+    oggi = date.today()
+    df_agenda = df_opps.copy()
+    df_agenda = df_agenda.dropna(subset=["data_prossima_azione"])
+    df_agenda = df_agenda[df_agenda["data_prossima_azione"] >= oggi]
+    df_agenda = df_agenda.sort_values("data_prossima_azione")
 
-        cols_agenda = [
-            "data_prossima_azione",
-            "Cliente",
-            "nome_opportunita",
-            "tipo_prossima_azione",
-            "note_prossima_azione",
-            "fase_pipeline",
-            "probabilita",
-            "owner",
-        ]
+    cols_agenda = [
+        "data_prossima_azione",
+        "Cliente",
+        "nome_opportunita",
+        "tipo_prossima_azione",
+        "note_prossima_azione",
+        "fase_pipeline",
+        "probabilita",
+        "owner",
+    ]
 
-        st.dataframe(df_agenda[cols_agenda])
-    else:
-        st.info(
-            "Per usare l’agenda venditore aggiungi i campi 'data_prossima_azione', 'tipo_prossima_azione' e 'note_prossima_azione' al modello Opportunity."
-        )
+    st.dataframe(df_agenda[cols_agenda])
 
+    # 🔔 bottone test notifica Telegram
+    if st.button("🔔 Invia agenda di oggi su Telegram"):
+        send_agenda_oggi_telegram()
+        st.success("Agenda di oggi inviata su Telegram (se ci sono azioni).")
+
+    # 📅 CALENDARIO PROSSIME AZIONI
+    st.subheader("📅 Calendario prossime azioni")
+
+    events = []
+    for _, row in df_agenda.iterrows():
+        if pd.notnull(row["data_prossima_azione"]):
+            events.append(
+                {
+                    "title": f"{row['Cliente']} – {row['nome_opportunita']} ({row.get('tipo_prossima_azione', '')})",
+                    "start": row["data_prossima_azione"].strftime("%Y-%m-%d"),
+                }
+            )
+
+    options = {
+        "initialView": "dayGridMonth",
+        "headerToolbar": {
+            "left": "prev,next today",
+            "center": "title",
+            "right": "dayGridMonth,timeGridWeek,listWeek",
+        },
+    }
+
+    calendar(events=events, options=options, key="crm_calendar")
+
+else:
+    st.info(
+        "Per usare l’agenda venditore aggiungi i campi 'data_prossima_azione', "
+        "'tipo_prossima_azione' e 'note_prossima_azione' al modello Opportunity."
+    )
     # =========================
     # SEZIONE EDIT / DELETE (SOLO ADMIN)
     # =========================
