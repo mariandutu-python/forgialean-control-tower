@@ -1840,12 +1840,23 @@ def page_crm_sales():
                 int(df_open.shape[0]),
             )
 
-    col1, col2 = st.columns(2)
+    col_c, col1, col2 = st.columns(3)
+
+    # Filtro cliente
+    with col_c:
+        clienti_opt = ["Tutti"] + sorted(
+            df_opps["Cliente"].dropna().astype(str).unique().tolist()
+        )
+        f_cliente = st.selectbox("Filtro cliente", clienti_opt)
+
+    # Filtro fase
     with col1:
         fase_opt = ["Tutte"] + sorted(
             df_opps["fase_pipeline"].dropna().unique().tolist()
         )
         f_fase = st.selectbox("Filtro fase pipeline", fase_opt)
+
+    # Filtro owner
     with col2:
         owner_opt = (
             ["Tutti"]
@@ -1855,9 +1866,15 @@ def page_crm_sales():
         )
         f_owner = st.selectbox("Filtro owner", owner_opt)
 
+    # Applicazione filtri
     df_f = df_opps.copy()
+
+    if f_cliente != "Tutti":
+        df_f = df_f[df_f["Cliente"] == f_cliente]
+
     if f_fase != "Tutte":
         df_f = df_f[df_f["fase_pipeline"] == f_fase]
+
     if f_owner != "Tutti":
         df_f = df_f[df_f["owner"] == f_owner]
 
