@@ -1971,6 +1971,15 @@ def page_crm_sales():
                 "N. opportunità aperte",
                 int(df_open.shape[0]),
             )
+    # KPI win rate complessivo (solo opportunità chiuse)
+    df_closed = df_opps[df_opps["stato_opportunita"].isin(["vinta", "persa"])].copy()
+    if not df_closed.empty:
+        num_won = (df_closed["stato_opportunita"] == "vinta").sum()
+        num_closed = len(df_closed)
+        win_rate = num_won / num_closed * 100
+
+        st.metric("Win rate complessivo", f"{win_rate:.1f}%")
+
     # KPI durata ciclo di vendita (solo opportunità vinte)
     df_won = df_opps[df_opps["stato_opportunita"] == "vinta"].copy()
     if not df_won.empty and {"data_apertura", "data_chiusura_prevista"}.issubset(df_won.columns):
