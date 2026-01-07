@@ -4657,7 +4657,7 @@ if uploaded_file is not None and clients:
             st.success(f"Fattura {new_inv_pdf.num_fattura} (da PDF) registrata.")
             st.rerun()
 
-st.markdown("---")
+    st.markdown("---")
 
     # =========================
     # 3) ELENCO FATTURE + KPI
