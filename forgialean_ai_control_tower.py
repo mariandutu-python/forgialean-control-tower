@@ -1815,15 +1815,26 @@ def page_crm_sales():
             ]
             cols_conv = [c for c in cols_conv if c in df_conv.columns]
 
-            st.dataframe(
-                df_conv[cols_conv].rename(
-                    columns={
-                        "valore_stimato": "value",
-                        "data_chiusura_prevista": "conversion_date",
-                        "data_apertura": "conversion_date",
-                    }
-                ),
-                use_container_width=True,
+            df_conv_view = df_conv[cols_conv].rename(
+                columns={
+                    "valore_stimato": "value",
+                    "data_chiusura_prevista": "conversion_date",
+                    "data_apertura": "conversion_date",
+                }
+            )
+
+            # aggiungo colonna currency fissa EUR per export
+            df_conv_view["currency"] = "EUR"
+
+            st.dataframe(df_conv_view, use_container_width=True)
+
+            # pulsante export CSV per offline conversions
+            csv_conv = df_conv_view.to_csv(index=False).encode("utf-8")
+            st.download_button(
+                "⬇️ Scarica CSV conversioni offline",
+                data=csv_conv,
+                file_name="crm_conversioni_offline.csv",
+                mime="text/csv",
             )
         else:
             st.info("Nessuna opportunità vinta legata a campagne UTM.")
