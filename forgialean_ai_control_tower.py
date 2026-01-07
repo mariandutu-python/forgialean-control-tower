@@ -3772,140 +3772,140 @@ def page_finance_invoices():
 
     st.markdown("---")
 
-# =========================
-# 3) ELENCO FATTURE + KPI
-# =========================
-st.subheader("📊 Elenco fatture")
+    # =========================
+    # 3) ELENCO FATTURE + KPI
+    # =========================
+    st.subheader("📊 Elenco fatture")
 
-# -------------------------
-# FILTRI RICERCA FATTURE
-# -------------------------
-col_f1, col_f2, col_f3 = st.columns(3)
-with col_f1:
-    data_da = st.date_input("Da data (fattura)", value=None)
-with col_f2:
-    data_a = st.date_input("A data (fattura)", value=None)
-with col_f3:
-    stato_filter = st.selectbox(
-        "Stato pagamento",
-        ["tutti", "emessa", "parzialmente_incassata", "incassata", "scaduta"],
-        index=0,
-    )
+    # -------------------------
+    # FILTRI RICERCA FATTURE
+    # -------------------------
+    col_f1, col_f2, col_f3 = st.columns(3)
+    with col_f1:
+        data_da = st.date_input("Da data (fattura)", value=None)
+    with col_f2:
+        data_a = st.date_input("A data (fattura)", value=None)
+    with col_f3:
+        stato_filter = st.selectbox(
+            "Stato pagamento",
+            ["tutti", "emessa", "parzialmente_incassata", "incassata", "scaduta"],
+            index=0,
+        )
 
-# filtro per cliente e anno
-col_f4, col_f5 = st.columns(2)
-with col_f4:
+    # filtro per cliente e anno
+    col_f4, col_f5 = st.columns(2)
+    with col_f4:
+        with get_session() as session:
+            clients_all = session.exec(select(Client)).all()
+        df_clients_all = pd.DataFrame([c.__dict__ for c in clients_all]) if clients_all else pd.DataFrame()
+        cliente_filter = "tutti"
+        if not df_clients_all.empty:
+            clienti_labels = ["tutti"] + (
+                df_clients_all["client_id"].astype(str) + " - " + df_clients_all["ragione_sociale"]
+            ).tolist()
+            cliente_filter = st.selectbox("Cliente", clienti_labels, index=0)
+    with col_f5:
+        anno_filter = st.selectbox(
+            "Anno fattura",
+            ["tutti"] + [str(y) for y in range(2023, date.today().year + 1)],
+            index=0,
+        )
+
+    # -------------------------
+    # CARICO FATTURE DAL DB
+    # -------------------------
     with get_session() as session:
-        clients_all = session.exec(select(Client)).all()
-    df_clients_all = pd.DataFrame([c.__dict__ for c in clients_all]) if clients_all else pd.DataFrame()
-    cliente_filter = "tutti"
-    if not df_clients_all.empty:
-        clienti_labels = ["tutti"] + (
-            df_clients_all["client_id"].astype(str) + " - " + df_clients_all["ragione_sociale"]
-        ).tolist()
-        cliente_filter = st.selectbox("Cliente", clienti_labels, index=0)
-with col_f5:
-    anno_filter = st.selectbox(
-        "Anno fattura",
-        ["tutti"] + [str(y) for y in range(2023, date.today().year + 1)],
-        index=0,
-    )
+        invoices = session.exec(select(Invoice)).all()
 
-# -------------------------
-# CARICO FATTURE DAL DB
-# -------------------------
-with get_session() as session:
-    invoices = session.exec(select(Invoice)).all()
+    if not invoices:
+        st.info("Nessuna fattura registrata.")
+        return
 
-if not invoices:
-    st.info("Nessuna fattura registrata.")
-    return
-
-df_inv = pd.DataFrame([i.__dict__ for i in invoices])
-df_inv["data_fattura"] = pd.to_datetime(df_inv["data_fattura"], errors="coerce")
-
-# -------------------------
-# MERGE COMMESSE / FASI
-# -------------------------
-with get_session() as session:
-    commesse_all = session.exec(select(ProjectCommessa)).all()
-    fasi_all = session.exec(select(TaskFase)).all()
-
-df_comm_all = pd.DataFrame([c.__dict__ for c in commesse_all]) if commesse_all else pd.DataFrame()
-df_fasi_all = pd.DataFrame([f.__dict__ for f in fasi_all]) if fasi_all else pd.DataFrame()
-
-if not df_comm_all.empty and "commessa_id" in df_inv.columns:
-    df_inv = df_inv.merge(
-        df_comm_all[["commessa_id", "cod_commessa"]],
-        how="left",
-        on="commessa_id",
-    )
-
-if not df_fasi_all.empty and "fase_id" in df_inv.columns:
-    df_inv = df_inv.merge(
-        df_fasi_all[["fase_id", "nome_fase"]],
-        how="left",
-        on="fase_id",
-    )
-
-# -------------------------
-# FILTRO PER COMMESSA
-# -------------------------
-commessa_filter = "tutte"
-if "cod_commessa" in df_inv.columns:
-    commesse_opts = ["tutte"] + sorted(df_inv["cod_commessa"].dropna().unique().tolist())
-    commessa_filter = st.selectbox("Commessa", commesse_opts, index=0)
-
-# -------------------------
-# APPLICA FILTRI
-# -------------------------
-if data_da:
-    df_inv = df_inv[df_inv["data_fattura"] >= pd.to_datetime(data_da)]
-if data_a:
-    df_inv = df_inv[df_inv["data_fattura"] <= pd.to_datetime(data_a)]
-
-if stato_filter != "tutti" and "stato_pagamento" in df_inv.columns:
-    df_inv = df_inv[df_inv["stato_pagamento"] == stato_filter]
-
-if cliente_filter != "tutti" and "client_id" in df_inv.columns:
-    client_id_sel = int(cliente_filter.split(" - ")[0])
-    df_inv = df_inv[df_inv["client_id"] == client_id_sel]
-
-if anno_filter != "tutti":
-    df_inv["anno"] = df_inv["data_fattura"].dt.year
-    df_inv = df_inv[df_inv["anno"] == int(anno_filter)]
-
-if commessa_filter != "tutte" and "cod_commessa" in df_inv.columns:
-    df_inv = df_inv[df_inv["cod_commessa"] == commessa_filter]
-
-if df_inv.empty:
-    st.info("Nessuna fattura trovata con i filtri selezionati.")
-    return
-
-# -------------------------
-# VISTA TABELLA PULITA
-# -------------------------
-cols_show = [
-    "invoice_id",
-    "num_fattura",
-    "data_fattura",
-    "importo_totale",
-    "stato_pagamento",
-    "cod_commessa",
-    "nome_fase",
-]
-cols_show = [c for c in cols_show if c in df_inv.columns]
-st.dataframe(df_inv[cols_show])
-
-# -------------------------
-# KPI BASE: TOTALE PER ANNO
-# -------------------------
-if {"data_fattura", "importo_totale"}.issubset(df_inv.columns):
+    df_inv = pd.DataFrame([i.__dict__ for i in invoices])
     df_inv["data_fattura"] = pd.to_datetime(df_inv["data_fattura"], errors="coerce")
-    df_inv["anno"] = df_inv["data_fattura"].dt.year
-    kpi_year = df_inv.groupby("anno")["importo_totale"].sum().reset_index()
-    st.markdown("#### Totale fatturato per anno")
-    st.bar_chart(kpi_year.set_index("anno")["importo_totale"])
+
+    # -------------------------
+    # MERGE COMMESSE / FASI
+    # -------------------------
+    with get_session() as session:
+        commesse_all = session.exec(select(ProjectCommessa)).all()
+        fasi_all = session.exec(select(TaskFase)).all()
+
+    df_comm_all = pd.DataFrame([c.__dict__ for c in commesse_all]) if commesse_all else pd.DataFrame()
+    df_fasi_all = pd.DataFrame([f.__dict__ for f in fasi_all]) if fasi_all else pd.DataFrame()
+
+    if not df_comm_all.empty and "commessa_id" in df_inv.columns:
+        df_inv = df_inv.merge(
+            df_comm_all[["commessa_id", "cod_commessa"]],
+            how="left",
+            on="commessa_id",
+        )
+
+    if not df_fasi_all.empty and "fase_id" in df_inv.columns:
+        df_inv = df_inv.merge(
+            df_fasi_all[["fase_id", "nome_fase"]],
+            how="left",
+            on="fase_id",
+        )
+
+    # -------------------------
+    # FILTRO PER COMMESSA
+    # -------------------------
+    commessa_filter = "tutte"
+    if "cod_commessa" in df_inv.columns:
+        commesse_opts = ["tutte"] + sorted(df_inv["cod_commessa"].dropna().unique().tolist())
+        commessa_filter = st.selectbox("Commessa", commesse_opts, index=0)
+
+    # -------------------------
+    # APPLICA FILTRI
+    # -------------------------
+    if data_da:
+        df_inv = df_inv[df_inv["data_fattura"] >= pd.to_datetime(data_da)]
+    if data_a:
+        df_inv = df_inv[df_inv["data_fattura"] <= pd.to_datetime(data_a)]
+
+    if stato_filter != "tutti" and "stato_pagamento" in df_inv.columns:
+        df_inv = df_inv[df_inv["stato_pagamento"] == stato_filter]
+
+    if cliente_filter != "tutti" and "client_id" in df_inv.columns:
+        client_id_sel = int(cliente_filter.split(" - ")[0])
+        df_inv = df_inv[df_inv["client_id"] == client_id_sel]
+
+    if anno_filter != "tutti":
+        df_inv["anno"] = df_inv["data_fattura"].dt.year
+        df_inv = df_inv[df_inv["anno"] == int(anno_filter)]
+
+    if commessa_filter != "tutte" and "cod_commessa" in df_inv.columns:
+        df_inv = df_inv[df_inv["cod_commessa"] == commessa_filter]
+
+    if df_inv.empty:
+        st.info("Nessuna fattura trovata con i filtri selezionati.")
+        return
+
+    # -------------------------
+    # VISTA TABELLA PULITA
+    # -------------------------
+    cols_show = [
+        "invoice_id",
+        "num_fattura",
+        "data_fattura",
+        "importo_totale",
+        "stato_pagamento",
+        "cod_commessa",
+        "nome_fase",
+    ]
+    cols_show = [c for c in cols_show if c in df_inv.columns]
+    st.dataframe(df_inv[cols_show])
+
+    # -------------------------
+    # KPI BASE: TOTALE PER ANNO
+    # -------------------------
+    if {"data_fattura", "importo_totale"}.issubset(df_inv.columns):
+        df_inv["data_fattura"] = pd.to_datetime(df_inv["data_fattura"], errors="coerce")
+        df_inv["anno"] = df_inv["data_fattura"].dt.year
+        kpi_year = df_inv.groupby("anno")["importo_totale"].sum().reset_index()
+        st.markdown("#### Totale fatturato per anno")
+        st.bar_chart(kpi_year.set_index("anno")["importo_totale"])
 
     # =========================
     # 4) MODIFICA / ELIMINA FATTURA (SOLO ADMIN) + EXPORT XML
@@ -4070,7 +4070,7 @@ if {"data_fattura", "importo_totale"}.issubset(df_inv.columns):
         # Progressivo invio
         prefisso = my.get("progressivo_invio_prefisso", "FL")
         raw_prog = f"{prefisso}{inv.invoice_id:08d}"
-        progressivo_invio = raw_prog[:10] 
+        progressivo_invio = raw_prog[:10]
 
         aliquota_iva = (inv.iva / inv.importo_imponibile * 100) if inv.importo_imponibile else 22.0
 
