@@ -1641,6 +1641,36 @@ def page_crm_sales():
     st.title("🤝 CRM & Vendite (SQLite)")
     role = st.session_state.get("role", "user")
 
+    # --- LEAD PER CAMPAGNA (UTM) ---
+    st.subheader("Lead per campagna (UTM)")
+
+    if "utm_campaign" in df_leads.columns:
+        df_utm = (
+            df_leads.assign(
+                utm_campaign=lambda d: d["utm_campaign"]
+                .fillna("(no campaign)")
+                .replace("", "(no campaign)")
+                .astype(str)
+            )
+            .groupby("utm_campaign")
+            .size()
+            .reset_index(name="num_lead")
+            .sort_values("num_lead", ascending=False)
+        )
+
+        col_t, col_g = st.columns(2)
+
+        with col_t:
+            st.dataframe(df_utm, hide_index=True, use_container_width=True)
+
+        with col_g:
+            st.bar_chart(
+                df_utm.set_index("utm_campaign")["num_lead"],
+                use_container_width=True,
+            )
+    else:
+        st.info("Nessun dato UTM disponibile sui lead.")
+
     # =========================
     # FORM INSERIMENTO OPPORTUNITÀ
     # =========================
