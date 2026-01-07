@@ -77,8 +77,12 @@ class Invoice(SQLModel, table=True):
     importo_imponibile: Optional[float] = 0.0
     iva: Optional[float] = 0.0
     importo_totale: Optional[float] = 0.0
-    stato_pagamento: Optional[str] = None  # emessa, incassata, scaduta
+    stato_pagamento: Optional[str] = None  # emessa, incassata, scaduta, parzialmente_incassata
     data_incasso: Optional[date] = None
+
+    # collegamento a commessa/fase (opzionale)
+    commessa_id: Optional[int] = Field(default=None, foreign_key="projectcommessa.commessa_id")
+    fase_id: Optional[int] = Field(default=None, foreign_key="taskfase.fase_id")
 
     # relazione con i pagamenti
     payments: list["Payment"] = Relationship(back_populates="invoice")
