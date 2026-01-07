@@ -2058,7 +2058,7 @@ def page_crm_sales():
         df_agenda = df_agenda.sort_values("data_prossima_azione")
 
         # --- FILTRI AGENDA ---
-        col_f1, col_f2 = st.columns(2)
+        col_f1, col_f2, col_f3 = st.columns(3)
         with col_f1:
             owner_opt = ["Tutti"] + sorted(
                 df_agenda["owner"].dropna().astype(str).unique().tolist()
@@ -2075,6 +2075,19 @@ def page_crm_sales():
             )
             f_tipo_ag = st.selectbox("Filtro tipo azione", tipo_opt)
 
+        with col_f3:
+            if "utm_campaign" in df_agenda.columns:
+                camp_opt_ag = ["Tutte"] + sorted(
+                    df_agenda["utm_campaign"]
+                    .fillna("(no campaign)")
+                    .astype(str)
+                    .unique()
+                    .tolist()
+                )
+            else:
+                camp_opt_ag = ["Tutte"]
+            f_camp_ag = st.selectbox("Filtro campagna (UTM)", camp_opt_ag)
+
         df_agenda_f = df_agenda.copy()
         if f_owner_ag != "Tutti":
             df_agenda_f = df_agenda_f[df_agenda_f["owner"] == f_owner_ag]
@@ -2082,6 +2095,14 @@ def page_crm_sales():
             df_agenda_f = df_agenda_f[
                 df_agenda_f["tipo_prossima_azione"] == f_tipo_ag
             ]
+        if f_camp_ag != "Tutte" and "utm_campaign" in df_agenda_f.columns:
+            if f_camp_ag == "(no campaign)":
+                df_agenda_f = df_agenda_f[
+                    df_agenda_f["utm_campaign"].isna()
+                    | (df_agenda_f["utm_campaign"] == "")
+                ]
+            else:
+                df_agenda_f = df_agenda_f[df_agenda_f["utm_campaign"] == f_camp_ag]
 
         cols_agenda = [
             "data_prossima_azione",
