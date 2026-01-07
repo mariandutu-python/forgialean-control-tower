@@ -3704,11 +3704,27 @@ def page_finance_invoices():
             st.error(f"Errore lettura PDF: {e}")
 
     if uploaded_file is not None and clients:
+        # Carico commesse/fasi
+        with get_session() as session:
+            commesse_pdf = session.exec(select(ProjectCommessa)).all()
+            fasi_pdf = session.exec(select(TaskFase)).all()
+
+        df_comm_pdf = pd.DataFrame([c.__dict__ for c in commesse_pdf]) if commesse_pdf else pd.DataFrame()
+        df_fasi_pdf = pd.DataFrame([f.__dict__ for f in fasi_pdf]) if fasi_pdf else pd.DataFrame()
+
+        commesse_labels_pdf = ["(nessuna)"]
+        if not df_comm_pdf.empty:
+            df_comm_pdf["label"] = df_comm_pdf["commessa_id"].astype(str) + " - " + df_comm_pdf["cod_commessa"]
+            commesse_labels_pdf += df_comm_pdf["label"].tolist()
+
+        fasi_labels_pdf = ["(nessuna)"]
+        if not df_fasi_pdf.empty:
+            df_fasi_pdf["label"] = df_fasi_pdf["fase_id"].astype(str) + " - " + df_fasi_pdf["nome_fase"]
+            fasi_labels_pdf += df_fasi_pdf["label"].tolist()
+
+        # Clienti
         df_clients = pd.DataFrame([c.__dict__ for c in clients])
         df_clients["label"] = df_clients["client_id"].astype(str) + " - " + df_clients["ragione_sociale"]
-
-        with get_session() as session:
-            suggested_num_pdf = get_next_invoice_number(session, year=date.today().year, prefix="FL")
 
         with st.form("new_invoice_from_pdf"):
             st.markdown("#### Dati fattura precompilati")
@@ -3716,10 +3732,9 @@ def page_finance_invoices():
             col1, col2 = st.columns(2)
             with col1:
                 client_label_pdf = st.selectbox("Cliente", df_clients["label"].tolist())
-                num_fattura_pdf = st.text_input(
-                    "Numero fattura",
-                    parsed_data["num_fattura"] or suggested_num_pdf,
-                )
+                commessa_label_pdf = st.selectbox("Commessa (opzionale)", commesse_labels_pdf)
+                fase_label_pdf = st.selectbox("Fase (opzionale)", fasi_labels_pdf)
+                num_fattura_pdf = st.text_input("Numero fattura", parsed_data["num_fattura"])
                 data_fattura_pdf = st.date_input("Data fattura", value=parsed_data["data_fattura"])
                 data_scadenza_pdf = st.date_input("Data scadenza", value=parsed_data["data_fattura"])
             with col2:
@@ -3749,6 +3764,15 @@ def page_finance_invoices():
                 st.warning("Il numero fattura è obbligatorio.")
             else:
                 client_id_sel_pdf = int(client_label_pdf.split(" - ")[0])
+
+                commessa_id_sel_pdf = None
+                if commessa_label_pdf != "(nessuna)":
+                    commessa_id_sel_pdf = int(commessa_label_pdf.split(" - ")[0])
+
+                fase_id_sel_pdf = None
+                if fase_label_pdf != "(nessuna)":
+                    fase_id_sel_pdf = int(fase_label_pdf.split(" - ")[0])
+
                 iva_val_pdf = imponibile_pdf * iva_perc_pdf / 100.0
                 totale_pdf = imponibile_pdf + iva_val_pdf
 
@@ -3763,6 +3787,8 @@ def page_finance_invoices():
                         importo_totale=totale_pdf,
                         stato_pagamento=stato_pagamento_pdf,
                         data_incasso=data_incasso_pdf if stato_pagamento_pdf == "incassata" else None,
+                        commessa_id=commessa_id_sel_pdf,
+                        fase_id=fase_id_sel_pdf,
                     )
                     session.add(new_inv_pdf)
                     session.commit()
@@ -4008,8 +4034,8 @@ def page_finance_invoices():
                     obj.data_incasso = data_incasso_e if stato_pagamento_e == "incassata" else None
                     session.add(obj)
                     session.commit()
-            st.success("Fattura aggiornata.")
-            st.rerun()
+        st.success("Fattura aggiornata.")
+        st.rerun()
 
     if delete_clicked:
         with get_session() as session:
@@ -4069,10 +4095,15 @@ def page_finance_invoices():
 
         # Progressivo invio
         prefisso = my.get("progressivo_invio_prefisso", "FL")
-        raw_prog = f"{prefisso}{inv.invoice_id:08d}"
-        progressivo_invio = raw_prog[:10]
+        progressivo_invio = f"{prefisso}_{(inv.num_fattura or '1').replace('/', '_')}"
 
-        aliquota_iva = (inv.iva / inv.importo_imponibile * 100) if inv.importo_imponibile else 22.0
+        # Aliquota IVA: calcolata da imponibile e iva
+        if inv.importo_imponibile:
+            aliquota_iva = round((inv.iva / inv.importo_imponibile) * 100, 2)
+        else:
+            aliquota_iva = 22.0
+
+        descrizione_riga = "Servizi di consulenza ForgiaLean"
 
         xml_content = f"""<?xml version="1.0" encoding="UTF-8"?>
 <FatturaElettronica versione="{formato_trasm}">
@@ -4084,8 +4115,7 @@ def page_finance_invoices():
       </IdTrasmittente>
       <ProgressivoInvio>{progressivo_invio}</ProgressivoInvio>
       <FormatoTrasmissione>{formato_trasm}</FormatoTrasmissione>
-      <CodiceDestinatario>{cli_cod_dest}</CodiceDestinatario>
-      {"<PECDestinatario>" + cli_pec + "</PECDestinatario>" if cli_cod_dest == "0000000" and cli_pec else ""}
+      <CodiceDestinatario>{cli_cod_dest}</CodiceDestinatario>{("<PECDestinatario>" + cli_pec + "</PECDestinatario>") if cli_cod_dest == "0000000" and cli_pec else ""}
     </DatiTrasmissione>
     <CedentePrestatore>
       <DatiAnagrafici>
@@ -4140,7 +4170,7 @@ def page_finance_invoices():
     <DatiBeniServizi>
       <DettaglioLinee>
         <NumeroLinea>1</NumeroLinea>
-        <Descrizione>Servizi di consulenza ForgiaLean</Descrizione>
+        <Descrizione>{descrizione_riga}</Descrizione>
         <Quantita>1.00</Quantita>
         <PrezzoUnitario>{inv.importo_imponibile:.2f}</PrezzoUnitario>
         <PrezzoTotale>{inv.importo_imponibile:.2f}</PrezzoTotale>
