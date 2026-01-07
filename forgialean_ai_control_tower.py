@@ -1635,8 +1635,12 @@ def page_crm_sales():
         except ValueError:
             opp_id = None
 
+    # Cattura eventuali parametri UTM dall'URL
+    capture_utm_params()
+
     st.title("🤝 CRM & Vendite (SQLite)")
     role = st.session_state.get("role", "user")
+
     # =========================
     # FORM INSERIMENTO OPPORTUNITÀ
     # =========================
