@@ -1641,6 +1641,67 @@ def page_crm_sales():
     st.title("🤝 CRM & Vendite (SQLite)")
     role = st.session_state.get("role", "user")
 
+    # =========================
+    # KPI RIEPILOGO CRM
+    # =========================
+    st.markdown("---")
+    st.subheader("📌 KPI riepilogo CRM")
+
+    # Carico opportunità per KPI (se non già caricate sopra)
+    with get_session() as session:
+        opps_kpi = session.exec(select(Opportunity)).all()
+
+    if not opps_kpi:
+        st.info("Nessuna opportunità presente per il riepilogo KPI.")
+    else:
+        df_kpi = pd.DataFrame([o.__dict__ for o in opps_kpi])
+
+        # Totale opportunità
+        tot_opp = len(df_kpi)
+
+        # Opportunità aperte / vinte / perse
+        num_open = (df_kpi["stato_opportunita"] == "aperta").sum()
+        num_won = (df_kpi["stato_opportunita"] == "vinta").sum()
+        num_lost = (df_kpi["stato_opportunita"] == "persa").sum()
+
+        # Win rate complessivo su chiuse
+        num_closed = num_won + num_lost
+        win_rate = (num_won / num_closed * 100) if num_closed > 0 else 0
+
+        # Valore pipeline aperta
+        df_open_kpi = df_kpi[df_kpi["stato_opportunita"] == "aperta"].copy()
+        valore_pipeline = df_open_kpi["valore_stimato"].sum() if not df_open_kpi.empty else 0
+
+        # Durata media ciclo (solo vinte)
+        durata_media = None
+        if {"data_apertura", "data_chiusura_prevista"}.issubset(df_kpi.columns):
+            df_won_kpi = df_kpi[df_kpi["stato_opportunita"] == "vinta"].copy()
+            if not df_won_kpi.empty:
+                df_won_kpi["data_apertura"] = pd.to_datetime(df_won_kpi["data_apertura"])
+                df_won_kpi["data_chiusura_prevista"] = pd.to_datetime(
+                    df_won_kpi["data_chiusura_prevista"]
+                )
+                df_won_kpi["giorni_ciclo"] = (
+                    df_won_kpi["data_chiusura_prevista"] - df_won_kpi["data_apertura"]
+                ).dt.days
+                durata_media = df_won_kpi["giorni_ciclo"].mean()
+
+        c1, c2, c3, c4 = st.columns(4)
+        with c1:
+            st.metric("Totale opportunità", int(tot_opp))
+        with c2:
+            st.metric("Win rate complessivo", f"{win_rate:.1f}%")
+        with c3:
+            st.metric(
+                "Valore pipeline aperta",
+                f"€ {valore_pipeline:,.0f}".replace(",", "."),
+            )
+        with c4:
+            st.metric(
+                "Durata media ciclo",
+                f"{durata_media:.1f} giorni" if durata_media is not None else "n/d",
+            )
+
     # --- LEAD PER CAMPAGNA (UTM) ---
     st.subheader("Lead per campagna (UTM)")
 
