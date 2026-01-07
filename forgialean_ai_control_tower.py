@@ -1921,6 +1921,7 @@ with st.expander(header, expanded=expanded_default):
     st.markdown("**Pianifica prossima azione**")
     ...
 
+
                 col_na1, col_na2 = st.columns(2)
                 with col_na1:
                     nuova_data = st.date_input(
