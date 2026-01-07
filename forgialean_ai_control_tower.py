@@ -2108,6 +2108,49 @@ def page_crm_sales():
         )
 
     # =========================
+    # SINTESI ATTIVITÀ COMMERCIALI
+    # =========================
+    st.markdown("---")
+    st.subheader("🧮 Sintesi attività commerciali")
+
+    today = pd.to_datetime("today").normalize()
+
+    df_act = df_opps.copy()
+    if "data_prossima_azione" in df_act.columns:
+        df_act["data_prossima_azione"] = pd.to_datetime(df_act["data_prossima_azione"])
+
+        # filtro opzionale per owner
+        owner_opt = ["Tutti"] + sorted(
+            df_act["owner"].dropna().astype(str).unique().tolist()
+        )
+        f_owner_act = st.selectbox(
+            "Filtro owner attività", owner_opt, key="f_owner_act"
+        )
+
+        if f_owner_act != "Tutti":
+            df_act = df_act[df_act["owner"] == f_owner_act]
+
+        future = df_act[df_act["data_prossima_azione"] > today]
+        overdue = df_act[df_act["data_prossima_azione"] < today]
+
+        # se hai un flag/completata, adatta il nome colonna
+        if "completata" in df_act.columns:
+            done_last_7 = df_act[
+                (df_act["completata"] == True)
+                & (df_act["data_prossima_azione"] >= today - pd.Timedelta(days=7))
+                & (df_act["data_prossima_azione"] <= today)
+            ]
+        else:
+            done_last_7 = df_act.iloc[0:0]  # nessun dato disponibile
+
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Azioni future", len(future))
+        c2.metric("Azioni scadute", len(overdue))
+        c3.metric("Azioni completate (7g)", len(done_last_7))
+    else:
+        st.info("Nessuna colonna 'data_prossima_azione' disponibile per la sintesi attività.")
+
+    # =========================
     # AGENDA VENDITORE (tutti i ruoli)
     # =========================
     st.markdown("---")
