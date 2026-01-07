@@ -2506,7 +2506,39 @@ def page_lead_capture():
             session.commit()
             session.refresh(nuova_opp)
 
-        # 3) Notifica Telegram al commerciale
+        # 3) Tracking GA4 lead generato da campagna
+        track_ga4_event(
+            "generate_lead",
+            {
+                "lead_type": "campagna_online",
+                "client_name": azienda,
+                "opportunity_id": str(nuova_opp.opportunity_id),
+                "utm_source": utm_source or "",
+                "utm_medium": utm_medium or "",
+                "utm_campaign": utm_campaign or "",
+                "utm_content": utm_content or "",
+                "value": 0.0,
+                "currency": "EUR",
+            },
+            client_id=None,
+        )
+
+        # 4) Tracking Facebook Lead da campagna
+        track_facebook_event(
+            "Lead",
+            {
+                "value": 0.0,
+                "currency": "EUR",
+                "content_name": f"Lead form campagna - {azienda}",
+                "content_category": "Lead da campagna",
+                "utm_source": utm_source or "",
+                "utm_medium": utm_medium or "",
+                "utm_campaign": utm_campaign or "",
+                "utm_content": utm_content or "",
+            },
+        )
+
+        # 5) Notifica Telegram al commerciale
         try:
             testo_msg = (
                 f"📥 Nuovo LEAD da form\n"
@@ -2526,13 +2558,12 @@ def page_lead_capture():
             f"Richiesta ricevuta. Ti contattiamo a breve. (ID opportunità: {nuova_opp.opportunity_id})"
         )
 
-        # 4) Deep-link al CRM
+        # 6) Deep-link al CRM
         base_url = "https://forgialean.streamlit.app"
         crm_url = f"{base_url}?page=crm&opp_id={nuova_opp.opportunity_id}"
         st.markdown(
             f"[Apri subito la scheda nel CRM]({crm_url})"
         )
-
 # --------------------------------------------------------------------
 # PAGINA: TRENO VENDITE GUIDATO (7 VAGONI) + UPDATE CRM
 # --------------------------------------------------------------------
