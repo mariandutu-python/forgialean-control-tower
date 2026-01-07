@@ -1971,6 +1971,22 @@ def page_crm_sales():
                 "N. opportunità aperte",
                 int(df_open.shape[0]),
             )
+    # KPI attività per opportunità aperta (azioni future)
+    if "data_prossima_azione" in df_opps.columns:
+        df_future_actions = df_opps[
+            (df_opps["stato_opportunita"] == "aperta")
+            & pd.notnull(df_opps["data_prossima_azione"])
+        ].copy()
+        num_future_actions = len(df_future_actions)
+        num_open_opps = len(df_open)
+
+        if num_open_opps > 0:
+            act_per_opp = num_future_actions / num_open_opps
+            st.metric(
+                "Azioni future per opportunità aperta",
+                f"{act_per_opp:.2f}",
+            )
+
     # KPI win rate complessivo (solo opportunità chiuse)
     df_closed = df_opps[df_opps["stato_opportunita"].isin(["vinta", "persa"])].copy()
     if not df_closed.empty:
