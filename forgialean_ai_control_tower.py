@@ -1672,6 +1672,39 @@ def page_crm_sales():
         st.info("Nessun dato UTM disponibile sui lead.")
 
     # =========================
+    # REPORT CAMPAGNE (UTM)
+    # =========================
+    if "utm_campaign" in df_opps.columns and not df_opps.empty:
+        st.markdown("---")
+        st.subheader("📊 Lead & opportunità per campagna (UTM)")
+
+        df_camp = df_opps.copy()
+        df_camp["utm_campaign"] = df_camp["utm_campaign"].fillna("(no campaign)")
+
+        agg = (
+            df_camp.groupby("utm_campaign")
+            .agg(
+                lead_tot=("opportunity_id", "count"),
+                valore_tot=("valore_stimato", "sum"),
+                vinte=("stato_opportunita", lambda s: (s == "vinta").sum()),
+            )
+            .reset_index()
+        )
+        agg["win_rate_%"] = agg.apply(
+            lambda r: 100 * r["vinte"] / r["lead_tot"] if r["lead_tot"] else 0,
+            axis=1,
+        )
+
+        st.dataframe(
+            agg.sort_values("lead_tot", ascending=False).style.format(
+                {"valore_tot": "{:,.0f}", "win_rate_%": "{:,.1f}"}
+            ),
+            use_container_width=True,
+        )
+    else:
+        st.info("Nessun dato campagne disponibile sulle opportunità.")
+
+    # =========================
     # FORM INSERIMENTO OPPORTUNITÀ
     # =========================
     st.subheader("➕ Inserisci nuova opportunità")
