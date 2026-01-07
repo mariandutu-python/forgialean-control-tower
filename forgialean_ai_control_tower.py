@@ -2115,6 +2115,29 @@ def page_crm_sales():
     if df_f.empty:
         st.info("Nessuna opportunità trovata con i filtri selezionati.")
     else:
+        # === LISTA COMPATTA OPPORTUNITÀ (TABELLARE) ===
+        st.markdown("**Vista tabellare pipeline**")
+
+        cols_list = [
+            "opportunity_id",
+            "Cliente",
+            "nome_opportunita",
+            "fase_pipeline",
+            "stato_opportunita",
+            "owner",
+            "valore_stimato",
+            "data_chiusura_prevista",
+            "data_prossima_azione",
+        ]
+        cols_list = [c for c in cols_list if c in df_f.columns]
+
+        df_list = df_f[cols_list].copy()
+        st.dataframe(df_list, hide_index=True, use_container_width=True)
+
+        st.markdown("---")
+        st.markdown("**Dettaglio opportunità**")
+
+        # === DETTAGLIO CON EXPANDER ===
         for _, row in df_f.iterrows():
             expanded_default = bool(
                 selected_opp is not None and row["opportunity_id"] == opp_id
@@ -2214,64 +2237,6 @@ def page_crm_sales():
                                 session.commit()
                         st.success("Nuova prossima azione salvata.")
                         st.rerun()
-
-    if {"fase_pipeline", "valore_stimato"}.issubset(df_f.columns) and not df_f.empty:
-        st.subheader("📈 Valore opportunità per fase")
-        pivot = df_f.groupby("fase_pipeline")["valore_stimato"].sum().reset_index()
-        fig_fase = px.bar(
-            pivot,
-            x="fase_pipeline",
-            y="valore_stimato",
-            title="Valore totale per fase pipeline",
-            text="valore_stimato",
-        )
-        fig_fase.update_traces(texttemplate="€ %{y:,.0f}", textposition="outside")
-        fig_fase.update_layout(yaxis_title="Valore (€)")
-        st.plotly_chart(fig_fase, use_container_width=True)
-    if {"fase_pipeline", "valore_stimato"}.issubset(df_f.columns) and not df_f.empty:
-        st.subheader("📈 Valore opportunità per fase")
-        pivot = df_f.groupby("fase_pipeline")["valore_stimato"].sum().reset_index()
-        fig_fase = px.bar(
-            pivot,
-            x="fase_pipeline",
-            y="valore_stimato",
-            title="Valore totale per fase pipeline",
-            text="valore_stimato",
-        )
-        fig_fase.update_traces(texttemplate="€ %{y:,.0f}", textposition="outside")
-        fig_fase.update_layout(yaxis_title="Valore (€)")
-        st.plotly_chart(fig_fase, use_container_width=True)
-
-    # =========================
-    # REPORT CAMPAGNE (UTM)
-    # =========================
-    if "utm_campaign" in df_opps.columns and not df_opps.empty:
-        st.markdown("---")
-        st.subheader("📊 Lead & opportunità per campagna (UTM)")
-
-        df_camp = df_opps.copy()
-        df_camp["utm_campaign"] = df_camp["utm_campaign"].fillna("(no campaign)")
-
-        agg = (
-            df_camp.groupby("utm_campaign")
-            .agg(
-                lead_tot=("opportunity_id", "count"),
-                valore_tot=("valore_stimato", "sum"),
-                vinte=("stato_opportunita", lambda s: (s == "vinta").sum()),
-            )
-            .reset_index()
-        )
-        agg["win_rate_%"] = agg.apply(
-            lambda r: 100 * r["vinte"] / r["lead_tot"] if r["lead_tot"] else 0,
-            axis=1,
-        )
-
-        st.dataframe(
-            agg.sort_values("lead_tot", ascending=False).style.format(
-                {"valore_tot": "{:,.0f}", "win_rate_%": "{:,.1f}"}
-            )
-        )
-
     # =========================
     # SINTESI ATTIVITÀ COMMERCIALI
     # =========================
