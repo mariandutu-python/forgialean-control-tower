@@ -4692,8 +4692,15 @@ st.markdown("---")
             ).tolist()
             cliente_filter = st.selectbox("Cliente", clienti_labels, index=0)
     with col_f5:
-        anno_filter = st.selectbox("Anno fattura", ["tutti"] + [str(y) for y in range(2023, date.today().year + 1)], index=0)
+        anno_filter = st.selectbox(
+            "Anno fattura",
+            ["tutti"] + [str(y) for y in range(2023, date.today().year + 1)],
+            index=0,
+        )
 
+    # -------------------------
+    # CARICO FATTURE DAL DB
+    # -------------------------
     with get_session() as session:
         invoices = session.exec(select(Invoice)).all()
 
@@ -4703,27 +4710,42 @@ st.markdown("---")
 
     df_inv = pd.DataFrame([i.__dict__ for i in invoices])
     df_inv["data_fattura"] = pd.to_datetime(df_inv["data_fattura"], errors="coerce")
-with get_session() as session:
-    commesse_all = session.exec(select(ProjectCommessa)).all()
-    fasi_all = session.exec(select(TaskFase)).all()
 
-df_comm_all = pd.DataFrame([c.__dict__ for c in commesse_all]) if commesse_all else pd.DataFrame()
-df_fasi_all = pd.DataFrame([f.__dict__ for f in fasi_all]) if fasi_all else pd.DataFrame()
+    # -------------------------
+    # MERGE COMMESSE / FASI
+    # -------------------------
+    with get_session() as session:
+        commesse_all = session.exec(select(ProjectCommessa)).all()
+        fasi_all = session.exec(select(TaskFase)).all()
 
-if not df_comm_all.empty and "commessa_id" in df_inv.columns:
-    df_inv = df_inv.merge(
-        df_comm_all[["commessa_id", "cod_commessa"]],
-        how="left",
-        on="commessa_id",
-    )
+    df_comm_all = pd.DataFrame([c.__dict__ for c in commesse_all]) if commesse_all else pd.DataFrame()
+    df_fasi_all = pd.DataFrame([f.__dict__ for f in fasi_all]) if fasi_all else pd.DataFrame()
 
-if not df_fasi_all.empty and "fase_id" in df_inv.columns:
-    df_inv = df_inv.merge(
-        df_fasi_all[["fase_id", "nome_fase"]],
-        how="left",
-        on="fase_id",
-    )
-    # Applica filtri
+    if not df_comm_all.empty and "commessa_id" in df_inv.columns:
+        df_inv = df_inv.merge(
+            df_comm_all[["commessa_id", "cod_commessa"]],
+            how="left",
+            on="commessa_id",
+        )
+
+    if not df_fasi_all.empty and "fase_id" in df_inv.columns:
+        df_inv = df_inv.merge(
+            df_fasi_all[["fase_id", "nome_fase"]],
+            how="left",
+            on="fase_id",
+        )
+
+    # -------------------------
+    # FILTRO PER COMMESSA
+    # -------------------------
+    commessa_filter = "tutte"
+    if "cod_commessa" in df_inv.columns:
+        commesse_opts = ["tutte"] + sorted(df_inv["cod_commessa"].dropna().unique().tolist())
+        commessa_filter = st.selectbox("Commessa", commesse_opts, index=0)
+
+    # -------------------------
+    # APPLICA FILTRI
+    # -------------------------
     if data_da:
         df_inv = df_inv[df_inv["data_fattura"] >= pd.to_datetime(data_da)]
     if data_a:
@@ -4740,27 +4762,31 @@ if not df_fasi_all.empty and "fase_id" in df_inv.columns:
         df_inv["anno"] = df_inv["data_fattura"].dt.year
         df_inv = df_inv[df_inv["anno"] == int(anno_filter)]
 
+    if commessa_filter != "tutte" and "cod_commessa" in df_inv.columns:
+        df_inv = df_inv[df_inv["cod_commessa"] == commessa_filter]
+
     if df_inv.empty:
         st.info("Nessuna fattura trovata con i filtri selezionati.")
         return
 
-    st.dataframe(df_inv)
+    # -------------------------
+    # VISTA TABELLA PULITA
+    # -------------------------
+    cols_show = [
+        "invoice_id",
+        "num_fattura",
+        "data_fattura",
+        "importo_totale",
+        "stato_pagamento",
+        "cod_commessa",
+        "nome_fase",
+    ]
+    cols_show = [c for c in cols_show if c in df_inv.columns]
+    st.dataframe(df_inv[cols_show])
 
-    if not invoices:
-        st.info("Nessuna fattura registrata.")
-        return
-
-    df_inv = pd.DataFrame([i.__dict__ for i in invoices])
-    df_inv["data_fattura"] = pd.to_datetime(df_inv["data_fattura"], errors="coerce")
-
-    if data_da:
-        df_inv = df_inv[df_inv["data_fattura"] >= pd.to_datetime(data_da)]
-    if data_a:
-        df_inv = df_inv[df_inv["data_fattura"] <= pd.to_datetime(data_a)]
-
-    st.dataframe(df_inv)
-
-    # KPI base: totale fatturato per anno
+    # -------------------------
+    # KPI BASE: TOTALE PER ANNO
+    # -------------------------
     if {"data_fattura", "importo_totale"}.issubset(df_inv.columns):
         df_inv["data_fattura"] = pd.to_datetime(df_inv["data_fattura"], errors="coerce")
         df_inv["anno"] = df_inv["data_fattura"].dt.year
@@ -4869,17 +4895,23 @@ if not df_fasi_all.empty and "fase_id" in df_inv.columns:
                     obj.data_incasso = data_incasso_e if stato_pagamento_e == "incassata" else None
                     session.add(obj)
                     session.commit()
-            st.success("Fattura aggiornata.")
-            st.rerun()
+        st.success("Fattura aggiornata.")
+        st.rerun()
 
     if delete_clicked:
         with get_session() as session:
             obj = session.get(Invoice, inv_id_sel)
             if obj:
-                session.delete(obj)
-                session.commit()
-        st.success("Fattura eliminata.")
-        st.rerun()
+                pays_linked = session.exec(
+                    select(Payment).where(Payment.invoice_id == inv_id_sel)
+                ).all()
+                if pays_linked:
+                    st.warning("Impossibile eliminare: esistono incassi collegati a questa fattura.")
+                else:
+                    session.delete(obj)
+                    session.commit()
+                    st.success("Fattura eliminata.")
+                    st.rerun()
 
     if export_xml_clicked:
         inv = inv_obj
@@ -4932,7 +4964,6 @@ if not df_fasi_all.empty and "fase_id" in df_inv.columns:
         else:
             aliquota_iva = 22.0
 
-        # Descrizione riga (per ora fissa, ma parametrizzabile)
         descrizione_riga = "Servizi di consulenza ForgiaLean"
 
         xml_content = f"""<?xml version="1.0" encoding="UTF-8"?>
