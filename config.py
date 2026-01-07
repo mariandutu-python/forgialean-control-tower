@@ -98,6 +98,7 @@ PAGES_BY_ROLE = {
         "Clienti",
         "CRM & Vendite",
         "Treno vendite",
+        "Lead da campagne", 
         "Finanza / Fatture",
         "Finanza / Pagamenti",
         "Incassi / Scadenze",

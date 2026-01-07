@@ -2358,6 +2358,130 @@ class StepOutcome(str, Enum):
     APPROFONDISCI = "approfondisci"
     RINVIA = "rinvia"
 
+def page_lead_capture():
+    """
+    Pagina pubblica/semipubblica per catturare lead da campagne online.
+    Crea Client (se mancante) + Opportunity collegata con UTM.
+    """
+
+    # Cattura UTM dall'URL e li mette in session_state
+    capture_utm_params()
+
+    st.title("📥 Richiedi una call con ForgiaLean")
+
+    # Leggi eventuali UTM già in session_state
+    utm_source = st.session_state.get("utm_source")
+    utm_medium = st.session_state.get("utm_medium")
+    utm_campaign = st.session_state.get("utm_campaign")
+    utm_content = st.session_state.get("utm_content")
+
+    st.caption(
+        "Compila il form e ti ricontattiamo per una call di analisi su produzione, OEE e margini."
+    )
+
+    with st.form("lead_capture_form"):
+        col1, col2 = st.columns(2)
+        with col1:
+            azienda = st.text_input("Azienda *")
+            nome = st.text_input("Nome e cognome *")
+            email = st.text_input("Email *")
+        with col2:
+            telefono = st.text_input("Telefono (facoltativo)")
+            ruolo = st.text_input("Ruolo (facoltativo)")
+
+        note = st.text_area(
+            "Contesto / cosa vorresti migliorare?",
+            height=120,
+        )
+
+        accetta_privacy = st.checkbox(
+            "Ho letto e accetto l'informativa privacy", value=False
+        )
+
+        submitted = st.form_submit_button("📨 Invia richiesta")
+
+    if submitted:
+        # Validazioni base
+        if not azienda.strip() or not nome.strip() or not email.strip():
+            st.warning("Compila almeno Azienda, Nome e Email.")
+            return
+        if not accetta_privacy:
+            st.warning("Devi accettare l'informativa privacy per procedere.")
+            return
+
+        # 1) Crea / trova Client
+        with get_session() as session:
+            # Cerca client per ragione_sociale (case-insensitive molto semplice)
+            existing_client = session.exec(
+                select(Client).where(Client.ragione_sociale == azienda.strip())
+            ).first()
+
+            if existing_client:
+                client = existing_client
+            else:
+                client = Client(
+                    ragione_sociale=azienda.strip(),
+                    referente=nome.strip(),
+                    email=email.strip(),
+                    telefono=telefono.strip() or None,
+                    note=note or None,
+                )
+                session.add(client)
+                session.commit()
+                session.refresh(client)
+
+            # 2) Crea Opportunity collegata
+            nuova_opp = Opportunity(
+                client_id=client.client_id,
+                nome_opportunita=f"Lead da campagna - {azienda.strip()}",
+                fase_pipeline="Lead pre-qualificato (MQL)",
+                owner=None,  # opzionale: puoi sostituire con owner di default
+                valore_stimato=0.0,  # opzionale: stimare o lasciare 0
+                probabilita=10.0,
+                data_apertura=date.today(),
+                data_chiusura_prevista=date.today(),
+                data_prossima_azione=date.today(),
+                tipo_prossima_azione="Telefonata",
+                note_prossima_azione=(
+                    f"Lead da form: {note}\n"
+                    f"Nome: {nome}, Email: {email}, Tel: {telefono}, Ruolo: {ruolo}"
+                ),
+                stato_opportunita="aperta",
+                utm_source=utm_source,
+                utm_medium=utm_medium,
+                utm_campaign=utm_campaign,
+                utm_content=utm_content,
+            )
+            session.add(nuova_opp)
+            session.commit()
+            session.refresh(nuova_opp)
+
+        # 3) Notifica Telegram al commerciale
+        try:
+            testo_msg = (
+                f"📥 Nuovo LEAD da form\n"
+                f"Azienda: {azienda}\n"
+                f"Nome: {nome}\n"
+                f"Email: {email}\n"
+                f"Telefono: {telefono}\n"
+                f"Ruolo: {ruolo}\n\n"
+                f"Campagna: {utm_campaign} | Sorgente: {utm_source}/{utm_medium}\n"
+                f"Opportunity ID: {nuova_opp.opportunity_id}"
+            )
+            send_telegram_message(testo_msg)  # usa il tuo wrapper esistente
+        except Exception as e:
+            st.warning(f"Lead creato, ma Telegram ha dato errore: {e}")
+
+        st.success(
+            f"Richiesta ricevuta. Ti contattiamo a breve. (ID opportunità: {nuova_opp.opportunity_id})"
+        )
+
+        # 4) Deep-link al CRM
+        base_url = "https://forgialean.streamlit.app"
+        crm_url = f"{base_url}?page=crm&opp_id={nuova_opp.opportunity_id}"
+        st.markdown(
+            f"[Apri subito la scheda nel CRM]({crm_url})"
+        )
 
 # --------------------------------------------------------------------
 # PAGINA: TRENO VENDITE GUIDATO (7 VAGONI) + UPDATE CRM
@@ -6847,6 +6971,7 @@ PAGES = {
     "Clienti": page_clients,
     "CRM & Vendite": page_crm_sales,
     "Treno vendite": page_sales_train,
+    "Lead da campagne": page_lead_capture,
     "Finanza / Fatture": page_finance_invoices,    # pagina fatture
     "Finanza / Pagamenti": page_finance_payments,  # se è una pagina distinta
     "Incassi / Scadenze": page_payments,
