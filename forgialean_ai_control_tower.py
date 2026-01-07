@@ -1971,6 +1971,20 @@ def page_crm_sales():
                 "N. opportunità aperte",
                 int(df_open.shape[0]),
             )
+    # KPI durata ciclo di vendita (solo opportunità vinte)
+    df_won = df_opps[df_opps["stato_opportunita"] == "vinta"].copy()
+    if not df_won.empty and {"data_apertura", "data_chiusura_prevista"}.issubset(df_won.columns):
+        df_won["data_apertura"] = pd.to_datetime(df_won["data_apertura"])
+        df_won["data_chiusura_prevista"] = pd.to_datetime(df_won["data_chiusura_prevista"])
+        df_won["giorni_ciclo"] = (
+            df_won["data_chiusura_prevista"] - df_won["data_apertura"]
+        ).dt.days
+
+        durata_media = df_won["giorni_ciclo"].mean()
+        st.metric(
+            "Durata media ciclo di vendita",
+            f"{durata_media:.1f} giorni",
+        )
 
     col_c, col1, col2 = st.columns(3)
 
