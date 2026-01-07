@@ -2235,8 +2235,23 @@ def page_crm_sales():
         c1.metric("Azioni future", len(future))
         c2.metric("Azioni scadute", len(overdue))
         c3.metric("Azioni completate (7g)", len(done_last_7))
+
+        # Distribuzione azioni future per owner
+        if not future.empty and "owner" in future.columns:
+            st.subheader("Azioni future per owner")
+            azioni_owner = (
+                future["owner"]
+                .fillna("Senza owner")
+                .astype(str)
+                .value_counts()
+                .reset_index()
+            )
+            azioni_owner.columns = ["owner", "num_azioni_future"]
+            st.dataframe(azioni_owner, hide_index=True, use_container_width=True)
     else:
-        st.info("Nessuna colonna 'data_prossima_azione' disponibile per la sintesi attività.")
+        st.info(
+            "Nessuna colonna 'data_prossima_azione' disponibile per la sintesi attività."
+        )
 
     # =========================
     # AGENDA VENDITORE (tutti i ruoli)
