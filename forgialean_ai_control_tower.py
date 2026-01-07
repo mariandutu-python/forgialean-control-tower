@@ -1897,30 +1897,28 @@ def page_crm_sales():
                 f"{row['nome_opportunita']} ({row['stato_opportunita']})"
             )
 
-with st.expander(header, expanded=expanded_default):
-    st.write(f"Fase pipeline: {row['fase_pipeline']}")
-    st.write(f"Owner: {row.get('owner', '')}")
-    st.write(f"Valore stimato: {row['valore_stimato']} €")
-    st.write(f"Probabilità: {row['probabilita']} %")
-    st.write(f"Data apertura: {row['data_apertura']}")
-    st.write(f"Data chiusura prevista: {row['data_chiusura_prevista']}")
-    st.write(f"Data prossima azione: {row.get('data_prossima_azione', '')}")
-    st.write(f"Tipo prossima azione: {row.get('tipo_prossima_azione', '')}")
-    st.write(
-        f"Note prossima azione: {row.get('note_prossima_azione', '')}"
-    )
+            with st.expander(header, expanded=expanded_default):
+                st.write(f"Fase pipeline: {row['fase_pipeline']}")
+                st.write(f"Owner: {row.get('owner', '')}")
+                st.write(f"Valore stimato: {row['valore_stimato']} €")
+                st.write(f"Probabilità: {row['probabilita']} %")
+                st.write(f"Data apertura: {row['data_apertura']}")
+                st.write(f"Data chiusura prevista: {row['data_chiusura_prevista']}")
+                st.write(f"Data prossima azione: {row.get('data_prossima_azione', '')}")
+                st.write(f"Tipo prossima azione: {row.get('tipo_prossima_azione', '')}")
+                st.write(
+                    f"Note prossima azione: {row.get('note_prossima_azione', '')}"
+                )
 
-    # --- INFO UTM CAMPAGNA ---
-    st.markdown("**Dati campagna (UTM)**")
-    st.write(f"utm_source: {row.get('utm_source', '')}")
-    st.write(f"utm_medium: {row.get('utm_medium', '')}")
-    st.write(f"utm_campaign: {row.get('utm_campaign', '')}")
-    st.write(f"utm_content: {row.get('utm_content', '')}")
+                # --- INFO UTM CAMPAGNA ---
+                st.markdown("**Dati campagna (UTM)**")
+                st.write(f"utm_source: {row.get('utm_source', '')}")
+                st.write(f"utm_medium: {row.get('utm_medium', '')}")
+                st.write(f"utm_campaign: {row.get('utm_campaign', '')}")
+                st.write(f"utm_content: {row.get('utm_content', '')}")
 
-    st.markdown("---")
-    st.markdown("**Pianifica prossima azione**")
-    ...
-
+                st.markdown("---")
+                st.markdown("**Pianifica prossima azione**")
 
                 col_na1, col_na2 = st.columns(2)
                 with col_na1:
