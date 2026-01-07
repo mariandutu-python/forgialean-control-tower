@@ -1672,7 +1672,7 @@ def page_crm_sales():
         st.info("Nessun dato UTM disponibile sui lead.")
 
     # =========================
-    # REPORT CAMPAGNE (UTM)
+    # REPORT CAMPAGNE (UTM) - OPPORTUNITÀ + FUNNEL
     # =========================
     if "utm_campaign" in df_opps.columns and not df_opps.empty:
         st.markdown("---")
@@ -1681,6 +1681,7 @@ def page_crm_sales():
         df_camp = df_opps.copy()
         df_camp["utm_campaign"] = df_camp["utm_campaign"].fillna("(no campaign)")
 
+        # report base lead/opportunità
         agg = (
             df_camp.groupby("utm_campaign")
             .agg(
@@ -1701,6 +1702,70 @@ def page_crm_sales():
             ),
             use_container_width=True,
         )
+
+        # --- STATO CAMPAGNA NEL FUNNEL ---
+        st.subheader("Stato campagna nel funnel")
+
+        df_c = df_camp.copy()
+        df_c["stato_opportunita"] = df_c["stato_opportunita"].fillna("").astype(str)
+        df_c["is_won"] = df_c["stato_opportunita"].str.lower().isin(
+            ["vinta", "closed won"]
+        )
+        df_c["is_open"] = df_c["stato_opportunita"].str.lower().isin(
+            ["aperta", "open"]
+        )
+
+        camp_funnel = (
+            df_c.groupby("utm_campaign")
+            .agg(
+                opp_aperte=("is_open", "sum"),
+                opp_vinte=("is_won", "sum"),
+                valore_vinto=(
+                    "valore_stimato",
+                    lambda v: v[df_c.loc[v.index, "is_won"]].sum(),
+                ),
+            )
+            .reset_index()
+        )
+
+        st.dataframe(
+            camp_funnel.sort_values("opp_vinte", ascending=False).style.format(
+                {"valore_vinto": "{:,.0f}"}
+            ),
+            use_container_width=True,
+        )
+
+        # --- CONVERSIONI PRONTE PER EXPORT (GOOGLE/META OFFLINE) ---
+        st.subheader("Conversioni da campagne (opportunità vinte)")
+
+        df_conv = df_c[df_c["is_won"]].copy()
+        if not df_conv.empty:
+            cols_conv = [
+                "opportunity_id",
+                "Cliente" if "Cliente" in df_conv.columns else "client_id",
+                "valore_stimato",
+                "data_chiusura_prevista"
+                if "data_chiusura_prevista" in df_conv.columns
+                else "data_apertura",
+                "utm_source",
+                "utm_medium",
+                "utm_campaign",
+                "utm_content",
+            ]
+            cols_conv = [c for c in cols_conv if c in df_conv.columns]
+
+            st.dataframe(
+                df_conv[cols_conv].rename(
+                    columns={
+                        "valore_stimato": "value",
+                        "data_chiusura_prevista": "conversion_date",
+                        "data_apertura": "conversion_date",
+                    }
+                ),
+                use_container_width=True,
+            )
+        else:
+            st.info("Nessuna opportunità vinta legata a campagne UTM.")
     else:
         st.info("Nessun dato campagne disponibile sulle opportunità.")
 
