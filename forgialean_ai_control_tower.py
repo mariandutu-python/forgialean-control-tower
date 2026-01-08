@@ -1023,7 +1023,7 @@ def page_presentation():
                     "note": note,
                 }
 
-                st.success("✅ Perfetto! Ti contatterò entro 24h secondo la tua disponibilità!")
+                st.success("✅ Perfetto! Ti contatterò secondo la tua disponibilità!")
                 st.balloons()
                 st.markdown(
                     "### 📋 Prossimi passi:\n"
