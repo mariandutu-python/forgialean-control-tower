@@ -1431,7 +1431,137 @@ def page_overview():
     df_invoices = pd.DataFrame(invoices) if invoices else pd.DataFrame()
     df_commesse = pd.DataFrame(commesse) if commesse else pd.DataFrame()
 
-    # Mostra metriche
+    # ===== KPI PRINCIPALI AZIENDALI =====
+    st.subheader("📊 KPI Principali")
+    
+    anno_kpi = date.today().year
+    
+    # Carica dati finanziari
+    with get_session() as session:
+        invoices_db = session.exec(select(Invoice)).all()
+        expenses_db = session.exec(select(Expense)).all()
+        tax_config = session.exec(select(TaxConfig).where(TaxConfig.year == anno_kpi)).first()
+        tax_deadlines = session.exec(select(TaxDeadline).where(TaxDeadline.year == anno_kpi)).all()
+        inps_contrib = session.exec(select(InpsContribution).where(InpsContribution.year == anno_kpi)).all()
+    
+    # Calcola ricavi
+    df_inv = pd.DataFrame([i.__dict__ for i in (invoices_db or [])])
+    if not df_inv.empty:
+        df_inv["data_rif"] = pd.to_datetime(
+            df_inv["data_incasso"].fillna(df_inv["data_fattura"]),
+            errors="coerce",
+        )
+        df_inv = df_inv.dropna(subset=["data_rif"])
+        df_inv["anno"] = df_inv["data_rif"].dt.year
+        ricavi_anno = float(df_inv.loc[df_inv["anno"] == anno_kpi, "importo_totale"].sum())
+    else:
+        ricavi_anno = 0.0
+    
+    # Calcola costi
+    df_exp = pd.DataFrame([e.__dict__ for e in (expenses_db or [])])
+    if not df_exp.empty:
+        df_exp["data_rif"] = pd.to_datetime(
+            df_exp["data_pagamento"].fillna(df_exp["data"]),
+            errors="coerce",
+        )
+        df_exp = df_exp.dropna(subset=["data_rif"])
+        df_exp["anno"] = df_exp["data_rif"].dt.year
+        costi_anno = float(df_exp.loc[df_exp["anno"] == anno_kpi, "importo_totale"].sum())
+    else:
+        costi_anno = 0.0
+    
+    margine_lordo = ricavi_anno - costi_anno
+    margine_perc = (margine_lordo / ricavi_anno * 100.0) if ricavi_anno > 0 else 0.0
+    
+    # Calcola imposte/INPS dovuti e pagati
+    imposte_dovute = sum(d.estimated_amount or 0.0 for d in (tax_deadlines or []))
+    imposte_pagate = sum(d.amount_paid or 0.0 for d in (tax_deadlines or []))
+    imposte_residue = imposte_dovute - imposte_pagate
+    
+    inps_dovuti = sum(c.amount_due or 0.0 for c in (inps_contrib or []))
+    inps_pagati = sum(c.amount_paid or 0.0 for c in (inps_contrib or []))
+    inps_residui = inps_dovuti - inps_pagati
+    
+    utile_netto = margine_lordo - imposte_dovute - inps_dovuti
+    
+    # Mostra metriche in griglia
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("💰 Ricavi anno", f"€ {ricavi_anno:,.0f}".replace(",", "."))
+    with col2:
+        st.metric("📉 Costi anno", f"€ {costi_anno:,.0f}".replace(",", "."))
+    with col3:
+        delta_color = "normal" if margine_perc > 20 else "off"
+        st.metric(
+            "📈 Margine lordo",
+            f"€ {margine_lordo:,.0f} ({margine_perc:.1f}%)".replace(",", "."),
+            delta=None,
+            delta_color=delta_color,
+        )
+    with col4:
+        st.metric("💎 Utile netto (teorico)", f"€ {utile_netto:,.0f}".replace(",", "."))
+    
+    col5, col6, col7, col8 = st.columns(4)
+    with col5:
+        st.metric("🏛️ Imposte dovute", f"€ {imposte_dovute:,.0f}".replace(",", "."))
+    with col6:
+        st.metric("✅ Imposte pagate", f"€ {imposte_pagate:,.0f}".replace(",", "."))
+    with col7:
+        st.metric("⚠️ Imposte residue", f"€ {imposte_residue:,.0f}".replace(",", "."))
+    with col8:
+        st.metric("Clienti / Opportunità / Fatture", f"{len(clients)} / {len(opps)} / {len(invoices)}")
+    
+    col9, col10, col11 = st.columns(3)
+    with col9:
+        st.metric("INPS dovuti", f"€ {inps_dovuti:,.0f}".replace(",", "."))
+    with col10:
+        st.metric("INPS pagati", f"€ {inps_pagati:,.0f}".replace(",", "."))
+    with col11:
+        st.metric("INPS residui", f"€ {inps_residui:,.0f}".replace(",", "."))
+    
+    # ===== ALERT CRITICI =====
+    st.markdown("---")
+    st.subheader("🚨 Alert Critici")
+    
+    alerts_critici = []
+    
+    if margine_perc < 20:
+        alerts_critici.append(f"🔴 Margine lordo basso: {margine_perc:.1f}% (target: >20%)")
+    
+    if imposte_residue > 0:
+        giorni_da_saldo = 0
+        for d in (tax_deadlines or []):
+            if d.due_date and (d.estimated_amount or 0.0) - (d.amount_paid or 0.0) > 0:
+                giorni_residui = (d.due_date - date.today()).days
+                if giorni_residui < 0:
+                    alerts_critici.append(f"🔴 Imposta scaduta: {d.type} ({abs(giorni_residui)} giorni in ritardo)")
+                elif giorni_residui <= 7:
+                    alerts_critici.append(f"🟡 Imposta in scadenza: {d.type} ({giorni_residui} giorni)")
+    
+    if inps_residui > 0:
+        for c in (inps_contrib or []):
+            if c.due_date and (c.amount_due or 0.0) - (c.amount_paid or 0.0) > 0:
+                giorni_residui = (c.due_date - date.today()).days
+                if giorni_residui < 0:
+                    alerts_critici.append(f"🔴 INPS scaduto: {c.description} ({abs(giorni_residui)} giorni in ritardo)")
+                elif giorni_residui <= 7:
+                    alerts_critici.append(f"🟡 INPS in scadenza: {c.description} ({giorni_residui} giorni)")
+    
+    if ricavi_anno == 0:
+        alerts_critici.append("🟡 Nessun ricavo registrato per questo anno")
+    
+    if alerts_critici:
+        for alert in alerts_critici:
+            if "🔴" in alert:
+                st.error(alert)
+            else:
+                st.warning(alert)
+    else:
+        st.success("✅ Nessun alert critico. Situazione sotto controllo.")
+    
+    st.markdown("---")
+
+    # Mostra metriche base (clienti, opportunità, ecc.)
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         st.metric("Clienti", len(clients))
