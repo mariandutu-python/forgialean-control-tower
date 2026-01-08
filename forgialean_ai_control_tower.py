@@ -527,6 +527,8 @@ def build_income_statement_monthly(anno_sel: int) -> pd.DataFrame:
         ["Mese", "Proventi", "Costi_spese", "Costi_inps", "Costi_tasse", "Costi_totali", "Risultato_netto"]
     ]
 
+from sqlalchemy import text  # già importato in alto, va bene
+
 def build_cashflow_monthly(anno: int) -> pd.DataFrame:
     """
     Cashflow operativo mensile:
@@ -539,7 +541,7 @@ def build_cashflow_monthly(anno: int) -> pd.DataFrame:
         pays = session.exec(
             select(Payment).where(
                 Payment.payment_date.is_not(None),
-                SQLModel.raw_column("strftime('%Y', payment_date) = :anno"),
+                text("strftime('%Y', payment_date) = :anno"),
             ).params(anno=str(anno))
         ).all()
 
@@ -548,7 +550,7 @@ def build_cashflow_monthly(anno: int) -> pd.DataFrame:
             select(Expense).where(
                 Expense.pagata == True,
                 Expense.data_pagamento.is_not(None),
-                SQLModel.raw_column("strftime('%Y', data_pagamento) = :anno"),
+                text("strftime('%Y', data_pagamento) = :anno"),
             ).params(anno=str(anno))
         ).all()
 
@@ -556,7 +558,7 @@ def build_cashflow_monthly(anno: int) -> pd.DataFrame:
         taxes = session.exec(
             select(TaxDeadline).where(
                 TaxDeadline.payment_date.is_not(None),
-                SQLModel.raw_column("strftime('%Y', payment_date) = :anno"),
+                text("strftime('%Y', payment_date) = :anno"),
             ).params(anno=str(anno))
         ).all()
 
