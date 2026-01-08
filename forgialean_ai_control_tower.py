@@ -8294,7 +8294,7 @@ def main():
         st.session_state["current_page"] = selected_page
         
         # Breadcrumb navigazione
-        render_breadcrumb(section, selected_page)
+        # render_breadcrumb(section, selected_page)
         
         # Esegui la pagina selezionata
         page_func = pages_in_section[selected_page]
