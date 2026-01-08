@@ -5097,13 +5097,14 @@ if uploaded_file is not None and clients:
         st.info("XML FatturaPA di bozza generato. Verifica con un validatore/gestionale prima dell'invio allo SdI.")
 
 def page_operations():
-    st.title("🏭 Operations / Commesse (SQLite)")
     role = st.session_state.get("role", "user")
+
+    st.title("🏭 Operations / Commesse (SQLite)")
 
     # =========================
     # FORM INSERIMENTO COMMESSA
     # =========================
-    st.subheader("➕ Inserisci nuova commessa")
+    st.subheader("📁 Inserisci nuova commessa")
 
     with st.form("new_commessa"):
         col1, col2 = st.columns(2)
@@ -5121,9 +5122,9 @@ def page_operations():
             ore_previste = st.number_input("Ore previste", min_value=0.0, step=1.0)
             costo_previsto = st.number_input("Costo previsto (€)", min_value=0.0, step=100.0)
 
-        submitted_commessa = st.form_submit_button("Salva commessa")
+        submitted = st.form_submit_button("Salva commessa")
 
-    if submitted_commessa:
+    if submitted:
         if not cod_commessa.strip():
             st.warning("Il codice commessa è obbligatorio.")
         else:
@@ -5137,7 +5138,6 @@ def page_operations():
                     ore_previste=ore_previste,
                     ore_consumate=0.0,
                     costo_previsto=costo_previsto,
-                    costo_consuntivo=0.0,
                 )
                 session.add(new_comm)
                 session.commit()
@@ -5225,7 +5225,6 @@ def page_operations():
             col1, col2 = st.columns(2)
             with col1:
                 commessa_label_ts = st.selectbox("Commessa (timesheet)", df_comm_ts["label"].tolist())
-                # filtra le fasi per commessa selezionata
                 commessa_id_ts = int(commessa_label_ts.split(" - ")[0])
                 df_fasi_comm = df_fasi_ts[df_fasi_ts["commessa_id"] == commessa_id_ts]
                 if df_fasi_comm.empty:
@@ -5258,7 +5257,6 @@ def page_operations():
                     )
                     session.add(new_entry)
 
-                    # aggiorna ore_consumate fase
                     total_ore_fase = session.exec(
                         select(TimeEntry.ore).where(TimeEntry.fase_id == fase_id_ts)
                     ).all()
@@ -5268,7 +5266,6 @@ def page_operations():
                     if fase_obj:
                         fase_obj.ore_consumate = somma_fase
 
-                    # aggiorna ore_consumate commessa
                     total_ore_comm = session.exec(
                         select(TimeEntry.ore).where(TimeEntry.commessa_id == commessa_id_ts)
                     ).all()
@@ -5317,7 +5314,6 @@ def page_operations():
     else:
         st.info("Mancano colonne per il grafico ore previste/consumate.")
 
-
     st.markdown("---")
     st.subheader("📋 Fasi / Task commesse")
 
@@ -5349,7 +5345,6 @@ def page_operations():
         df_comm_all = pd.DataFrame([c.__dict__ for c in commesse_all_kpi])
         df_time_all = pd.DataFrame([t.__dict__ for t in time_all_kpi])
 
-        # KPI sintetici
         ore_totali = df_time_all["ore"].sum()
         n_commesse_aperte = df_comm_all[
             df_comm_all["stato_commessa"].isin(["aperta", "in corso"])
@@ -5368,7 +5363,6 @@ def page_operations():
         st.markdown("---")
         st.subheader("📦 Avanzamento commesse")
 
-        # Avanzamento per commessa: ore_consumate vs ore_previste
         df_comm_all["Avanzamento_ore_%"] = df_comm_all.apply(
             lambda r: (r["ore_consumate"] / r["ore_previste"] * 100.0) if r["ore_previste"] > 0 else 0.0,
             axis=1,
@@ -5480,7 +5474,6 @@ def page_operations():
 
             if delete_comm:
                 with get_session() as session:
-                    # opzionale: eliminare anche fasi e timeentry collegati
                     session.exec(delete(TimeEntry).where(TimeEntry.commessa_id == comm_id_sel))
                     session.exec(delete(TaskFase).where(TaskFase.commessa_id == comm_id_sel))
                     obj = session.get(ProjectCommessa, comm_id_sel)
@@ -5557,7 +5550,6 @@ def page_operations():
 
             if delete_fase:
                 with get_session() as session:
-                    # elimina anche timeentry relativi alla fase
                     session.exec(delete(TimeEntry).where(TimeEntry.fase_id == fase_id_sel))
                     obj = session.get(TaskFase, fase_id_sel)
                     if obj:
@@ -5586,7 +5578,6 @@ def page_operations():
                     session.delete(te)
                     session.commit()
 
-                    # ricalcola ore_consumate fase
                     total_ore_fase = session.exec(
                         select(TimeEntry.ore).where(TimeEntry.fase_id == fase_id)
                     ).all()
@@ -5595,7 +5586,6 @@ def page_operations():
                     if fase_obj2:
                         fase_obj2.ore_consumate = somma_fase
 
-                    # ricalcola ore_consumate commessa
                     total_ore_comm = session.exec(
                         select(TimeEntry.ore).where(TimeEntry.commessa_id == comm_id)
                     ).all()
@@ -5607,7 +5597,6 @@ def page_operations():
                     session.commit()
             st.success("Riga timesheet eliminata e ore ricalcolate.")
             st.rerun()
-
 
 def page_people_departments():
     st.title("👥 People & Reparti (SQLite)")
