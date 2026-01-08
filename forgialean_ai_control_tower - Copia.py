@@ -1,4 +1,5 @@
 from datetime import date, timedelta, datetime
+import time
 from pathlib import Path
 import io
 import urllib.parse 
@@ -7,9 +8,13 @@ import pandas as pd
 import plotly.express as px
 import pdfplumber
 from sqlmodel import SQLModel, Field, Session, select, delete
-from finance_utils import build_full_management_balance
-
+from finance_utils import (
+    build_full_management_balance,
+    calcola_imposte_e_inps_normative,
+)
+from sqlalchemy import text
 from config import CACHE_TTL, PAGES_BY_ROLE, APP_NAME, LOGO_PATH, MY_COMPANY_DATA
+from enum import Enum
 
 from db import (
     init_db,
@@ -56,16 +61,34 @@ from cache_functions import (
 )
 
 from tracking import track_ga4_event, track_facebook_event
+from streamlit_calendar import calendar
+import requests
+import smtplib
+from email.mime.text import MIMEText
+
+# === LETTURA SECRETS ===
+TELEGRAM_BOT_TOKEN = st.secrets["tracking"]["TELEGRAM_BOT_TOKEN"]
+TELEGRAM_CHAT_ID = st.secrets["tracking"]["TELEGRAM_CHAT_ID"]
+
+SMTP_SERVER = st.secrets["email"]["SMTP_SERVER"]
+SMTP_PORT = int(st.secrets["email"]["SMTP_PORT"])
+SMTP_USER = st.secrets["email"]["SMTP_USER"]
+SMTP_PASSWORD = st.secrets["email"]["SMTP_PASSWORD"]
+FROM_ADDRESS = st.secrets["email"]["FROM_ADDRESS"]
 
 init_db()
 
 LOGO_PATH = Path("forgialean_logo.png")
 
-# --- Notifiche Telegram ---
-import requests
+def capture_utm_params():
+    """Legge i parametri UTM dall'URL e li mette in session_state."""
+    params = st.query_params
 
-TELEGRAM_BOT_TOKEN = st.secrets["tracking"]["TELEGRAM_BOT_TOKEN"]
-TELEGRAM_CHAT_ID = st.secrets["tracking"]["TELEGRAM_CHAT_ID"]
+    st.session_state["utm_source"] = params.get("utm_source", "")
+    st.session_state["utm_medium"] = params.get("utm_medium", "")
+    st.session_state["utm_campaign"] = params.get("utm_campaign", "")
+    st.session_state["utm_content"] = params.get("utm_content", "")
+
 
 def send_telegram_message(text: str):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
@@ -75,6 +98,35 @@ def send_telegram_message(text: str):
     except Exception:
         # opzionale: puoi loggare su file o ignorare in silenzio
         pass
+
+from datetime import date
+
+def get_opps_di_oggi(session):
+    """Opportunità con data_prossima_azione oggi."""
+    return session.exec(
+        select(Opportunity).where(
+            Opportunity.data_prossima_azione == date.today()
+        )
+    ).all()
+def send_agenda_oggi_telegram():
+    """Manda su Telegram la lista delle azioni di oggi."""
+    with get_session() as session:
+        opps_oggi = get_opps_di_oggi(session)
+
+    if not opps_oggi:
+        st.stop()
+
+    lines = []
+    for o in opps_oggi:
+        riga = f"- {o.nome_opportunita} ({o.data_prossima_azione})"
+        if o.tipo_prossima_azione:
+            riga += f" – {o.tipo_prossima_azione}"
+        if o.note_prossima_azione:
+            riga += f" – {o.note_prossima_azione}"
+        lines.append(riga)
+
+    testo = "Agenda CRM di oggi:\n" + "\n".join(lines)
+    send_telegram_message(testo)
 
 def build_email_body(nome, azienda, email, oee_perc, perdita_euro_turno, fascia):
     if fascia == "critica":
@@ -215,27 +267,18 @@ def calcola_oee_e_perdita(ore_turno, ore_fermi, scarti, velocita, valore_orario)
 
     return oee * 100.0, perdita_euro_turno, fascia
 
-import smtplib
-from email.mime.text import MIMEText
-
 def invia_minireport_oee(email_destinatario: str, subject: str, body: str):
     """
     Invia il mini‑report OEE via email in formato testo/HTML semplice.
     """
-    smtp_server = st.secrets["email"]["SMTP_SERVER"]
-    smtp_port = st.secrets["email"]["SMTP_PORT"]
-    smtp_user = st.secrets["email"]["SMTP_USER"]
-    smtp_password = st.secrets["email"]["SMTP_PASSWORD"]
-    mittente = st.secrets["email"]["FROM_ADDRESS"]
-
     msg = MIMEText(body, "html", "utf-8")
     msg["Subject"] = subject
-    msg["From"] = mittente
+    msg["From"] = FROM_ADDRESS
     msg["To"] = email_destinatario
 
-    with smtplib.SMTP(smtp_server, smtp_port) as server:
+    with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
         server.starttls()
-        server.login(smtp_user, smtp_password)
+        server.login(SMTP_USER, SMTP_PASSWORD)
         server.send_message(msg)
 
 # === FUNZIONE SALDO CASSA GESTIONALE ===
@@ -373,31 +416,36 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
+from sqlalchemy import text  # assicurati che sia importato in testa al file
+
 def build_income_statement_monthly(anno_sel: int) -> pd.DataFrame:
     """Conto Economico gestionale per mese: Proventi, Costi, Netto."""
     with get_session() as session:
         invoices = session.exec(
             select(Invoice).where(
                 Invoice.data_fattura.is_not(None),
-                SQLModel.raw_column("strftime('%Y', data_fattura) = :anno")
+                text("strftime('%Y', data_fattura) = :anno"),
             ).params(anno=str(anno_sel))
         ).all()
+
         expenses = session.exec(
             select(Expense).where(
                 Expense.data.is_not(None),
-                SQLModel.raw_column("strftime('%Y', data) = :anno")
+                text("strftime('%Y', data) = :anno"),
             ).params(anno=str(anno_sel))
         ).all()
+
         inps = session.exec(
             select(InpsContribution).where(
                 InpsContribution.payment_date.is_not(None),
-                SQLModel.raw_column("strftime('%Y', payment_date) = :anno")
+                text("strftime('%Y', payment_date) = :anno"),
             ).params(anno=str(anno_sel))
         ).all()
+
         taxes = session.exec(
             select(TaxDeadline).where(
                 TaxDeadline.payment_date.is_not(None),
-                SQLModel.raw_column("strftime('%Y', payment_date) = :anno")
+                text("strftime('%Y', payment_date) = :anno"),
             ).params(anno=str(anno_sel))
         ).all()
 
@@ -460,14 +508,16 @@ def build_income_statement_monthly(anno_sel: int) -> pd.DataFrame:
 
     mesi_df = pd.DataFrame({"mese": list(range(1, 13))})
 
-    df_ce_mese = (
-        mesi_df
-        .merge(ricavi_mese, on="mese", how="left")
-        .merge(costi_spese_mese, on="mese", how="left")
-        .merge(costi_inps_mese, on="mese", how="left")
-        .merge(costi_tasse_mese, on="mese", how="left")
-        .fillna(0.0)
-    )
+    with pd.option_context("future.no_silent_downcasting", True):
+        df_ce_mese = (
+            mesi_df
+            .merge(ricavi_mese, on="mese", how="left")
+            .merge(costi_spese_mese, on="mese", how="left")
+            .merge(costi_inps_mese, on="mese", how="left")
+            .merge(costi_tasse_mese, on="mese", how="left")
+            .fillna(0.0)
+            .infer_objects(copy=False)
+        )
 
     df_ce_mese["Costi_totali"] = (
         df_ce_mese["Costi_spese"] + df_ce_mese["Costi_inps"] + df_ce_mese["Costi_tasse"]
@@ -478,6 +528,8 @@ def build_income_statement_monthly(anno_sel: int) -> pd.DataFrame:
     return df_ce_mese[
         ["Mese", "Proventi", "Costi_spese", "Costi_inps", "Costi_tasse", "Costi_totali", "Risultato_netto"]
     ]
+
+from sqlalchemy import text  # già importato in alto, va bene
 
 def build_cashflow_monthly(anno: int) -> pd.DataFrame:
     """
@@ -491,7 +543,7 @@ def build_cashflow_monthly(anno: int) -> pd.DataFrame:
         pays = session.exec(
             select(Payment).where(
                 Payment.payment_date.is_not(None),
-                SQLModel.raw_column("strftime('%Y', payment_date) = :anno"),
+                text("strftime('%Y', payment_date) = :anno"),
             ).params(anno=str(anno))
         ).all()
 
@@ -500,7 +552,7 @@ def build_cashflow_monthly(anno: int) -> pd.DataFrame:
             select(Expense).where(
                 Expense.pagata == True,
                 Expense.data_pagamento.is_not(None),
-                SQLModel.raw_column("strftime('%Y', data_pagamento) = :anno"),
+                text("strftime('%Y', data_pagamento) = :anno"),
             ).params(anno=str(anno))
         ).all()
 
@@ -508,7 +560,7 @@ def build_cashflow_monthly(anno: int) -> pd.DataFrame:
         taxes = session.exec(
             select(TaxDeadline).where(
                 TaxDeadline.payment_date.is_not(None),
-                SQLModel.raw_column("strftime('%Y', payment_date) = :anno"),
+                text("strftime('%Y', payment_date) = :anno"),
             ).params(anno=str(anno))
         ).all()
 
@@ -891,6 +943,9 @@ Le informazioni aggregate in questa Nota Integrativa gestionale, insieme ai pros
     )
 
 def page_presentation():
+    from datetime import date, timedelta
+    from sqlmodel import select
+
     # 1) Leggo lo step dalla URL
     query_params = st.query_params.to_dict()
     step = query_params.get("step", "")
@@ -914,28 +969,71 @@ def page_presentation():
 
             note = st.text_area("💬 Note / richieste")
 
-            if st.form_submit_button("🚀 Contattami subito", type="primary"):
-                if not nome.strip() or not telefono.strip() or not email.strip():
-                    st.warning("Compila nome, telefono ed email per poter essere ricontattato.")
-                else:
-                    st.session_state.call_data = {
-                        "nome": nome,
-                        "telefono": telefono,
-                        "email": email,
-                        "disponibilita": disponibilita,
-                        "note": note,
-                    }
-                    st.success("✅ Perfetto! Ti contatterò entro 24h secondo la tua disponibilità!")
-                    st.balloons()
-                    st.markdown(
-                        "### 📋 Prossimi passi:\n"
-                        "1. **Ricevi la chiamata**\n"
-                        "2. **Demo personalizzata**\n"
-                        "3. **Dashboard attiva**"
-                    )
-                    st.stop()
+            submitted_call = st.form_submit_button("🚀 Contattami subito", type="primary")
+
+        if submitted_call:
+            if not nome.strip() or not telefono.strip() or not email.strip():
+                st.warning("Compila nome, telefono ed email per poter essere ricontattato.")
+            else:
+                with get_session() as session:
+                    # 1) Trova il client per email (se esiste)
+                    client = session.exec(
+                        select(Client).where(Client.email == email)
+                    ).first()
+
+                    # 2) Trova l'ultima Opportunity Lead OEE collegata a quel client
+                    opp = None
+                    if client:
+                        opp = session.exec(
+                            select(Opportunity)
+                            .where(Opportunity.client_id == client.client_id)
+                            .where(Opportunity.nome_opportunita.ilike("%Lead OEE%"))
+                            .order_by(Opportunity.data_apertura.desc())
+                        ).first()
+
+                    if opp:
+                        # Aggiorna a Lead qualificato (SQL)
+                        opp.fase_pipeline = "Lead qualificato (SQL)"
+                        opp.probabilita = 50.0
+                        opp.owner = "Marian Dutu"
+                        # se in modello hai data_prossima_azione, puoi usare disponibilita per decidere la data
+                        if hasattr(opp, "data_prossima_azione"):
+                            opp.data_prossima_azione = date.today()
+
+                        extra = (
+                            f"\n\n--- Step call OEE ---\n"
+                            f"Nome: {nome}\n"
+                            f"Telefono: {telefono}\n"
+                            f"Disponibilità: {disponibilita}\n"
+                        )
+                        if note.strip():
+                            extra += f"Note: {note.strip()}\n"
+
+                        if hasattr(opp, "note"):
+                            opp.note = (opp.note or "") + extra
+
+                        session.add(opp)
+                        session.commit()
+
+                st.session_state.call_data = {
+                    "nome": nome,
+                    "telefono": telefono,
+                    "email": email,
+                    "disponibilita": disponibilita,
+                    "note": note,
+                }
+
+                st.success("✅ Perfetto! Ti contatterò entro 24h secondo la tua disponibilità!")
+                st.balloons()
+                st.markdown(
+                    "### 📋 Prossimi passi:\n"
+                    "1. **Ricevi la chiamata**\n"
+                    "2. **Demo personalizzata**\n"
+                    "3. **Dashboard attiva**"
+                )
+                st.stop()
         st.stop()
-        return
+        
 
     # HERO: chi sei e che beneficio dai
     st.title("🏭 Turni lunghi, OEE basso e margini sotto pressione?")
@@ -977,12 +1075,12 @@ ForgiaLean unisce **Black Belt Lean Six Sigma**, **Operations Management** e **D
 - Fermi **-82%**.
 - Circa **28.000 €/anno** di capacità recuperata, scarti dal 9% al 2%.
 """)
+
     # GRAFICI PRIMA / DOPO (esempio fittizio)
     st.subheader("Come cambia la situazione: prima e dopo il progetto")
 
     col_g1, col_g2 = st.columns(2)
 
-    # Dati fittizi per esempio
     df_oee = pd.DataFrame(
         {
             "Fase": ["Prima", "Dopo"],
@@ -1009,7 +1107,7 @@ ForgiaLean unisce **Black Belt Lean Six Sigma**, **Operations Management** e **D
         )
         fig_oee.update_traces(texttemplate="%{y}%", textposition="outside")
         fig_oee.update_layout(showlegend=False)
-        st.plotly_chart(fig_oee, use_container_width=True)
+        st.plotly_chart(fig_oee, width="stretch")
 
     with col_g2:
         fig_fermi = px.bar(
@@ -1023,7 +1121,7 @@ ForgiaLean unisce **Black Belt Lean Six Sigma**, **Operations Management** e **D
         )
         fig_fermi.update_traces(texttemplate="%{y:.1f} h", textposition="outside")
         fig_fermi.update_layout(showlegend=False)
-        st.plotly_chart(fig_fermi, use_container_width=True)
+        st.plotly_chart(fig_fermi, width="stretch")
 
     # DIFFERENZIAZIONE: perché voi
     st.subheader("Perché scegliere ForgiaLean rispetto ad altre soluzioni")
@@ -1047,6 +1145,7 @@ Compilando il form qui sotto riceverai via email un **mini‑report OEE** con:
 
 Fai il primo passo: Prenotare un **Audit 30 minuti + piano personalizzato**.
 """)
+
     st.subheader("Un vantaggio in più: bandi e incentivi 4.0")
 
     st.markdown("""
@@ -1085,6 +1184,7 @@ In questo modo hai sia un **miglioramento operativo concreto**, sia la possibili
 Risultati ottenibili quando c'è impegno congiunto 
 tra direzione, produzione e miglioramento continuo.
 """)
+
     # =====================
     # FORM: RICHIEDI REPORT OEE (visibile a tutti)
     # =====================
@@ -1126,7 +1226,6 @@ tra direzione, produzione e miglioramento continuo.
         submitted = st.form_submit_button("Ottieni il mini‑report OEE")
 
     if submitted:
-        #st.write(f"🔍 DEBUG: nome='{nome}', ...")  # ← PRIMA RIGA
         if not (nome and azienda and email):
             st.error("Nome, azienda ed email sono obbligatori.")
         else:
@@ -1146,31 +1245,36 @@ tra direzione, produzione e miglioramento continuo.
 
             try:
                 with get_session() as session:
-                    # 2) Crea Client
-                    new_client = Client(
-                        ragione_sociale=azienda,
-                        email=email,
-                        canale_acquisizione="Landing OEE",
-                        segmento_cliente="PMI manifatturiera",
-                        data_creazione=date.today(),
-                        stato_cliente="prospect",
-                        paese=None,
-                        settore=None,
-                        piva=None,
-                        cod_fiscale=None,
-                    )
-                    session.add(new_client)
-                    session.commit()
-                    session.refresh(new_client)
+                    # 2) Trova o crea Client
+                    client = session.exec(
+                        select(Client).where(Client.email == email)
+                    ).first()
 
-                    # 3) Crea Opportunity
+                    if not client:
+                        client = Client(
+                            ragione_sociale=azienda,
+                            email=email,
+                            canale_acquisizione="Landing OEE",
+                            segmento_cliente="PMI manifatturiera",
+                            data_creazione=date.today(),
+                            stato_cliente="prospect",
+                            paese=None,
+                            settore=None,
+                            piva=None,
+                            cod_fiscale=None,
+                        )
+                        session.add(client)
+                        session.commit()
+                        session.refresh(client)
+
+                    # 3) Crea Opportunity come lead pre-qualificato (MQL)
                     new_opp = Opportunity(
-                        client_id=new_client.client_id,
+                        client_id=client.client_id,
                         nome_opportunita=f"Lead OEE - {nome}",
-                        fase_pipeline="Lead",
+                        fase_pipeline="Lead pre-qualificato (MQL)",
                         owner="Marian Dutu",
                         valore_stimato=0.0,
-                        probabilita=10.0,
+                        probabilita=30.0,
                         data_apertura=date.today(),
                         stato_opportunita="aperta",
                         data_chiusura_prevista=None,
@@ -1217,14 +1321,13 @@ segui le istruzioni e completa il **passo successivo** lasciando i dati richiest
     # =====================
     role = st.session_state.get("role", "user")
     if role != "admin":
-        # Il cliente vede solo landing + form
         st.markdown("""
 Se hai linee o impianti che lavorano sotto l'80% di OEE, **continuare così è la scelta più costosa**.
 
 Compila il form qui sopra per il mini‑report OEE gratuito: sarà la base per valutare
 se un progetto ForgiaLean può portarti **+16% OEE e più margine**, senza perdere altro tempo in riunioni sterili.
 """)
-        return
+        st.stop()
 
     st.markdown("---")
     st.subheader("Calcolatore rapido OEE e perdita economica (uso interno)")
@@ -1328,7 +1431,277 @@ def page_overview():
     df_invoices = pd.DataFrame(invoices) if invoices else pd.DataFrame()
     df_commesse = pd.DataFrame(commesse) if commesse else pd.DataFrame()
 
-    # Mostra metriche
+    # ===== KPI PRINCIPALI AZIENDALI =====
+    st.subheader("📊 KPI Principali")
+    
+    anno_kpi = date.today().year
+    
+    # Carica dati finanziari
+    with get_session() as session:
+        invoices_db = session.exec(select(Invoice)).all()
+        expenses_db = session.exec(select(Expense)).all()
+        tax_config = session.exec(select(TaxConfig).where(TaxConfig.year == anno_kpi)).first()
+        tax_deadlines = session.exec(select(TaxDeadline).where(TaxDeadline.year == anno_kpi)).all()
+        inps_contrib = session.exec(select(InpsContribution).where(InpsContribution.year == anno_kpi)).all()
+    
+    # Calcola ricavi
+    df_inv = pd.DataFrame([i.__dict__ for i in (invoices_db or [])])
+    if not df_inv.empty:
+        df_inv["data_rif"] = pd.to_datetime(
+            df_inv["data_incasso"].fillna(df_inv["data_fattura"]),
+            errors="coerce",
+        )
+        df_inv = df_inv.dropna(subset=["data_rif"])
+        df_inv["anno"] = df_inv["data_rif"].dt.year
+        ricavi_anno = float(df_inv.loc[df_inv["anno"] == anno_kpi, "importo_totale"].sum())
+    else:
+        ricavi_anno = 0.0
+    
+    # Calcola costi
+    df_exp = pd.DataFrame([e.__dict__ for e in (expenses_db or [])])
+    if not df_exp.empty:
+        df_exp["data_rif"] = pd.to_datetime(
+            df_exp["data_pagamento"].fillna(df_exp["data"]),
+            errors="coerce",
+        )
+        df_exp = df_exp.dropna(subset=["data_rif"])
+        df_exp["anno"] = df_exp["data_rif"].dt.year
+        costi_anno = float(df_exp.loc[df_exp["anno"] == anno_kpi, "importo_totale"].sum())
+    else:
+        costi_anno = 0.0
+    
+    margine_lordo = ricavi_anno - costi_anno
+    margine_perc = (margine_lordo / ricavi_anno * 100.0) if ricavi_anno > 0 else 0.0
+    
+    # Calcola imposte/INPS dovuti e pagati
+    imposte_dovute = sum(d.estimated_amount or 0.0 for d in (tax_deadlines or []))
+    imposte_pagate = sum(d.amount_paid or 0.0 for d in (tax_deadlines or []))
+    imposte_residue = imposte_dovute - imposte_pagate
+    
+    inps_dovuti = sum(c.amount_due or 0.0 for c in (inps_contrib or []))
+    inps_pagati = sum(c.amount_paid or 0.0 for c in (inps_contrib or []))
+    inps_residui = inps_dovuti - inps_pagati
+    
+    utile_netto = margine_lordo - imposte_dovute - inps_dovuti
+    
+    # ===== FLUSSO CASSA MESE CORRENTE =====
+    mese_oggi = date.today().month
+    anno_oggi = date.today().year
+    
+    df_cf_mese = build_cashflow_monthly(anno_oggi)
+    
+    net_cf_oggi = 0.0
+    if not df_cf_mese.empty:
+        cf_mese_oggi = df_cf_mese[df_cf_mese["Mese"] == mese_oggi]
+        if not cf_mese_oggi.empty:
+            net_cf_oggi = cf_mese_oggi.iloc[0].get("Net_cash_flow", 0.0)
+    
+    # Mostra metriche in griglia
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("💰 Ricavi anno", f"€ {ricavi_anno:,.0f}".replace(",", "."))
+    with col2:
+        st.metric("📉 Costi anno", f"€ {costi_anno:,.0f}".replace(",", "."))
+    with col3:
+        delta_color = "normal" if margine_perc > 20 else "off"
+        st.metric(
+            "📈 Margine lordo",
+            f"€ {margine_lordo:,.0f} ({margine_perc:.1f}%)".replace(",", "."),
+            delta=None,
+            delta_color=delta_color,
+        )
+    with col4:
+        st.metric("💎 Utile netto (teorico)", f"€ {utile_netto:,.0f}".replace(",", "."))
+    
+    col5, col6, col7, col8 = st.columns(4)
+    with col5:
+        st.metric("🏛️ Imposte dovute", f"€ {imposte_dovute:,.0f}".replace(",", "."))
+    with col6:
+        st.metric("✅ Imposte pagate", f"€ {imposte_pagate:,.0f}".replace(",", "."))
+    with col7:
+        st.metric("⚠️ Imposte residue", f"€ {imposte_residue:,.0f}".replace(",", "."))
+    with col8:
+        st.metric("💵 Flusso cassa mese", f"€ {net_cf_oggi:,.0f}".replace(",", "."))
+    
+    col9, col10, col11 = st.columns(3)
+    with col9:
+        st.metric("INPS dovuti", f"€ {inps_dovuti:,.0f}".replace(",", "."))
+    with col10:
+        st.metric("INPS pagati", f"€ {inps_pagati:,.0f}".replace(",", "."))
+    with col11:
+        st.metric("INPS residui", f"€ {inps_residui:,.0f}".replace(",", "."))
+    
+    # ===== ALERT CRITICI =====
+    st.markdown("---")
+    st.subheader("🚨 Alert Critici")
+    
+    alerts_critici = []
+    
+    if margine_perc < 20 and ricavi_anno > 0:
+        alerts_critici.append(f"🔴 Margine lordo basso: {margine_perc:.1f}% (target: >20%)")
+    
+    if net_cf_oggi < 0:
+        alerts_critici.append(f"🔴 Flusso cassa negativo questo mese: € {net_cf_oggi:,.0f}".replace(",", "."))
+    
+    if imposte_residue > 0:
+        for d in (tax_deadlines or []):
+            if d.due_date and (d.estimated_amount or 0.0) - (d.amount_paid or 0.0) > 0:
+                giorni_residui = (d.due_date - date.today()).days
+                if giorni_residui < 0:
+                    alerts_critici.append(f"🔴 Imposta scaduta: {d.type} ({abs(giorni_residui)} giorni in ritardo)")
+                elif giorni_residui <= 7:
+                    alerts_critici.append(f"🟡 Imposta in scadenza: {d.type} ({giorni_residui} giorni)")
+    
+    if inps_residui > 0:
+        for c in (inps_contrib or []):
+            if c.due_date and (c.amount_due or 0.0) - (c.amount_paid or 0.0) > 0:
+                giorni_residui = (c.due_date - date.today()).days
+                if giorni_residui < 0:
+                    alerts_critici.append(f"🔴 INPS scaduto: {c.description} ({abs(giorni_residui)} giorni in ritardo)")
+                elif giorni_residui <= 7:
+                    alerts_critici.append(f"🟡 INPS in scadenza: {c.description} ({giorni_residui} giorni)")
+    
+    if ricavi_anno == 0:
+        alerts_critici.append("🟡 Nessun ricavo registrato per questo anno")
+    
+    if alerts_critici:
+        for alert in alerts_critici:
+            if "🔴" in alert:
+                st.error(alert)
+            else:
+                st.warning(alert)
+    else:
+        st.success("✅ Nessun alert critico. Situazione sotto controllo.")
+    
+    st.markdown("---")
+
+    # ===== GRAFICI TREND =====
+    st.subheader("📈 Trend ricavi, costi e margine")
+    
+    col_trend1, col_trend2 = st.columns(2)
+    with col_trend1:
+        periodo_trend = st.selectbox(
+            "Visualizza per",
+            ["Mensile (ultimi 12 mesi)", "Semestrale (ultimi 2 anni)", "Annuale (ultimi 5 anni)"],
+            key="periodo_trend"
+        )
+    with col_trend2:
+        anno_trend_start = st.number_input(
+            "Da anno",
+            min_value=2020,
+            max_value=anno_kpi,
+            value=max(2020, anno_kpi - 1),
+            step=1,
+        )
+    
+    # Costruisci DataFrame per il trend
+    if invoices_db or expenses_db:
+        df_inv_trend = pd.DataFrame([i.__dict__ for i in invoices_db]) if invoices_db else pd.DataFrame()
+        df_exp_trend = pd.DataFrame([e.__dict__ for e in expenses_db]) if expenses_db else pd.DataFrame()
+        
+        # Entrate
+        if not df_inv_trend.empty:
+            df_inv_trend["data_rif"] = pd.to_datetime(
+                df_inv_trend["data_incasso"].fillna(df_inv_trend["data_fattura"]),
+                errors="coerce",
+            )
+            df_inv_trend = df_inv_trend.dropna(subset=["data_rif"])
+            
+            if "Mensile" in periodo_trend:
+                df_inv_trend["periodo"] = df_inv_trend["data_rif"].dt.to_period("M").astype(str)
+                entrate_trend = (
+                    df_inv_trend.groupby("periodo")["importo_totale"]
+                    .sum()
+                    .rename("Ricavi")
+                    .reset_index()
+                )
+            elif "Semestrale" in periodo_trend:
+                df_inv_trend["periodo"] = df_inv_trend["data_rif"].dt.to_period("Q").astype(str)
+                entrate_trend = (
+                    df_inv_trend.groupby("periodo")["importo_totale"]
+                    .sum()
+                    .rename("Ricavi")
+                    .reset_index()
+                )
+            else:
+                df_inv_trend["anno"] = df_inv_trend["data_rif"].dt.year
+                df_inv_trend["periodo"] = df_inv_trend["anno"].astype(str)
+                entrate_trend = (
+                    df_inv_trend.groupby("periodo")["importo_totale"]
+                    .sum()
+                    .rename("Ricavi")
+                    .reset_index()
+                )
+        else:
+            entrate_trend = pd.DataFrame(columns=["periodo", "Ricavi"])
+        
+        # Uscite
+        if not df_exp_trend.empty:
+            df_exp_trend["data_rif"] = pd.to_datetime(
+                df_exp_trend["data_pagamento"].fillna(df_exp_trend["data"]),
+                errors="coerce",
+            )
+            df_exp_trend = df_exp_trend.dropna(subset=["data_rif"])
+            
+            if "Mensile" in periodo_trend:
+                df_exp_trend["periodo"] = df_exp_trend["data_rif"].dt.to_period("M").astype(str)
+                uscite_trend = (
+                    df_exp_trend.groupby("periodo")["importo_totale"]
+                    .sum()
+                    .rename("Costi")
+                    .reset_index()
+                )
+            elif "Semestrale" in periodo_trend:
+                df_exp_trend["periodo"] = df_exp_trend["data_rif"].dt.to_period("Q").astype(str)
+                uscite_trend = (
+                    df_exp_trend.groupby("periodo")["importo_totale"]
+                    .sum()
+                    .rename("Costi")
+                    .reset_index()
+                )
+            else:
+                df_exp_trend["anno"] = df_exp_trend["data_rif"].dt.year
+                df_exp_trend["periodo"] = df_exp_trend["anno"].astype(str)
+                uscite_trend = (
+                    df_exp_trend.groupby("periodo")["importo_totale"]
+                    .sum()
+                    .rename("Costi")
+                    .reset_index()
+                )
+        else:
+            uscite_trend = pd.DataFrame(columns=["periodo", "Costi"])
+        
+        # Merge
+        df_trend = pd.merge(entrate_trend, uscite_trend, on="periodo", how="outer").fillna(0.0)
+        df_trend["Margine"] = df_trend["Ricavi"] - df_trend["Costi"]
+        
+        if not df_trend.empty:
+            fig_trend = px.line(
+                df_trend,
+                x="periodo",
+                y=["Ricavi", "Costi", "Margine"],
+                markers=True,
+                title=f"Trend ricavi, costi e margine ({periodo_trend})",
+                labels={"value": "€", "periodo": "Periodo"},
+            )
+            fig_trend.update_layout(hovermode="x unified")
+            st.plotly_chart(fig_trend, width="stretch")
+            
+            with st.expander("📋 Dettagli trend"):
+                st.dataframe(df_trend.style.format({
+                    "Ricavi": "{:,.2f}",
+                    "Costi": "{:,.2f}",
+                    "Margine": "{:,.2f}",
+                }))
+        else:
+            st.info("Nessun dato disponibile per il trend selezionato.")
+    else:
+        st.info("Nessun dato di entrate o uscite per visualizzare il trend.")
+
+    st.markdown("---")
+
+    # ===== METRICHE BASE =====
+    st.subheader("📊 Metriche Base")
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         st.metric("Clienti", len(clients))
@@ -1342,7 +1715,6 @@ def page_overview():
     st.markdown("---")
     st.subheader("📈 KPI reparto (se presenti)")
 
-    # ✅ USA LA FUNZIONE CACHED
     kpi_dept = get_all_kpi_department_timeseries()
 
     if kpi_dept:
@@ -1351,13 +1723,12 @@ def page_overview():
         kpi_sel = st.selectbox("Seleziona KPI", sorted(df["kpi_name"].unique()))
         df_f = df[df["kpi_name"] == kpi_sel].sort_values("data")
         fig = px.line(df_f, x="data", y=["valore", "target"], title=f"KPI reparto: {kpi_sel}")
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
     else:
         st.info("Nessun KPI reparto ancora registrato.")
 
-    # ---- EXPORT COMPLETO ----
     st.markdown("---")
-    st.subheader("📥 Export completo")
+    st.subheader("📥 Export")
 
     export_all_to_excel(
         {
@@ -1452,7 +1823,7 @@ def page_clients():
 
     if not clients:
         st.info("Nessun cliente presente. Inseriscine uno con il form sopra.")
-        return
+        st.stop()
 
     df_clients = pd.DataFrame([c.__dict__ for c in clients])
     st.dataframe(df_clients)
@@ -1462,7 +1833,7 @@ def page_clients():
     # =========================
     if role != "admin":
         st.info("Modifica ed eliminazione clienti disponibili solo per ruolo 'admin'.")
-        return
+        st.stop()
 
     st.markdown("---")
     st.subheader("✏️ Modifica / elimina cliente (solo admin)")
@@ -1477,7 +1848,7 @@ def page_clients():
 
     if not client_obj:
         st.warning("Cliente non trovato.")
-        return
+        st.stop()
 
     with st.form("edit_client"):
         col1, col2 = st.columns(2)
@@ -1536,14 +1907,259 @@ def page_clients():
 
 
 def page_crm_sales():
+    # Lettura querystring per deep-link da calendario
+    params = st.query_params
+    opp_id = params.get("opp_id", None)
+    if opp_id:
+        try:
+            opp_id = int(opp_id)
+        except ValueError:
+            opp_id = None
+
+    # Cattura eventuali parametri UTM dall'URL
+    capture_utm_params()
+
     st.title("🤝 CRM & Vendite (SQLite)")
     role = st.session_state.get("role", "user")
+
+    # =========================
+    # KPI RIEPILOGO CRM
+    # =========================
+    st.markdown("---")
+    st.subheader("📌 KPI riepilogo CRM")
+
+    with get_session() as session:
+        opps_kpi = session.exec(select(Opportunity)).all()
+
+    if not opps_kpi:
+        st.info("Nessuna opportunità presente per il riepilogo KPI.")
+    else:
+        df_kpi = pd.DataFrame([o.__dict__ for o in opps_kpi])
+
+        tot_opp = len(df_kpi)
+        num_open = (df_kpi["stato_opportunita"] == "aperta").sum()
+        num_won = (df_kpi["stato_opportunita"] == "vinta").sum()
+        num_lost = (df_kpi["stato_opportunita"] == "persa").sum()
+
+        num_closed = num_won + num_lost
+        win_rate = (num_won / num_closed * 100) if num_closed > 0 else 0
+
+        df_open_kpi = df_kpi[df_kpi["stato_opportunita"] == "aperta"].copy()
+        valore_pipeline = (
+            df_open_kpi["valore_stimato"].sum() if not df_open_kpi.empty else 0
+        )
+
+        durata_media = None
+        if {"data_apertura", "data_chiusura_prevista"}.issubset(df_kpi.columns):
+            df_won_kpi = df_kpi[df_kpi["stato_opportunita"] == "vinta"].copy()
+            if not df_won_kpi.empty:
+                df_won_kpi["data_apertura"] = pd.to_datetime(
+                    df_won_kpi["data_apertura"]
+                )
+                df_won_kpi["data_chiusura_prevista"] = pd.to_datetime(
+                    df_won_kpi["data_chiusura_prevista"]
+                )
+                df_won_kpi["giorni_ciclo"] = (
+                    df_won_kpi["data_chiusura_prevista"]
+                    - df_won_kpi["data_apertura"]
+                ).dt.days
+                durata_media = df_won_kpi["giorni_ciclo"].mean()
+
+        c1, c2, c3, c4 = st.columns(4)
+        with c1:
+            st.metric("Totale opportunità", int(tot_opp))
+        with c2:
+            st.metric("Win rate complessivo", f"{win_rate:.1f}%")
+        with c3:
+            st.metric(
+                "Valore pipeline aperta",
+                f"€ {valore_pipeline:,.0f}".replace(",", "."),
+            )
+        with c4:
+            st.metric(
+                "Durata media ciclo",
+                f"{durata_media:.1f} giorni" if durata_media is not None else "n/d",
+            )
+
+    # =========================
+    # LEAD PER CAMPAGNA (UTM)
+    # =========================
+    st.markdown("---")
+    st.subheader("Lead per campagna (UTM)")
+
+    if "df_leads" in st.session_state:
+        df_leads = st.session_state["df_leads"]
+    else:
+        df_leads = pd.DataFrame()
+
+    if df_leads is None or df_leads.empty:
+        st.info("Nessun lead disponibile per analizzare le UTM.")
+    else:
+        if "utm_campaign" in df_leads.columns:
+            df_utm = (
+                df_leads.assign(
+                    utm_campaign=lambda d: d["utm_campaign"]
+                    .fillna("(no campaign)")
+                    .replace("", "(no campaign)")
+                    .astype(str)
+                )
+                .groupby("utm_campaign")
+                .size()
+                .reset_index(name="num_lead")
+                .sort_values("num_lead", ascending=False)
+            )
+
+            col_t, col_g = st.columns(2)
+            with col_t:
+                st.dataframe(df_utm, hide_index=True, width="stretch")
+            with col_g:
+                st.bar_chart(
+                    df_utm.set_index("utm_campaign")["num_lead"],
+                    width="stretch",
+                )
+        else:
+            st.info("Nessun dato UTM disponibile sui lead.")
+
+    # =========================
+    # VISTA / FILTRI OPPORTUNITÀ
+    # (carico df_opps UNA VOLTA qui)
+    # =========================
+    st.markdown("---")
+    st.subheader("🎯 Funnel Opportunità")
+
+    with get_session() as session:
+        opps = session.exec(select(Opportunity)).all()
+        clients_all = session.exec(select(Client)).all()
+
+    if not opps:
+        st.info("Nessuna opportunità presente.")
+        st.stop()
+
+    df_opps = pd.DataFrame([o.__dict__ for o in opps])
+    df_clients_all = (
+        pd.DataFrame([c.__dict__ for c in clients_all])
+        if clients_all
+        else pd.DataFrame()
+    )
+    client_map = (
+        {c["client_id"]: c["ragione_sociale"] for _, c in df_clients_all.iterrows()}
+        if not df_clients_all.empty
+        else {}
+    )
+    df_opps["Cliente"] = df_opps["client_id"].map(client_map).fillna(
+        df_opps["client_id"]
+    )
+
+    # Se ho opp_id da querystring, salvo la riga selezionata
+    selected_opp = None
+    if opp_id is not None and not df_opps.empty:
+        df_match = df_opps[df_opps["opportunity_id"] == opp_id]
+        if not df_match.empty:
+            selected_opp = df_match.iloc[0]
+
+    # =========================
+    # REPORT CAMPAGNE (UTM) - OPPORTUNITÀ + FUNNEL
+    # =========================
+    if "utm_campaign" in df_opps.columns and not df_opps.empty:
+        st.markdown("---")
+        st.subheader("📊 Lead & opportunità per campagna (UTM)")
+
+        df_camp = df_opps.copy()
+        df_camp["utm_campaign"] = df_camp["utm_campaign"].fillna("(no campaign)")
+
+        # report base lead/opportunità
+        agg = (
+            df_camp.groupby("utm_campaign")
+            .agg(
+                lead_tot=("opportunity_id", "count"),
+                valore_tot=("valore_stimato", "sum"),
+                vinte=("stato_opportunita", lambda s: (s == "vinta").sum()),
+            )
+            .reset_index()
+        )
+        agg["win_rate_%"] = agg.apply(
+            lambda r: 100 * r["vinte"] / r["lead_tot"] if r["lead_tot"] else 0,
+            axis=1,
+        )
+
+        st.dataframe(
+            agg.sort_values("lead_tot", ascending=False).style.format(
+                {"valore_tot": "{:,.0f}", "win_rate_%": "{:,.1f}"}
+            ),
+            width="stretch",
+        )
+
+        # --- STATO CAMPAGNA NEL FUNNEL ---
+        st.subheader("Stato campagna nel funnel")
+
+        df_c = df_camp.copy()
+        df_c["stato_opportunita"] = df_c["stato_opportunita"].fillna("").astype(str)
+        df_c["is_won"] = df_c["stato_opportunita"].str.lower().isin(
+            ["vinta", "closed won"]
+        )
+        df_c["is_open"] = df_c["stato_opportunita"].str.lower().isin(
+            ["aperta", "open"]
+        )
+
+        camp_funnel = (
+            df_c.groupby("utm_campaign")
+            .agg(
+                opp_aperte=("is_open", "sum"),
+                opp_vinte=("is_won", "sum"),
+                valore_vinto=(
+                    "valore_stimato",
+                    lambda v: v[df_c.loc[v.index, "is_won"]].sum(),
+                ),
+            )
+            .reset_index()
+        )
+
+        st.dataframe(
+            camp_funnel.sort_values("opp_vinte", ascending=False).style.format(
+                {"valore_vinto": "{:,.0f}"}
+            ),
+            width="stretch",
+        )
+
+        # --- CONVERSIONI PRONTE PER EXPORT (GOOGLE/META OFFLINE) ---
+        st.subheader("Conversioni da campagne (opportunità vinte)")
+
+        df_conv = df_c[df_c["is_won"]].copy()
+        if not df_conv.empty:
+            cols_conv = [
+                "opportunity_id",
+                "Cliente" if "Cliente" in df_conv.columns else "client_id",
+                "valore_stimato",
+                "data_chiusura_prevista"
+                if "data_chiusura_prevista" in df_conv.columns
+                else "data_apertura",
+                "utm_source",
+                "utm_medium",
+                "utm_campaign",
+                "utm_content",
+            ]
+            cols_conv = [c for c in cols_conv if c in df_conv.columns]
+
+            st.dataframe(
+                df_conv[cols_conv].rename(
+                    columns={
+                        "valore_stimato": "value",
+                        "data_chiusura_prevista": "conversion_date",
+                        "data_apertura": "conversion_date",
+                    }
+                ),
+                width="stretch",
+            )
+        else:
+            st.info("Nessuna opportunità vinta legata a campagne UTM.")
+    else:
+        st.info("Nessun dato campagne disponibile sulle opportunità.")
+
     # =========================
     # FORM INSERIMENTO OPPORTUNITÀ
     # =========================
     st.subheader("➕ Inserisci nuova opportunità")
 
-    # Carico lista clienti per selezione
     with get_session() as session:
         clients = session.exec(select(Client)).all()
 
@@ -1551,7 +2167,11 @@ def page_crm_sales():
         st.info("Prima crea almeno un cliente nella pagina 'Clienti'.")
     else:
         df_clients = pd.DataFrame([c.__dict__ for c in clients])
-        df_clients["label"] = df_clients["client_id"].astype(str) + " - " + df_clients["ragione_sociale"]
+        df_clients["label"] = (
+            df_clients["client_id"].astype(str)
+            + " - "
+            + df_clients["ragione_sociale"]
+        )
 
         with st.form("new_opportunity"):
             col1, col2 = st.columns(2)
@@ -1560,15 +2180,47 @@ def page_crm_sales():
                 nome_opportunita = st.text_input("Nome opportunità", "")
                 fase_pipeline = st.selectbox(
                     "Fase pipeline",
-                    ["Lead", "Offerta", "Negoziazione", "Vinta", "Persa"],
+                    [
+                        "Lead pre-qualificato (MQL)",
+                        "Lead qualificato (SQL)",
+                        "Lead",
+                        "Offerta",
+                        "Negoziazione",
+                        "Vinta",
+                        "Persa",
+                    ],
                     index=0,
                 )
                 owner = st.text_input("Owner (commerciale)", "")
             with col2:
-                valore_stimato = st.number_input("Valore stimato (€)", min_value=0.0, step=100.0)
-                probabilita = st.slider("Probabilità (%)", min_value=0, max_value=100, value=50)
+                valore_stimato = st.number_input(
+                    "Valore stimato (€)", min_value=0.0, step=100.0
+                )
+                probabilita = st.slider(
+                    "Probabilità (%)", min_value=0, max_value=100, value=50
+                )
                 data_apertura = st.date_input("Data apertura", value=date.today())
-                data_chiusura_prevista = st.date_input("Data chiusura prevista", value=date.today())
+                data_chiusura_prevista = st.date_input(
+                    "Data chiusura prevista", value=date.today()
+                )
+
+            # --- PROSSIMA AZIONE ---
+            col_a1, col_a2 = st.columns(2)
+            with col_a1:
+                data_prossima_azione = st.date_input(
+                    "📅 Data prossima azione",
+                    value=date.today(),
+                )
+            with col_a2:
+                tipo_prossima_azione = st.selectbox(
+                    "📌 Tipo prossima azione",
+                    ["", "Telefonata", "Email", "Visita", "Preventivo", "Follow‑up"],
+                )
+
+            note_prossima_azione = st.text_area(
+                "📝 Note prossima azione",
+                value="",
+            )
 
             stato_opportunita = st.selectbox(
                 "Stato opportunità",
@@ -1584,9 +2236,16 @@ def page_crm_sales():
             else:
                 client_id_sel = int(client_label.split(" - ")[0])
 
-                # Recupero info cliente per avere il nome nel tracking
-                client_row = df_clients[df_clients["client_id"] == client_id_sel].iloc[0]
+                client_row = df_clients[
+                    df_clients["client_id"] == client_id_sel
+                ].iloc[0]
                 client_name = client_row["ragione_sociale"]
+
+                # UTM da session_state
+                utm_source = st.session_state.get("utm_source") or None
+                utm_medium = st.session_state.get("utm_medium") or None
+                utm_campaign = st.session_state.get("utm_campaign") or None
+                utm_content = st.session_state.get("utm_content") or None
 
                 with get_session() as session:
                     new_opp = Opportunity(
@@ -1598,13 +2257,19 @@ def page_crm_sales():
                         probabilita=float(probabilita),
                         data_apertura=data_apertura,
                         data_chiusura_prevista=data_chiusura_prevista,
+                        data_prossima_azione=data_prossima_azione,
+                        tipo_prossima_azione=tipo_prossima_azione or None,
+                        note_prossima_azione=note_prossima_azione or None,
                         stato_opportunita=stato_opportunita,
+                        utm_source=utm_source,
+                        utm_medium=utm_medium,
+                        utm_campaign=utm_campaign,
+                        utm_content=utm_content,
                     )
                     session.add(new_opp)
                     session.commit()
                     session.refresh(new_opp)
 
-                # === TRACKING GA4 ===
                 track_ga4_event(
                     "lead_generato",
                     {
@@ -1617,10 +2282,9 @@ def page_crm_sales():
                         "probability": float(new_opp.probabilita or 0),
                         "status": new_opp.stato_opportunita,
                     },
-                    client_id=None,  # per ora usiamo un fallback server
+                    client_id=None,
                 )
 
-                # === TRACKING FACEBOOK (Conversions API) ===
                 track_facebook_event(
                     "Lead",
                     {
@@ -1638,27 +2302,14 @@ def page_crm_sales():
 
     st.markdown("---")
 
-    st.markdown("---")
-
     # =========================
-    # VISTA / FILTRI OPPORTUNITÀ
+    # KPI E FILTRI FUNNEL (usano df_opps già caricato)
     # =========================
-    st.subheader("🎯 Funnel Opportunità")
-
-    with get_session() as session:
-        opps = session.exec(select(Opportunity)).all()
-
-    if not opps:
-        st.info("Nessuna opportunità presente.")
-        return
-
-    df_opps = pd.DataFrame([o.__dict__ for o in opps])
-
-    # --- KPI di sintesi pipeline (solo opportunità aperte) ---
     df_open = df_opps[df_opps["stato_opportunita"] == "aperta"].copy()
-
     if not df_open.empty:
-        df_open["valore_ponderato"] = df_open["valore_stimato"] * df_open["probabilita"] / 100.0
+        df_open["valore_ponderato"] = (
+            df_open["valore_stimato"] * df_open["probabilita"] / 100.0
+        )
 
         col_k1, col_k2, col_k3 = st.columns(3)
         with col_k1:
@@ -1677,55 +2328,399 @@ def page_crm_sales():
                 int(df_open.shape[0]),
             )
 
-    col1, col2 = st.columns(2)
+    if "data_prossima_azione" in df_opps.columns:
+        df_future_actions = df_opps[
+            (df_opps["stato_opportunita"] == "aperta")
+            & pd.notnull(df_opps["data_prossima_azione"])
+        ].copy()
+        num_future_actions = len(df_future_actions)
+        num_open_opps = len(df_open)
+
+        if num_open_opps > 0:
+            act_per_opp = num_future_actions / num_open_opps
+            st.metric(
+                "Azioni future per opportunità aperta",
+                f"{act_per_opp:.2f}",
+            )
+
+    df_closed = df_opps[
+        df_opps["stato_opportunita"].isin(["vinta", "persa"])
+    ].copy()
+    if not df_closed.empty:
+        num_won = (df_closed["stato_opportunita"] == "vinta").sum()
+        num_closed = len(df_closed)
+        win_rate = num_won / num_closed * 100
+        st.metric("Win rate complessivo", f"{win_rate:.1f}%")
+
+    df_won = df_opps[df_opps["stato_opportunita"] == "vinta"].copy()
+    if not df_won.empty and {"data_apertura", "data_chiusura_prevista"}.issubset(
+        df_won.columns
+    ):
+        df_won["data_apertura"] = pd.to_datetime(df_won["data_apertura"])
+        df_won["data_chiusura_prevista"] = pd.to_datetime(
+            df_won["data_chiusura_prevista"]
+        )
+        df_won["giorni_ciclo"] = (
+            df_won["data_chiusura_prevista"] - df_won["data_apertura"]
+        ).dt.days
+
+        durata_media = df_won["giorni_ciclo"].mean()
+        st.metric(
+            "Durata media ciclo di vendita",
+            f"{durata_media:.1f} giorni",
+        )
+
+    col_c, col1, col2 = st.columns(3)
+    with col_c:
+        clienti_opt = ["Tutti"] + sorted(
+            df_opps["Cliente"].dropna().astype(str).unique().tolist()
+        )
+        f_cliente = st.selectbox("Filtro cliente", clienti_opt)
     with col1:
-        fase_opt = ["Tutte"] + sorted(df_opps["fase_pipeline"].dropna().unique().tolist())
+        fase_opt = ["Tutte"] + sorted(
+            df_opps["fase_pipeline"].dropna().unique().tolist()
+        )
         f_fase = st.selectbox("Filtro fase pipeline", fase_opt)
     with col2:
-        owner_opt = ["Tutti"] + sorted(df_opps["owner"].dropna().unique().tolist()) if "owner" in df_opps.columns else ["Tutti"]
+        owner_opt = (
+            ["Tutti"]
+            + sorted(df_opps["owner"].dropna().unique().tolist())
+            if "owner" in df_opps.columns
+            else ["Tutti"]
+        )
         f_owner = st.selectbox("Filtro owner", owner_opt)
 
     df_f = df_opps.copy()
+    if f_cliente != "Tutti":
+        df_f = df_f[df_f["Cliente"] == f_cliente]
     if f_fase != "Tutte":
         df_f = df_f[df_f["fase_pipeline"] == f_fase]
     if f_owner != "Tutti":
         df_f = df_f[df_f["owner"] == f_owner]
 
     st.subheader("📂 Opportunità filtrate")
-    st.dataframe(df_f)
 
-    if "fase_pipeline" in df_f.columns and "valore_stimato" in df_f.columns and not df_f.empty:
-        st.subheader("📈 Valore opportunità per fase")
-        pivot = df_f.groupby("fase_pipeline")["valore_stimato"].sum().reset_index()
-        fig_fase = px.bar(
-            pivot,
-            x="fase_pipeline",
-            y="valore_stimato",
-            title="Valore totale per fase pipeline",
-            text="valore_stimato",
+    if df_f.empty:
+        st.info("Nessuna opportunità trovata con i filtri selezionati.")
+    else:
+        st.markdown("**Vista tabellare pipeline**")
+
+        cols_list = [
+            "opportunity_id",
+            "Cliente",
+            "nome_opportunita",
+            "fase_pipeline",
+            "stato_opportunita",
+            "owner",
+            "valore_stimato",
+            "data_chiusura_prevista",
+            "data_prossima_azione",
+        ]
+        cols_list = [c for c in cols_list if c in df_f.columns]
+
+        df_list = df_f[cols_list].copy()
+        st.dataframe(df_list, hide_index=True, width="stretch")
+
+        st.markdown("---")
+        st.markdown("**Dettaglio opportunità**")
+
+        for _, row in df_f.iterrows():
+            expanded_default = bool(
+                selected_opp is not None and row["opportunity_id"] == opp_id
+            )
+
+            header = (
+                f"{row['opportunity_id']} – {row['Cliente']} – "
+                f"{row['nome_opportunita']} ({row['stato_opportunita']})"
+            )
+
+            with st.expander(header, expanded=expanded_default):
+                st.write(f"Fase pipeline: {row['fase_pipeline']}")
+                st.write(f"Owner: {row.get('owner', '')}")
+                st.write(f"Valore stimato: {row['valore_stimato']} €")
+                st.write(f"Probabilità: {row['probabilita']} %")
+                st.write(f"Data apertura: {row['data_apertura']}")
+                st.write(f"Data chiusura prevista: {row['data_chiusura_prevista']}")
+                st.write(
+                    f"Data prossima azione: {row.get('data_prossima_azione', '')}"
+                )
+                st.write(
+                    f"Tipo prossima azione: {row.get('tipo_prossima_azione', '')}"
+                )
+                st.write(
+                    f"Note prossima azione: {row.get('note_prossima_azione', '')}"
+                )
+
+                st.markdown("**Dati campagna (UTM)**")
+                st.write(f"utm_source: {row.get('utm_source', '')}")
+                st.write(f"utm_medium: {row.get('utm_medium', '')}")
+                st.write(f"utm_campaign: {row.get('utm_campaign', '')}")
+                st.write(f"utm_content: {row.get('utm_content', '')}")
+
+                st.markdown("---")
+                st.markdown("**Pianifica prossima azione**")
+
+                col_na1, col_na2 = st.columns(2)
+                with col_na1:
+                    nuova_data = st.date_input(
+                        "Nuova data",
+                        value=row.get("data_prossima_azione") or date.today(),
+                        key=f"nuova_data_{row['opportunity_id']}",
+                    )
+                with col_na2:
+                    nuovo_tipo = st.selectbox(
+                        "Nuovo tipo azione",
+                        ["", "Telefonata", "Email", "Visita", "Preventivo", "Follow‑up"],
+                        index=(
+                            [
+                                "",
+                                "Telefonata",
+                                "Email",
+                                "Visita",
+                                "Preventivo",
+                                "Follow‑up",
+                            ].index(row.get("tipo_prossima_azione"))
+                            if row.get("tipo_prossima_azione")
+                            in [
+                                "Telefonata",
+                                "Email",
+                                "Visita",
+                                "Preventivo",
+                                "Follow‑up",
+                            ]
+                            else 0
+                        ),
+                        key=f"nuovo_tipo_{row['opportunity_id']}",
+                    )
+
+                nuove_note = st.text_area(
+                    "Note prossima azione",
+                    value=row.get("note_prossima_azione", "") or "",
+                    key=f"nuove_note_{row['opportunity_id']}",
+                )
+
+                col_b1, col_b2 = st.columns(2)
+                with col_b1:
+                    if st.button(
+                        "✅ Segna azione come fatta (svuota)",
+                        key=f"done_{row['opportunity_id']}",
+                    ):
+                        with get_session() as session:
+                            opp_db = session.get(
+                                Opportunity, row["opportunity_id"]
+                            )
+                            if opp_db:
+                                opp_db.data_prossima_azione = None
+                                opp_db.tipo_prossima_azione = None
+                                opp_db.note_prossima_azione = None
+                                session.add(opp_db)
+                                session.commit()
+                        st.success(
+                            "Azione segnata come completata e rimossa dall'agenda."
+                        )
+                        st.rerun()
+
+                with col_b2:
+                    if st.button(
+                        "📅 Salva nuova prossima azione",
+                        key=f"next_{row['opportunity_id']}",
+                    ):
+                        with get_session() as session:
+                            opp_db = session.get(
+                                Opportunity, row["opportunity_id"]
+                            )
+                            if opp_db:
+                                opp_db.data_prossima_azione = nuova_data
+                                opp_db.tipo_prossima_azione = nuovo_tipo or None
+                                opp_db.note_prossima_azione = nuove_note or None
+                                session.add(opp_db)
+                                session.commit()
+                        st.success("Nuova prossima azione salvata.")
+                        st.rerun()
+
+    # =========================
+    # SINTESI ATTIVITÀ COMMERCIALI
+    # =========================
+    st.markdown("---")
+    st.subheader("🧮 Sintesi attività commerciali")
+
+    today = pd.to_datetime("today").normalize()
+
+    df_act = df_opps.copy()
+    if "data_prossima_azione" in df_act.columns:
+        df_act["data_prossima_azione"] = pd.to_datetime(df_act["data_prossima_azione"])
+
+        owner_opt = ["Tutti"] + sorted(
+            df_act["owner"].dropna().astype(str).unique().tolist()
         )
-        fig_fase.update_traces(texttemplate="€ %{y:,.0f}", textposition="outside")
-        fig_fase.update_layout(yaxis_title="Valore (€)")
-        st.plotly_chart(fig_fase, use_container_width=True)
+        f_owner_act = st.selectbox(
+            "Filtro owner attività", owner_opt, key="f_owner_act"
+        )
+
+        if f_owner_act != "Tutti":
+            df_act = df_act[df_act["owner"] == f_owner_act]
+
+        future = df_act[df_act["data_prossima_azione"] > today]
+        overdue = df_act[df_act["data_prossima_azione"] < today]
+
+        if "completata" in df_act.columns:
+            done_last_7 = df_act[
+                (df_act["completata"] == True)
+                & (df_act["data_prossima_azione"] >= today - pd.Timedelta(days=7))
+                & (df_act["data_prossima_azione"] <= today)
+            ]
+        else:
+            done_last_7 = df_act.iloc[0:0]
+
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Azioni future", len(future))
+        c2.metric("Azioni scadute", len(overdue))
+        c3.metric("Azioni completate (7g)", len(done_last_7))
+
+        if not future.empty and "owner" in future.columns:
+            st.subheader("Azioni future per owner")
+            azioni_owner = (
+                future["owner"]
+                .fillna("Senza owner")
+                .astype(str)
+                .value_counts()
+                .reset_index()
+            )
+            azioni_owner.columns = ["owner", "num_azioni_future"]
+            st.dataframe(azioni_owner, hide_index=True, width="stretch")
+    else:
+        st.info(
+            "Nessuna colonna 'data_prossima_azione' disponibile per la sintesi attività."
+        )
+
+    # =========================
+    # AGENDA VENDITORE
+    # =========================
+    st.markdown("---")
+    st.subheader("📞 Agenda venditore")
+
+    if "data_prossima_azione" in df_opps.columns:
+        oggi = date.today()
+        df_agenda = df_opps.copy()
+        df_agenda = df_agenda.dropna(subset=["data_prossima_azione"])
+        df_agenda = df_agenda[df_agenda["data_prossima_azione"] >= oggi]
+        df_agenda = df_agenda.sort_values("data_prossima_azione")
+
+        col_f1, col_f2, col_f3 = st.columns(3)
+        with col_f1:
+            owner_opt = ["Tutti"] + sorted(
+                df_agenda["owner"].dropna().astype(str).unique().tolist()
+            )
+            f_owner_ag = st.selectbox("Filtro owner agenda", owner_opt)
+
+        with col_f2:
+            tipo_opt = ["Tutti"] + sorted(
+                df_agenda["tipo_prossima_azione"]
+                .dropna()
+                .astype(str)
+                .unique()
+                .tolist()
+            )
+            f_tipo_ag = st.selectbox("Filtro tipo azione", tipo_opt)
+
+        with col_f3:
+            if "utm_campaign" in df_agenda.columns:
+                camp_opt_ag = ["Tutte"] + sorted(
+                    df_agenda["utm_campaign"]
+                    .fillna("(no campaign)")
+                    .astype(str)
+                    .unique()
+                    .tolist()
+                )
+            else:
+                camp_opt_ag = ["Tutte"]
+            f_camp_ag = st.selectbox("Filtro campagna (UTM)", camp_opt_ag)
+
+        df_agenda_f = df_agenda.copy()
+        if f_owner_ag != "Tutti":
+            df_agenda_f = df_agenda_f[df_agenda_f["owner"] == f_owner_ag]
+        if f_tipo_ag != "Tutti":
+            df_agenda_f = df_agenda_f[
+                df_agenda_f["tipo_prossima_azione"] == f_tipo_ag
+            ]
+        if f_camp_ag != "Tutte" and "utm_campaign" in df_agenda_f.columns:
+            if f_camp_ag == "(no campaign)":
+                df_agenda_f = df_agenda_f[
+                    df_agenda_f["utm_campaign"].isna()
+                    | (df_agenda_f["utm_campaign"] == "")
+                ]
+            else:
+                df_agenda_f = df_agenda_f[df_agenda_f["utm_campaign"] == f_camp_ag]
+
+        cols_agenda = [
+            "opportunity_id",
+            "data_prossima_azione",
+            "Cliente",
+            "nome_opportunita",
+            "tipo_prossima_azione",
+            "note_prossima_azione",
+            "fase_pipeline",
+            "probabilita",
+            "owner",
+        ]
+        cols_agenda = [c for c in cols_agenda if c in df_agenda_f.columns]
+        df_agenda_f = df_agenda_f[cols_agenda]
+        st.dataframe(df_agenda_f, hide_index=True, width="stretch")
+
+        if st.button("🔔 Invia agenda di oggi su Telegram"):
+            send_agenda_oggi_telegram()
+            st.success("Agenda di oggi inviata su Telegram (se ci sono azioni).")
+
+        st.subheader("📅 Calendario prossime azioni")
+
+        base_url = "https://forgialean.streamlit.app"
+
+        events = []
+        for _, row in df_agenda_f.iterrows():
+            if pd.notnull(row["data_prossima_azione"]):
+                opp_id_event = row["opportunity_id"]
+                event_url = f"{base_url}?page=crm&opp_id={opp_id_event}"
+
+                events.append(
+                    {
+                        "title": f"{row['Cliente']} – {row['nome_opportunita']} "
+                        f"({row.get('tipo_prossima_azione', '')})",
+                        "start": row["data_prossima_azione"].strftime("%Y-%m-%d"),
+                        "url": event_url,
+                    }
+                )
+
+        options = {
+            "initialView": "dayGridMonth",
+            "headerToolbar": {
+                "left": "prev,next today",
+                "center": "title",
+                "right": "dayGridMonth,timeGridWeek,listWeek",
+            },
+        }
+
+        calendar(events=events, options=options, key="crm_calendar")
+    else:
+        st.info(
+            "Per usare l’agenda venditore aggiungi i campi 'data_prossima_azione', "
+            "'tipo_prossima_azione' e 'note_prossima_azione' al modello Opportunity."
+        )
+        st.stop()
 
     # =========================
     # SEZIONE EDIT / DELETE (SOLO ADMIN)
     # =========================
     if role != "admin":
-        return  # niente edit/delete per utenti normali
+        st.stop()
 
     st.markdown("---")
     st.subheader("✏️ Modifica / elimina opportunità (solo admin)")
 
-    with get_session() as session:
-        opp_all = session.exec(select(Opportunity)).all()
-        clients_all = session.exec(select(Client)).all()
-
-    if not opp_all:
+    if not opps:
         st.info("Nessuna opportunità da modificare/eliminare.")
-        return
+        st.stop()
 
-    df_opp_all = pd.DataFrame([o.__dict__ for o in opp_all])
+    df_opp_all = pd.DataFrame([o.__dict__ for o in opps])
     opp_ids = df_opp_all["opportunity_id"].tolist()
     opp_id_sel = st.selectbox("ID opportunità", opp_ids, key="crm_opp_sel")
 
@@ -1734,12 +2729,14 @@ def page_crm_sales():
 
     if not opp_obj:
         st.warning("Opportunità non trovata.")
-        return
+        st.stop()
 
-    # client label per select
-    df_clients_all = pd.DataFrame([c.__dict__ for c in clients_all]) if clients_all else pd.DataFrame()
     if not df_clients_all.empty:
-        df_clients_all["label"] = df_clients_all["client_id"].astype(str) + " - " + df_clients_all["ragione_sociale"]
+        df_clients_all["label"] = (
+            df_clients_all["client_id"].astype(str)
+            + " - "
+            + df_clients_all["ragione_sociale"]
+        )
         try:
             current_client_label = df_clients_all[
                 df_clients_all["client_id"] == opp_obj.client_id
@@ -1752,16 +2749,44 @@ def page_crm_sales():
     with st.form(f"edit_opp_{opp_id_sel}"):
         col1, col2 = st.columns(2)
         with col1:
-            client_label_e = st.selectbox(
-                "Cliente",
-                df_clients_all["label"].tolist() if not df_clients_all.empty else [],
-                index=df_clients_all["label"].tolist().index(current_client_label) if current_client_label else 0,
-            ) if not df_clients_all.empty else ("",)
-            nome_opportunita_e = st.text_input("Nome opportunità", opp_obj.nome_opportunita or "")
+            client_label_e = (
+                st.selectbox(
+                    "Cliente",
+                    df_clients_all["label"].tolist()
+                    if not df_clients_all.empty
+                    else [],
+                    index=df_clients_all["label"].tolist().index(
+                        current_client_label
+                    )
+                    if current_client_label
+                    else 0,
+                )
+                if not df_clients_all.empty
+                else ("",)
+            )
+            nome_opportunita_e = st.text_input(
+                "Nome opportunità", opp_obj.nome_opportunita or ""
+            )
             fase_pipeline_e = st.selectbox(
                 "Fase pipeline",
-                ["Lead", "Offerta", "Negoziazione", "Vinta", "Persa"],
-                index=["Lead", "Offerta", "Negoziazione", "Vinta", "Persa"].index(opp_obj.fase_pipeline or "Lead"),
+                [
+                    "Lead pre-qualificato (MQL)",
+                    "Lead qualificato (SQL)",
+                    "Lead",
+                    "Offerta",
+                    "Negoziazione",
+                    "Vinta",
+                    "Persa",
+                ],
+                index=[
+                    "Lead pre-qualificato (MQL)",
+                    "Lead qualificato (SQL)",
+                    "Lead",
+                    "Offerta",
+                    "Negoziazione",
+                    "Vinta",
+                    "Persa",
+                ].index(opp_obj.fase_pipeline or "Lead"),
             )
             owner_e = st.text_input("Owner", opp_obj.owner or "")
         with col2:
@@ -1787,6 +2812,42 @@ def page_crm_sales():
                 value=opp_obj.data_chiusura_prevista or date.today(),
             )
 
+        col_a1_e, col_a2_e = st.columns(2)
+        with col_a1_e:
+            data_prossima_azione_e = st.date_input(
+                "📅 Data prossima azione",
+                value=opp_obj.data_prossima_azione or date.today(),
+            )
+        with col_a2_e:
+            tipo_prossima_azione_e = st.selectbox(
+                "📌 Tipo prossima azione",
+                ["", "Telefonata", "Email", "Visita", "Preventivo", "Follow‑up"],
+                index=(
+                    [
+                        "",
+                        "Telefonata",
+                        "Email",
+                        "Visita",
+                        "Preventivo",
+                        "Follow‑up",
+                    ].index(opp_obj.tipo_prossima_azione)
+                    if opp_obj.tipo_prossima_azione
+                    in [
+                        "Telefonata",
+                        "Email",
+                        "Visita",
+                        "Preventivo",
+                        "Follow‑up",
+                    ]
+                    else 0
+                ),
+            )
+
+        note_prossima_azione_e = st.text_area(
+            "📝 Note prossima azione",
+            value=opp_obj.note_prossima_azione or "",
+        )
+
         colb1, colb2 = st.columns(2)
         with colb1:
             update_opp = st.form_submit_button("💾 Aggiorna opportunità")
@@ -1807,6 +2868,9 @@ def page_crm_sales():
                 obj.probabilita = probabilita_e
                 obj.data_apertura = data_apertura_e
                 obj.data_chiusura_prevista = data_chiusura_prevista_e
+                obj.data_prossima_azione = data_prossima_azione_e
+                obj.tipo_prossima_azione = tipo_prossima_azione_e or None
+                obj.note_prossima_azione = note_prossima_azione_e or None
                 session.add(obj)
                 session.commit()
         st.success("Opportunità aggiornata.")
@@ -1821,26 +2885,986 @@ def page_crm_sales():
         st.success("Opportunità eliminata.")
         st.rerun()
 
-def get_next_invoice_number(session, year=None, prefix="FL"):
-    year = year or date.today().year
-    res = session.exec(
-        select(Invoice.num_fattura).where(
-            Invoice.data_fattura.between(date(year, 1, 1), date(year, 12, 31))
-        )
-    ).all()
-    nums = []
-    for r in res:
-        if not r:
-            continue
-        try:
-            base = str(r).split("/")[0]  # "12/2025-FL" -> "12"
-            nums.append(int(base))
-        except ValueError:
-            continue
-    next_seq = (max(nums) + 1) if nums else 1
-    return f"{next_seq}/{year}-" + prefix
+    # =========================
+    # CREA COMMESSA DA OPPORTUNITÀ VINTA
+    # =========================
+    st.markdown("---")
+    st.subheader("📦 Crea commessa da opportunità vinta")
 
-from datetime import date, datetime
+    with get_session() as session:
+        opp_vinte = session.exec(
+            select(Opportunity).where(Opportunity.fase_pipeline == "Vinta")
+        ).all()
+        commesse = session.exec(select(ProjectCommessa)).all()
+
+    commesse_by_opp = set()
+    if commesse and hasattr(ProjectCommessa, "opportunity_id"):
+        for c in commesse:
+            if getattr(c, "opportunity_id", None) is not None:
+                commesse_by_opp.add(c.opportunity_id)
+
+    opp_vinte_creabili = [
+        o
+        for o in opp_vinte
+        if (
+            not hasattr(ProjectCommessa, "opportunity_id")
+            or o.opportunity_id not in commesse_by_opp
+        )
+    ]
+
+    if not opp_vinte_creabili:
+        st.info(
+            "Nessuna opportunità 'Vinta' disponibile per creare una nuova commessa."
+        )
+        st.stop()
+
+    opp_options = [
+        f"{o.opportunity_id} - {o.nome_opportunita}" for o in opp_vinte_creabili
+    ]
+    sel_opp_label = st.selectbox(
+        "Seleziona un'opportunità vinta per creare la commessa",
+        opp_options,
+        key="opp_vinta_sel",
+    )
+    sel_opp_id = int(sel_opp_label.split(" - ")[0])
+
+    with get_session() as session:
+        opp_sel = session.get(Opportunity, sel_opp_id)
+        client_sel = session.get(Client, opp_sel.client_id) if opp_sel else None
+
+    default_cod = f"COM-{sel_opp_id}"
+    default_desc = opp_sel.nome_opportunita if opp_sel else ""
+
+    with st.form("create_commessa_from_opp"):
+        colc1, colc2 = st.columns(2)
+        with colc1:
+            cod_commessa = st.text_input("Codice commessa", default_cod)
+            descr_commessa = st.text_input(
+                "Descrizione commessa", default_desc
+            )
+        with colc2:
+            data_ini_prev = st.date_input(
+                "Data inizio prevista", value=date.today()
+            )
+            data_fine_prev = st.date_input(
+                "Data fine prevista", value=date.today()
+            )
+        crea_commessa = st.form_submit_button("Crea commessa")
+
+    if crea_commessa and opp_sel and client_sel:
+        with get_session() as session:
+            opp_db = session.get(Opportunity, opp_sel.opportunity_id)
+            client_db = session.get(Client, client_sel.client_id)
+
+            new_comm = ProjectCommessa(
+                client_id=client_db.client_id,
+                cod_commessa=cod_commessa.strip() or default_cod,
+                descrizione=descr_commessa.strip() or default_desc,
+                data_inizio_prevista=data_ini_prev,
+                data_fine_prevista=data_fine_prev,
+            )
+
+            if hasattr(ProjectCommessa, "opportunity_id"):
+                new_comm.opportunity_id = opp_db.opportunity_id
+
+            session.add(new_comm)
+            session.commit()
+            session.refresh(new_comm)
+
+        opp_id_created = opp_db.opportunity_id
+        comm_id = new_comm.commessa_id
+        st.success(
+            f"Commessa creata da opportunità {opp_id_created} con ID {comm_id}."
+        )
+        st.rerun()
+
+class StepOutcome(str, Enum):
+    OK = "ok"
+    APPROFONDISCI = "approfondisci"
+    RINVIA = "rinvia"
+
+def page_lead_capture():
+    """
+    Pagina pubblica/semipubblica per catturare lead da campagne online.
+    Crea Client (se mancante) + Opportunity collegata con UTM.
+    """
+
+    # Cattura UTM dall'URL e li mette in session_state
+    capture_utm_params()
+
+    st.title("📥 Richiedi una call con ForgiaLean")
+
+    # Leggi eventuali UTM già in session_state
+    utm_source = st.session_state.get("utm_source")
+    utm_medium = st.session_state.get("utm_medium")
+    utm_campaign = st.session_state.get("utm_campaign")
+    utm_content = st.session_state.get("utm_content")
+
+    st.caption(
+        "Compila il form e ti ricontattiamo per una call di analisi su produzione, OEE e margini."
+    )
+
+    with st.form("lead_capture_form"):
+        col1, col2 = st.columns(2)
+        with col1:
+            azienda = st.text_input("Azienda *")
+            nome = st.text_input("Nome e cognome *")
+            email = st.text_input("Email *")
+        with col2:
+            telefono = st.text_input("Telefono (facoltativo)")
+            ruolo = st.text_input("Ruolo (facoltativo)")
+
+        note = st.text_area(
+            "Contesto / cosa vorresti migliorare?",
+            height=120,
+        )
+
+        accetta_privacy = st.checkbox(
+            "Ho letto e accetto l'informativa privacy", value=False
+        )
+
+        submitted = st.form_submit_button("📨 Invia richiesta")
+
+    if submitted:
+        # Validazioni base
+        if not azienda.strip() or not nome.strip() or not email.strip():
+            st.warning("Compila almeno Azienda, Nome e Email.")
+            st.stop()
+        if not accetta_privacy:
+            st.warning("Devi accettare l'informativa privacy per procedere.")
+            st.stop()
+
+        # 1) Crea / trova Client
+        with get_session() as session:
+            # Cerca client per ragione_sociale (case-insensitive molto semplice)
+            existing_client = session.exec(
+                select(Client).where(Client.ragione_sociale == azienda.strip())
+            ).first()
+
+            if existing_client:
+                client = existing_client
+            else:
+                client = Client(
+                    ragione_sociale=azienda.strip(),
+                    referente=nome.strip(),
+                    email=email.strip(),
+                    telefono=telefono.strip() or None,
+                    note=note or None,
+                )
+                session.add(client)
+                session.commit()
+                session.refresh(client)
+
+            # 2) Crea Opportunity collegata
+            nuova_opp = Opportunity(
+                client_id=client.client_id,
+                nome_opportunita=f"Lead da campagna - {azienda.strip()}",
+                fase_pipeline="Lead pre-qualificato (MQL)",
+                owner=None,  # opzionale: puoi sostituire con owner di default
+                valore_stimato=0.0,  # opzionale: stimare o lasciare 0
+                probabilita=10.0,
+                data_apertura=date.today(),
+                data_chiusura_prevista=date.today(),
+                data_prossima_azione=date.today(),
+                tipo_prossima_azione="Telefonata",
+                note_prossima_azione=(
+                    f"Lead da form: {note}\n"
+                    f"Nome: {nome}, Email: {email}, Tel: {telefono}, Ruolo: {ruolo}"
+                ),
+                stato_opportunita="aperta",
+                utm_source=utm_source,
+                utm_medium=utm_medium,
+                utm_campaign=utm_campaign,
+                utm_content=utm_content,
+            )
+            session.add(nuova_opp)
+            session.commit()
+            session.refresh(nuova_opp)
+
+        # 3) Tracking GA4 lead generato da campagna
+        track_ga4_event(
+            "generate_lead",
+            {
+                "lead_type": "campagna_online",
+                "client_name": azienda,
+                "opportunity_id": str(nuova_opp.opportunity_id),
+                "utm_source": utm_source or "",
+                "utm_medium": utm_medium or "",
+                "utm_campaign": utm_campaign or "",
+                "utm_content": utm_content or "",
+                "value": 0.0,
+                "currency": "EUR",
+            },
+            client_id=None,
+        )
+
+        # 4) Tracking Facebook Lead da campagna
+        track_facebook_event(
+            "Lead",
+            {
+                "value": 0.0,
+                "currency": "EUR",
+                "content_name": f"Lead form campagna - {azienda}",
+                "content_category": "Lead da campagna",
+                "utm_source": utm_source or "",
+                "utm_medium": utm_medium or "",
+                "utm_campaign": utm_campaign or "",
+                "utm_content": utm_content or "",
+            },
+        )
+
+        # 5) Notifica Telegram al commerciale
+        try:
+            testo_msg = (
+                f"📥 Nuovo LEAD da form\n"
+                f"Azienda: {azienda}\n"
+                f"Nome: {nome}\n"
+                f"Email: {email}\n"
+                f"Telefono: {telefono}\n"
+                f"Ruolo: {ruolo}\n\n"
+                f"Campagna: {utm_campaign} | Sorgente: {utm_source}/{utm_medium}\n"
+                f"Opportunity ID: {nuova_opp.opportunity_id}"
+            )
+            send_telegram_message(testo_msg)  # usa il tuo wrapper esistente
+        except Exception as e:
+            st.warning(f"Lead creato, ma Telegram ha dato errore: {e}")
+
+        st.success(
+            f"Richiesta ricevuta. Ti contattiamo a breve. (ID opportunità: {nuova_opp.opportunity_id})"
+        )
+
+        # 6) Deep-link al CRM
+        base_url = "https://forgialean.streamlit.app"
+        crm_url = f"{base_url}?page=crm&opp_id={nuova_opp.opportunity_id}"
+        st.markdown(
+            f"[Apri subito la scheda nel CRM]({crm_url})"
+        )
+# --------------------------------------------------------------------
+# PAGINA: TRENO VENDITE GUIDATO (7 VAGONI) + UPDATE CRM
+# --------------------------------------------------------------------
+def page_sales_train():
+    st.title("Treno vendite – Call guidata")
+    st.write(
+        "Usa i 7 vagoni per seguire la call in modo guidato, "
+        "restando entro 30–40 minuti complessivi."
+    )
+
+    # ------------------------------
+    # 1) Selezione Opportunity CRM
+    # ------------------------------
+    with get_session() as session:
+        opps = session.exec(select(Opportunity)).all()
+        clients = session.exec(select(Client)).all()
+
+    if not opps:
+        st.info("Nessuna opportunità presente. Crea prima almeno una opportunità nel CRM.")
+        st.stop()
+
+    df_opps = pd.DataFrame([o.__dict__ for o in opps])
+    df_clients = pd.DataFrame([c.__dict__ for c in clients]) if clients else pd.DataFrame()
+    client_map = {c["client_id"]: c["ragione_sociale"] for _, c in df_clients.iterrows()} if not df_clients.empty else {}
+
+    df_opps["Cliente"] = df_opps["client_id"].map(client_map).fillna(df_opps["client_id"])
+
+    opp_labels = [
+        f"{row['opportunity_id']} - {row['Cliente']} - {row['nome_opportunita']}"
+        for _, row in df_opps.iterrows()
+    ]
+    sel_opp_label = st.selectbox(
+        "Aggancia questa call a un'opportunity CRM",
+        opp_labels,
+        key="train_opp_sel_guidata",
+    )
+    sel_opp_id = int(sel_opp_label.split(" - ")[0])
+
+    # ------------------------------
+    # 2) Session state per gli step
+    # ------------------------------
+    for key in ["v1_step", "v2_step", "v3_step", "v4_step", "v5_step", "v6_step", "v7_step"]:
+        if key not in st.session_state:
+            st.session_state[key] = 1
+
+    # Appunti globali per ogni vagone (per costruire il testo da salvare)
+    note_keys = [
+        "v1_note_1", "v1_note_2", "v1_note_3", "v1_note_4",
+        "v2_note_1", "v2_note_2", "v2_note_3",
+        "v3_note_1", "v3_note_2", "v3_note_3",
+        "v4_note_1", "v4_note_2", "v4_note_3",
+        "v5_note_1", "v5_note_2", "v5_note_3",
+        "v6_note_1", "v6_note_2", "v6_note_3",
+        "v7_note_1", "v7_note_2",
+    ]
+    for nk in note_keys:
+        if nk not in st.session_state:
+            st.session_state[nk] = ""
+
+    # ------------------------------
+    # Sidebar – info chiamata
+    # ------------------------------
+    with st.sidebar:
+        st.markdown("### Dati chiamata")
+        cliente = st.text_input("Cliente / Azienda", key="train_cliente")
+        referente = st.text_input("Referente", key="train_referente")
+        data_call = st.date_input("Data call", value=datetime.today())
+        durata_prevista = st.selectbox(
+            "Durata prevista",
+            ["30 minuti", "40 minuti", "Altro"],
+            index=0,
+        )
+        st.write("Suggerito: usa i vagoni in ordine da 1 a 7.")
+        st.caption(f"Opportunity ID collegata: {sel_opp_id}")
+
+    # ==================================================================
+    # VAGONE 1 – PRIMO CONTATTO
+    # ==================================================================
+    with st.expander("Vagone 1 – Primo contatto", expanded=True):
+        step = st.session_state.v1_step
+
+        if step == 1:
+            st.markdown("### Step 1 – Apertura")
+            st.write("Obiettivo: rompere il ghiaccio e dare contesto (3–4 minuti).")
+            st.markdown(
+                "- Presentati per nome e ruolo.\n"
+                "- Ricorda come vi siete conosciuti / chi vi ha messi in contatto.\n"
+                "- Chiedi: **\"Hai circa 20–30 minuti per parlare ora?\"**"
+            )
+
+            col_a1, col_a2, col_a3 = st.columns(3)
+            with col_a1:
+                if st.button("Ha tempo (sì)", key="v1_s1_yes"):
+                    st.success("Perfetto: puoi passare al motivo della call.")
+                    st.session_state.v1_step = 2
+            with col_a2:
+                if st.button("Ha poco tempo", key="v1_s1_short"):
+                    st.info(
+                        "Concorda subito un momento preciso per una call completa "
+                        "(data, ora, durata) e valuta se fare una mini scoperta ora."
+                    )
+            with col_a3:
+                if st.button("Non è il momento", key="v1_s1_no"):
+                    st.warning(
+                        "Prima di chiudere la call, concorda un follow-up con data/orario."
+                    )
+
+            st.text_area("Appunti apertura", key="v1_note_1")
+            if st.checkbox("Step 1 completato", key="v1_done_1"):
+                st.session_state.v1_step = 2
+
+        elif step == 2:
+            st.markdown("### Step 2 – Motivo della call")
+            st.write("Obiettivo: capire perché sta parlando con te (5 minuti).")
+            st.markdown(
+                "Domande chiave:\n"
+                "- *\"Cosa ti ha spinto a confrontarti su questo tema adesso?\"*\n"
+                "- *\"Cosa non ti sta funzionando oggi su produzione / OEE / margini?\"*\n"
+                "- *\"Come gestite attualmente questa situazione?\"*"
+            )
+
+            st.markdown("**Come percepisci la risposta?**")
+            col_b1, col_b2, col_b3 = st.columns(3)
+            with col_b1:
+                if st.button("Dolore chiaro e concreto", key="v1_s2_pain"):
+                    st.success(
+                        "Bene: segnati esempi, numeri e reparti coinvolti. "
+                        "Puoi passare all’impatto."
+                    )
+                    st.session_state.v1_step = 3
+            with col_b2:
+                if st.button("Vago / superficiale", key="v1_s2_vague"):
+                    st.info(
+                        "Approfondisci con: *\"Puoi farmi un esempio pratico degli ultimi 30 giorni?\"*"
+                    )
+            with col_b3:
+                if st.button("Nessun vero problema", key="v1_s2_none"):
+                    st.warning(
+                        "Probabile curiosità: valuta se vale la pena proseguire "
+                        "o chiudere con eleganza proponendo solo contenuti."
+                    )
+
+            st.text_area("Appunti motivo / contesto", key="v1_note_2")
+            if st.checkbox("Step 2 completato", key="v1_done_2"):
+                st.session_state.v1_step = 3
+
+        elif step == 3:
+            st.markdown("### Step 3 – Impatto e priorità")
+            st.write("Obiettivo: misurare impatto su numeri e priorità (8–10 minuti).")
+            st.markdown(
+                "Domande chiave:\n"
+                "- *\"Che impatto ha questo problema su tempi, OEE o margini?\"*\n"
+                "- *\"Se non fate nulla per 6–12 mesi, cosa succede?\"*\n"
+                "- *\"Rispetto ad altri progetti in corso, dove lo metteresti come priorità?\"*"
+            )
+
+            st.markdown("**Come reagisce?**")
+            col_c1, col_c2, col_c3 = st.columns(3)
+            with col_c1:
+                if st.button("Impatto alto e urgente", key="v1_s3_high"):
+                    st.success(
+                        "È un problema strategico: preparati a proporre un prossimo passo concreto."
+                    )
+                    st.session_state.v1_step = 4
+            with col_c2:
+                if st.button("Impatto medio", key="v1_s3_mid"):
+                    st.info(
+                        "Aiutalo a capire il costo di non fare nulla con esempi o benchmark."
+                    )
+            with col_c3:
+                if st.button("Impatto basso", key="v1_s3_low"):
+                    st.warning(
+                        "Potrebbe non essere prioritario: valuta un follow-up leggero "
+                        "(contenuti, newsletter, check periodico)."
+                    )
+
+            st.text_area("Appunti impatto / priorità", key="v1_note_3")
+            if st.checkbox("Step 3 completato", key="v1_done_3"):
+                st.session_state.v1_step = 4
+
+        elif step == 4:
+            st.markdown("### Step 4 – Prossimo passo")
+            st.write("Obiettivo: chiudere con un next step chiaro (5–7 minuti).")
+            st.markdown(
+                "Opzioni tipiche di prossimo passo:\n"
+                "- Analisi dati OEE / margini su un campione di commesse.\n"
+                "- Sopralluogo in stabilimento.\n"
+                "- Demo del cruscotto ForgiaLean su dati di test.\n"
+                "- Call operativa con produzione + qualità + controllo di gestione."
+            )
+
+            st.markdown("**Cosa accetta il cliente?**")
+            col_d1, col_d2, col_d3 = st.columns(3)
+            with col_d1:
+                if st.button("Accetta un passo concreto", key="v1_s4_yes"):
+                    st.success(
+                        "Concorda data/ora, definisci chi deve esserci e invia un riepilogo per email."
+                    )
+            with col_d2:
+                if st.button("Deve parlarne internamente", key="v1_s4_internal"):
+                    st.info(
+                        "Fissa comunque un tentativo di follow-up con data/orario "
+                        "prima di chiudere la call."
+                    )
+            with col_d3:
+                if st.button("Non vuole impegnarsi", key="v1_s4_no"):
+                    st.warning(
+                        "Chiudi con eleganza, lascia la porta aperta e proponi solo contenuti "
+                        "o un check tra qualche mese."
+                    )
+
+            st.text_area("Appunti next step / decisione", key="v1_note_4")
+            if st.checkbox("Vagone 1 completato", key="v1_done_4"):
+                st.success("Vagone 1 completato: puoi passare al vagone successivo.")
+
+    # ==================================================================
+    # VAGONE 2 – PROCESSO / FLUSSO
+    # ==================================================================
+    with st.expander("Vagone 2 – Processo / flusso", expanded=False):
+        step = st.session_state.v2_step
+
+        if step == 1:
+            st.markdown("### Step 1 – Come lavorate oggi?")
+            st.write("Obiettivo: capire il flusso produttivo e informativo attuale (5 minuti).")
+            st.markdown(
+                "Domande chiave:\n"
+                "- *\"Mi racconti in breve il flusso tipico: dall’ordine alla consegna?\"*\n"
+                "- *\"Dove vedi oggi più intoppi: pianificazione, produzione, logistica?\"*\n"
+                "- *\"Che strumenti usate: ERP, Excel, fogli cartacei?\"*"
+            )
+
+            col_a1, col_a2 = st.columns(2)
+            with col_a1:
+                if st.button("Flusso chiaro", key="v2_s1_clear"):
+                    st.success("Bene: prendi nota delle fasi chiave e passa ai colli di bottiglia.")
+                    st.session_state.v2_step = 2
+            with col_a2:
+                if st.button("Flusso confuso", key="v2_s1_confused"):
+                    st.info(
+                        "Ridisegna a voce un flusso semplice e chiedi conferma: "
+                        "*\"Quindi, se ho capito bene, l’ordine fa così…\"*"
+                    )
+
+            st.text_area("Appunti flusso attuale", key="v2_note_1")
+            if st.checkbox("Step 1 completato (V2)", key="v2_done_1"):
+                st.session_state.v2_step = 2
+
+        elif step == 2:
+            st.markdown("### Step 2 – Colli di bottiglia")
+            st.write("Obiettivo: identificare dove si perde tempo o qualità (5–7 minuti).")
+            st.markdown(
+                "Domande chiave:\n"
+                "- *\"In quale punto del flusso si accumulano più ritardi?\"*\n"
+                "- *\"Ci sono reparti o macchine che aspettano spesso informazioni o materiale?\"*\n"
+                "- *\"Dove nascono più rilavorazioni o scarti?\"*"
+            )
+
+            col_b1, col_b2, col_b3 = st.columns(3)
+            with col_b1:
+                if st.button("Bottleneck chiaro", key="v2_s2_bneck"):
+                    st.success("Perfetto: collega questo bottleneck ai numeri (OEE, ritardi, margini).")
+                    st.session_state.v2_step = 3
+            with col_b2:
+                if st.button("Più punti critici", key="v2_s2_multi"):
+                    st.info("Chiedi di priorizzare: *\"Se dovessi scegliere uno solo da risolvere ora?\"*")
+            with col_b3:
+                if st.button("Nessun collo evidente", key="v2_s2_none"):
+                    st.warning("Probabile percezione diffusa di caos: indaga su ritardi e straordinari.")
+
+            st.text_area("Appunti colli di bottiglia", key="v2_note_2")
+            if st.checkbox("Step 2 completato (V2)", key="v2_done_2"):
+                st.session_state.v2_step = 3
+
+        elif step == 3:
+            st.markdown("### Step 3 – Flussi informativi")
+            st.write("Obiettivo: capire come girano le informazioni (5 minuti).")
+            st.markdown(
+                "Domande chiave:\n"
+                "- *\"Chi vede cosa, e con che strumenti (monitor, report, Excel)?\"*\n"
+                "- *\"Quando un problema succede in linea, chi lo vede e con che ritardo?\"*\n"
+                "- *\"Ci sono doppi inserimenti o copia/incolla tra sistemi?\"*"
+            )
+
+            col_c1, col_c2 = st.columns(2)
+            with col_c1:
+                if st.button("Flussi chiari ma manuali", key="v2_s3_manual"):
+                    st.success("Ottimo gancio per digitalizzare e centralizzare i dati in un cruscotto.")
+            with col_c2:
+                if st.button("Flussi confusi / silos", key="v2_s3_silos"):
+                    st.info("Evidenzia il rischio di errori, ritardi e mancanza di visione d’insieme.")
+
+            st.text_area("Appunti flussi informativi", key="v2_note_3")
+            if st.checkbox("Vagone 2 completato", key="v2_done_3"):
+                st.success("Vagone 2 completato: puoi passare al Vagone 3.")
+
+    # ==================================================================
+    # VAGONE 3 – DATI E MISURE
+    # ==================================================================
+    with st.expander("Vagone 3 – Dati e misure", expanded=False):
+        step = st.session_state.v3_step
+
+        if step == 1:
+            st.markdown("### Step 1 – Cosa misurate oggi")
+            st.write("Obiettivo: capire quali KPI esistono e quanto sono affidabili (5 minuti).")
+            st.markdown(
+                "Domande chiave:\n"
+                "- *\"Che indicatori usate oggi (OEE, scarti, tempi setup, ritardi consegna)?\"*\n"
+                "- *\"Con che frequenza li guardate e chi li vede?\"*\n"
+                "- *\"Vi fidate dei numeri o avete dubbi sulla qualità del dato?\"*"
+            )
+
+            col_a1, col_a2 = st.columns(2)
+            with col_a1:
+                if st.button("Misure chiare", key="v3_s1_clear"):
+                    st.success("Bene: chiedi qualche valore tipico e trend recente.")
+                    st.session_state.v3_step = 2
+            with col_a2:
+                if st.button("Misure scarse/confuse", key="v3_s1_poor"):
+                    st.info("Punto di forza per te: senza misure affidabili è difficile migliorare davvero.")
+
+            st.text_area("Appunti KPI attuali", key="v3_note_1")
+            if st.checkbox("Step 1 completato (V3)", key="v3_done_1"):
+                st.session_state.v3_step = 2
+
+        elif step == 2:
+            st.markdown("### Step 2 – Fonti dati")
+            st.write("Obiettivo: capire da dove arrivano i dati (ERP, macchine, Excel).")
+            st.markdown(
+                "Domande chiave:\n"
+                "- *\"Da dove arrivano questi numeri: ERP, MES, fogli manuali?\"*\n"
+                "- *\"Quanta parte è input manuale operatore?\"*\n"
+                "- *\"Quanto tempo passa tra l’evento e la disponibilità del dato?\"*"
+            )
+
+            col_b1, col_b2, col_b3 = st.columns(3)
+            with col_b1:
+                if st.button("Dati quasi automatici", key="v3_s2_auto"):
+                    st.success("Buona base: puoi concentrarti su analisi e azioni, non solo raccolta.")
+                    st.session_state.v3_step = 3
+            with col_b2:
+                if st.button("Dati molto manuali", key="v3_s2_manual"):
+                    st.info("Stressa il tema errori, ritardi e tempo perso in data entry.")
+            with col_b3:
+                if st.button("Dati sparsi in più sistemi", key="v3_s2_scattered"):
+                    st.warning("Ottimo gancio per proporre un cruscotto unico e integrato.")
+
+            st.text_area("Appunti fonti dati", key="v3_note_2")
+            if st.checkbox("Step 2 completato (V3)", key="v3_done_2"):
+                st.session_state.v3_step = 3
+
+        elif step == 3:
+            st.markdown("### Step 3 – Uso dei dati")
+            st.write("Obiettivo: capire se i dati guidano davvero decisioni e miglioramenti.")
+            st.markdown(
+                "Domande chiave:\n"
+                "- *\"Che decisioni prendete oggi grazie a questi dati?\"*\n"
+                "- *\"Vi capita di scoprire i problemi solo a fine mese?\"*\n"
+                "- *\"Coinvolgete i capi turno / operatori nella lettura dei numeri?\"*"
+            )
+
+            col_c1, col_c2 = st.columns(2)
+            with col_c1:
+                if st.button("Dati usati per decisioni", key="v3_s3_used"):
+                    st.success("Puoi proporre di rendere più veloce e visiva l’analisi (cruscotti real-time).")
+            with col_c2:
+                if st.button("Dati poco usati", key="v3_s3_unused"):
+                    st.info("Sottolinea il gap tra sforzo di raccolta e valore ottenuto, proponendo casi pratici.")
+
+            st.text_area("Appunti uso dei dati", key="v3_note_3")
+            if st.checkbox("Vagone 3 completato", key="v3_done_3"):
+                st.success("Vagone 3 completato: puoi passare al Vagone 4.")
+
+    # ==================================================================
+    # VAGONE 4 – IMPATTO ECONOMICO
+    # ==================================================================
+    with st.expander("Vagone 4 – Impatto economico", expanded=False):
+        step = st.session_state.v4_step
+
+        if step == 1:
+            st.markdown("### Step 1 – Effetti sul cliente finale")
+            st.write("Obiettivo: collegare i problemi interni a clienti e fatturato.")
+            st.markdown(
+                "Domande chiave:\n"
+                "- *\"Questi problemi come impattano consegne, qualità percepita, reclami?\"*\n"
+                "- *\"Vi capita di consegnare in ritardo o fuori specifica?\"*\n"
+                "- *\"Avete perso ordini o clienti per questi motivi?\"*"
+            )
+
+            col_a1, col_a2 = st.columns(2)
+            with col_a1:
+                if st.button("Impatto forte sui clienti", key="v4_s1_high"):
+                    st.success("Ottimo: stai collegando il tuo lavoro a fatturato e soddisfazione cliente.")
+                    st.session_state.v4_step = 2
+            with col_a2:
+                if st.button("Impatto limitato", key="v4_s1_low"):
+                    st.info("Concentrati su costi interni: scarti, straordinari, stock, stress organizzativo.")
+
+            st.text_area("Appunti impatto cliente", key="v4_note_1")
+            if st.checkbox("Step 1 completato (V4)", key="v4_done_1"):
+                st.session_state.v4_step = 2
+
+        elif step == 2:
+            st.markdown("### Step 2 – Costi e sprechi")
+            st.write("Obiettivo: far emergere costi nascosti e potenziale di recupero.")
+            st.markdown(
+                "Domande chiave:\n"
+                "- *\"Dove vedi più sprechi di tempo o denaro (scarti, rework, attese)?\"*\n"
+                "- *\"Quanto incidono straordinari o turni aggiuntivi per inseguire i ritardi?\"*\n"
+                "- *\"Avete un’idea di quanto varrebbe risolvere il problema (% o €)?\"*"
+            )
+
+            col_b1, col_b2, col_b3 = st.columns(3)
+            with col_b1:
+                if st.button("Costi ben noti", key="v4_s2_known"):
+                    st.success("Puoi già abbozzare un business case di miglioramento.")
+                    st.session_state.v4_step = 3
+            with col_b2:
+                if st.button("Costi percepiti ma non misurati", key="v4_s2_guess"):
+                    st.info("Proponi una fase di quantificazione con dati reali (diagnostica).")
+            with col_b3:
+                if st.button("Nessuna idea dei costi", key="v4_s2_none"):
+                    st.warning("Grande opportunità: far vedere al cliente quanto sta lasciando sul tavolo.")
+
+            st.text_area("Appunti costi / sprechi", key="v4_note_2")
+            if st.checkbox("Step 2 completato (V4)", key="v4_done_2"):
+                st.session_state.v4_step = 3
+
+        elif step == 3:
+            st.markdown("### Step 3 – Potenziale di miglioramento")
+            st.write("Obiettivo: far intravedere il valore economico di una soluzione.")
+            st.markdown(
+                "Domande chiave:\n"
+                "- *\"Se riduceste scarti / fermi / ritardi del 20–30%, cosa cambierebbe?\"*\n"
+                "- *\"Ci sono obiettivi aziendali già fissati (OEE, margine, OTIF)?\"*\n"
+                "- *\"C’è già un budget o un piano per migliorare questo ambito?\"*"
+            )
+
+            col_c1, col_c2 = st.columns(2)
+            with col_c1:
+                if st.button("Potenziale chiaro e importante", key="v4_s3_high"):
+                    st.success("Collega direttamente questi obiettivi alla tua proposta nella parte soluzione.")
+            with col_c2:
+                if st.button("Potenziale poco chiaro", key="v4_s3_unclear"):
+                    st.info("Suggerisci una fase di analisi numerica per quantificare in modo più preciso.")
+
+            st.text_area("Appunti potenziale economico", key="v4_note_3")
+            if st.checkbox("Vagone 4 completato", key="v4_done_3"):
+                st.success("Vagone 4 completato: puoi passare al Vagone 5.")
+
+    # ==================================================================
+    # VAGONE 5 – PERSONE E RUOLI
+    # ==================================================================
+    with st.expander("Vagone 5 – Persone e ruoli", expanded=False):
+        step = st.session_state.v5_step
+
+        if step == 1:
+            st.markdown("### Step 1 – Chi è coinvolto")
+            st.write("Obiettivo: mappare la squadra interna coinvolta nel problema e nella soluzione.")
+            st.markdown(
+                "Domande chiave:\n"
+                "- *\"Chi vive il problema tutti i giorni (reparti, ruoli)?\"*\n"
+                "- *\"Chi dovrà usare la soluzione quotidianamente?\"*\n"
+                "- *\"Chi potrebbe ostacolare il cambiamento?\"*"
+            )
+
+            col_a1, col_a2 = st.columns(2)
+            with col_a1:
+                if st.button("Mappa chiara", key="v5_s1_clear"):
+                    st.success("Perfetto: puoi preparare una proposta che tenga conto di tutti gli attori.")
+                    st.session_state.v5_step = 2
+            with col_a2:
+                if st.button("Mappa confusa", key="v5_s1_confused"):
+                    st.info("Proponi una call successiva con produzione + qualità + controllo gestione insieme.")
+
+            st.text_area("Appunti persone coinvolte", key="v5_note_1")
+            if st.checkbox("Step 1 completato (V5)", key="v5_done_1"):
+                st.session_state.v5_step = 2
+
+        elif step == 2:
+            st.markdown("### Step 2 – Processo decisionale")
+            st.write("Obiettivo: capire come si prende la decisione di acquisto.")
+            st.markdown(
+                "Domande chiave:\n"
+                "- *\"Chi decide alla fine se partire o no con un progetto così?\"*\n"
+                "- *\"Quali passi dovete fare internamente per approvare un investimento?\"*\n"
+                "- *\"Avete già fatto progetti simili? Come avete deciso allora?\"*"
+            )
+
+            col_b1, col_b2, col_b3 = st.columns(3)
+            with col_b1:
+                if st.button("Decision maker chiaro", key="v5_s2_dm_clear"):
+                    st.success("Ottimo: coinvolgilo presto nelle prossime call.")
+                    st.session_state.v5_step = 3
+            with col_b2:
+                if st.button("Comitato / più persone", key="v5_s2_committee"):
+                    st.info("Identifica un champion interno che ti aiuti a far circolare il valore del progetto.")
+            with col_b3:
+                if st.button("Processo poco chiaro", key="v5_s2_unknown"):
+                    st.warning("Rischio di stallo: torna su questo punto prima di formulare un’offerta completa.")
+
+            st.text_area("Appunti processo decisionale", key="v5_note_2")
+            if st.checkbox("Step 2 completato (V5)", key="v5_done_2"):
+                st.session_state.v5_step = 3
+
+        elif step == 3:
+            st.markdown("### Step 3 – Cultura e cambiamento")
+            st.write("Obiettivo: capire quanto l’azienda è pronta a cambiare modo di lavorare.")
+            st.markdown(
+                "Domande chiave:\n"
+                "- *\"Avete già fatto progetti di miglioramento (Lean, digitalizzazione, ecc.)?\"*\n"
+                "- *\"Come sono andati?\"*\n"
+                "- *\"Cosa dovrebbe succedere perché questo progetto venga considerato un successo?\"*"
+            )
+
+            col_c1, col_c2 = st.columns(2)
+            with col_c1:
+                if st.button("Apertura al cambiamento alta", key="v5_s3_open"):
+                    st.success("Puoi proporre un percorso più ambizioso (roadmap a step).")
+            with col_c2:
+                if st.button("Resistenza alta", key="v5_s3_resist"):
+                    st.info("Meglio partire da un pilota piccolo, con risultati veloci e visibili.")
+
+            st.text_area("Appunti cultura / cambiamento", key="v5_note_3")
+            if st.checkbox("Vagone 5 completato", key="v5_done_3"):
+                st.success("Vagone 5 completato: puoi passare al Vagone 6.")
+
+    # ==================================================================
+    # VAGONE 6 – SOLUZIONE PROPOSTA
+    # ==================================================================
+    with st.expander("Vagone 6 – Soluzione proposta", expanded=False):
+        step = st.session_state.v6_step
+
+        if step == 1:
+            st.markdown("### Step 1 – Collegare problemi e moduli")
+            st.write("Obiettivo: collegare quanto emerso con i pezzi della tua soluzione.")
+            st.markdown(
+                "Checklist:\n"
+                "- Richiama in 1 minuto i problemi chiave emersi (OEE, flussi, dati, costi).\n"
+                "- Mappa i problemi sui moduli / servizi che puoi offrire.\n"
+                "- Verifica che il cliente si ritrovi in questo collegamento."
+            )
+
+            col_a1, col_a2 = st.columns(2)
+            with col_a1:
+                if st.button("Allineamento forte", key="v6_s1_fit"):
+                    st.success("Puoi passare a descrivere la soluzione in 2–3 step chiari.")
+                    st.session_state.v6_step = 2
+            with col_a2:
+                if st.button("Allineamento da rivedere", key="v6_s1_weak"):
+                    st.info("Chiedi cosa manca o cosa è meno rilevante, e ritarare la proposta.")
+
+            st.text_area("Appunti collegamento problemi-soluzione", key="v6_note_1")
+            if st.checkbox("Step 1 completato (V6)", key="v6_done_1"):
+                st.session_state.v6_step = 2
+
+        elif step == 2:
+            st.markdown("### Step 2 – Descrizione ad alto livello")
+            st.write("Obiettivo: spiegare la soluzione senza perdersi nei dettagli tecnici.")
+            st.markdown(
+                "Checklist:\n"
+                "- Descrivi la soluzione in 2–3 blocchi (es. Raccolta dati → Cruscotto → Miglioramento).\n"
+                "- Usa il linguaggio del cliente (turni, linee, commesse, ecc.).\n"
+                "- Mostra 1–2 esempi concreti di cosa vedrà/otterrà."
+            )
+
+            col_b1, col_b2 = st.columns(2)
+            with col_b1:
+                if st.button("Cliente segue e annuisce", key="v6_s2_yes"):
+                    st.success("Perfetto: puoi accennare a tempi, effort e impatto.")
+                    st.session_state.v6_step = 3
+            with col_b2:
+                if st.button("Cliente confuso / scettico", key="v6_s2_no"):
+                    st.info("Fermati e chiedi: *\"Cosa non ti torna o non è chiaro?\"*")
+
+            st.text_area("Appunti descrizione soluzione", key="v6_note_2")
+            if st.checkbox("Step 2 completato (V6)", key="v6_done_2"):
+                st.session_state.v6_step = 3
+
+        elif step == 3:
+            st.markdown("### Step 3 – Tempi, rischi, impegno")
+            st.write("Obiettivo: dare un’idea realistica di tempi e impegno richiesti.")
+            st.markdown(
+                "Checklist:\n"
+                "- Indica durata tipica del progetto o della fase pilota.\n"
+                "- Sii chiaro sulle attività del cliente (chi deve fare cosa, e per quanto tempo).\n"
+                "- Evidenzia come riduci i rischi (pilota, step incrementali, supporto)."
+            )
+
+            col_c1, col_c2 = st.columns(2)
+            with col_c1:
+                if st.button("Cliente vede fattibile", key="v6_s3_ok"):
+                    st.success("Puoi portarlo verso il prossimo passo concreto nel Vagone 7.")
+            with col_c2:
+                if st.button("Cliente preoccupato per effort", key="v6_s3_effort"):
+                    st.info("Ridimensiona il primo step (pilota più piccolo, focus su una linea/reparto).")
+
+            st.text_area("Appunti tempi / rischi", key="v6_note_3")
+            if st.checkbox("Vagone 6 completato", key="v6_done_3"):
+                st.success("Vagone 6 completato: puoi passare al Vagone 7.")
+
+    # ==================================================================
+    # VAGONE 7 – CHIUSURA / RECAP
+    # ==================================================================
+    with st.expander("Vagone 7 – Chiusura / recap", expanded=False):
+        step = st.session_state.v7_step
+
+        if step == 1:
+            st.markdown("### Step 1 – Riepilogo condiviso")
+            st.write("Obiettivo: chiudere con una fotografia condivisa di problemi e soluzione.")
+            st.markdown(
+                "Checklist:\n"
+                "- Riepiloga in 1–2 minuti cosa hai capito: problemi, impatti, priorità.\n"
+                "- Chiedi conferma: *\"Mi confermi che è una sintesi corretta?\"*\n"
+                "- Se serve, correggi la sintesi insieme a lui."
+            )
+
+            if st.button("Riepilogo confermato", key="v7_s1_ok"):
+                st.success("Bene: ora definisci insieme il prossimo passo concreto.")
+                st.session_state.v7_step = 2
+
+            st.text_area("Appunti riepilogo", key="v7_note_1")
+            if st.checkbox("Step 1 completato (V7)", key="v7_done_1"):
+                st.session_state.v7_step = 2
+
+        elif step == 2:
+            st.markdown("### Step 2 – Next step e commit")
+            st.write("Obiettivo: chiudere la call con un impegno chiaro, non solo 'ci sentiamo'.")
+            st.markdown(
+                "Opzioni tipiche:\n"
+                "- Invio proposta con call già fissata per discuterla.\n"
+                "- Analisi dati / diagnosi con accesso a storici.\n"
+                "- Sopralluogo operativo.\n"
+                "- Workshop con team interno."
+            )
+
+            col_b1, col_b2, col_b3 = st.columns(3)
+            with col_b1:
+                if st.button("Accordo su step concreto", key="v7_s2_yes"):
+                    st.success("Concorda data/ora e chi partecipa, e prometti un riepilogo scritto.")
+            with col_b2:
+                if st.button("Deve allinearsi internamente", key="v7_s2_internal"):
+                    st.info("Fissa comunque una data indicativa per aggiornarsi.")
+            with col_b3:
+                if st.button("No decision ora", key="v7_s2_nodec"):
+                    st.warning("Chiudi lasciando la porta aperta, con un check leggero a data futura.")
+
+            st.text_area("Appunti prossimo passo", key="v7_note_2")
+            if st.checkbox("Vagone 7 completato", key="v7_done_2"):
+                st.success("Call completata. Ricorda di aggiornare CRM / dashboard dopo la call.")
+
+    st.markdown("---")
+
+    # =========================================================
+    # SALVATAGGIO SU CRM: NOTE + FASE + PROBABILITÀ
+    # =========================================================
+    st.subheader("Aggiorna CRM da questa call")
+
+    col_save1, col_save2 = st.columns(2)
+    with col_save1:
+        if st.button("💾 Salva questa call sull'opportunity"):
+            testo = f"\n\n=== Call treno vendite del {data_call.strftime('%Y-%m-%d')} ===\n"
+            testo += f"Cliente: {cliente} – Referente: {referente}\n"
+            testo += "Vagone 1:\n"
+            testo += f"- Apertura: {st.session_state['v1_note_1']}\n"
+            testo += f"- Motivo: {st.session_state['v1_note_2']}\n"
+            testo += f"- Impatto: {st.session_state['v1_note_3']}\n"
+            testo += f"- Next step: {st.session_state['v1_note_4']}\n"
+            testo += "Vagone 2:\n"
+            testo += f"- Flusso: {st.session_state['v2_note_1']}\n"
+            testo += f"- Colli di bottiglia: {st.session_state['v2_note_2']}\n"
+            testo += f"- Flussi informativi: {st.session_state['v2_note_3']}\n"
+            testo += "Vagone 3:\n"
+            testo += f"- KPI: {st.session_state['v3_note_1']}\n"
+            testo += f"- Fonti dati: {st.session_state['v3_note_2']}\n"
+            testo += f"- Uso dei dati: {st.session_state['v3_note_3']}\n"
+            testo += "Vagone 4:\n"
+            testo += f"- Impatto cliente: {st.session_state['v4_note_1']}\n"
+            testo += f"- Costi/sprechi: {st.session_state['v4_note_2']}\n"
+            testo += f"- Potenziale: {st.session_state['v4_note_3']}\n"
+            testo += "Vagone 5:\n"
+            testo += f"- Persone coinvolte: {st.session_state['v5_note_1']}\n"
+            testo += f"- Processo decisionale: {st.session_state['v5_note_2']}\n"
+            testo += f"- Cultura/cambiamento: {st.session_state['v5_note_3']}\n"
+            testo += "Vagone 6:\n"
+            testo += f"- Collegamento problemi-soluzione: {st.session_state['v6_note_1']}\n"
+            testo += f"- Descrizione soluzione: {st.session_state['v6_note_2']}\n"
+            testo += f"- Tempi/rischi: {st.session_state['v6_note_3']}\n"
+            testo += "Vagone 7:\n"
+            testo += f"- Riepilogo: {st.session_state['v7_note_1']}\n"
+            testo += f"- Prossimo passo: {st.session_state['v7_note_2']}\n"
+
+            with get_session() as session:
+                opp = session.get(Opportunity, sel_opp_id)
+                if not opp:
+                    st.error("Opportunity non trovata.")
+                else:
+                    opp.note = (opp.note or "") + testo
+
+                    fase_attuale = (opp.fase_pipeline or "").strip()
+                    v1_ok = st.session_state.get("v1_done_4", False)
+                    v4_ok = st.session_state.get("v4_done_3", False)
+
+                    if v1_ok and v4_ok:
+                        if fase_attuale in ("Lead", "Lead pre-qualificato (MQL)", ""):
+                            opp.fase_pipeline = "Lead qualificato (SQL)"
+                        elif fase_attuale in ("Lead qualificato (SQL)", "Analisi"):
+                            opp.fase_pipeline = "Proposta / Trattativa"
+
+                    v7_ok = st.session_state.get("v7_done_2", False)
+                    prob_attuale = float(opp.probabilita or 0.0)
+                    if v7_ok:
+                        nuova_prob = max(prob_attuale, 70.0)
+                    elif v1_ok and v4_ok:
+                        nuova_prob = max(prob_attuale, 50.0)
+                    else:
+                        nuova_prob = prob_attuale
+                    opp.probabilita = nuova_prob
+
+                    session.add(opp)
+                    session.commit()
+                    st.success("Call salvata sull'opportunity e campi CRM aggiornati.")
+
+    with col_save2:
+        st.caption("Dopo il salvataggio trovi subito note e stato aggiornato nella pagina CRM / Opportunità.")
+
+    st.caption("Treno vendite guidato per call di 30–40 minuti, integrato con il CRM.")
 
 def get_next_invoice_number(session, year=None, prefix="FL"):
     year = year or date.today().year
@@ -1935,7 +3959,7 @@ def page_finance_invoices():
 
     uploaded_file = st.file_uploader("Carica file PDF fattura", type=["pdf"])
 
-    parsed_data = {
+    parsed_data: dict[str, Any] = {
         "num_fattura": "",
         "data_fattura": date.today(),
         "data_scadenza": date.today(),
@@ -1961,7 +3985,9 @@ def page_finance_invoices():
             if m_date:
                 for fmt in ("%d/%m/%Y", "%d-%m-%Y"):
                     try:
-                        parsed_data["data_fattura"] = datetime.strptime(m_date.group(1), fmt).date()
+                        data_fatt = datetime.strptime(m_date.group(1), fmt).date()
+                        parsed_data["data_fattura"] = data_fatt
+                        parsed_data["data_scadenza"] = data_fatt
                         break
                     except ValueError:
                         continue
@@ -1969,13 +3995,17 @@ def page_finance_invoices():
             # Imponibile e totale (euristica)
             numbers = re.findall(r"(\d{1,3}(?:[\.\,]\d{3})*(?:[\.\,]\d{2}))", full_text)
             if len(numbers) >= 2:
-                def to_float(s):
+                def to_float(s: str) -> float:
                     s = s.replace(".", "").replace(",", ".")
                     return float(s)
+
                 parsed_data["imponibile"] = to_float(numbers[-2])
                 totale_pdf = to_float(numbers[-1])
                 if parsed_data["imponibile"] > 0:
-                    parsed_data["iva_perc"] = round((totale_pdf / parsed_data["imponibile"] - 1) * 100, 2)
+                    parsed_data["iva_perc"] = round(
+                        (totale_pdf / parsed_data["imponibile"] - 1) * 100,
+                        2,
+                    )
 
             st.success("PDF letto, controlla e conferma i dati sotto.")
 
@@ -1983,11 +4013,27 @@ def page_finance_invoices():
             st.error(f"Errore lettura PDF: {e}")
 
     if uploaded_file is not None and clients:
+        # Carico commesse/fasi
+        with get_session() as session:
+            commesse_pdf = session.exec(select(ProjectCommessa)).all()
+            fasi_pdf = session.exec(select(TaskFase)).all()
+
+        df_comm_pdf = pd.DataFrame([c.__dict__ for c in commesse_pdf]) if commesse_pdf else pd.DataFrame()
+        df_fasi_pdf = pd.DataFrame([f.__dict__ for f in fasi_pdf]) if fasi_pdf else pd.DataFrame()
+
+        commesse_labels_pdf = ["(nessuna)"]
+        if not df_comm_pdf.empty:
+            df_comm_pdf["label"] = df_comm_pdf["commessa_id"].astype(str) + " - " + df_comm_pdf["cod_commessa"]
+            commesse_labels_pdf += df_comm_pdf["label"].tolist()
+
+        fasi_labels_pdf = ["(nessuna)"]
+        if not df_fasi_pdf.empty:
+            df_fasi_pdf["label"] = df_fasi_pdf["fase_id"].astype(str) + " - " + df_fasi_pdf["nome_fase"]
+            fasi_labels_pdf += df_fasi_pdf["label"].tolist()
+
+        # Clienti
         df_clients = pd.DataFrame([c.__dict__ for c in clients])
         df_clients["label"] = df_clients["client_id"].astype(str) + " - " + df_clients["ragione_sociale"]
-
-        with get_session() as session:
-            suggested_num_pdf = get_next_invoice_number(session, year=date.today().year, prefix="FL")
 
         with st.form("new_invoice_from_pdf"):
             st.markdown("#### Dati fattura precompilati")
@@ -1995,24 +4041,32 @@ def page_finance_invoices():
             col1, col2 = st.columns(2)
             with col1:
                 client_label_pdf = st.selectbox("Cliente", df_clients["label"].tolist())
+                commessa_label_pdf = st.selectbox("Commessa (opzionale)", commesse_labels_pdf)
+                fase_label_pdf = st.selectbox("Fase (opzionale)", fasi_labels_pdf)
                 num_fattura_pdf = st.text_input(
                     "Numero fattura",
-                    parsed_data["num_fattura"] or suggested_num_pdf,
+                    parsed_data.get("num_fattura", ""),
                 )
-                data_fattura_pdf = st.date_input("Data fattura", value=parsed_data["data_fattura"])
-                data_scadenza_pdf = st.date_input("Data scadenza", value=parsed_data["data_fattura"])
+                data_fattura_pdf = st.date_input(
+                    "Data fattura",
+                    value=parsed_data.get("data_fattura", date.today()),
+                )
+                data_scadenza_pdf = st.date_input(
+                    "Data scadenza",
+                    value=parsed_data.get("data_scadenza", date.today()),
+                )
             with col2:
                 imponibile_pdf = st.number_input(
                     "Imponibile (€)",
                     min_value=0.0,
                     step=100.0,
-                    value=float(parsed_data["imponibile"]),
+                    value=float(parsed_data.get("imponibile", 0.0)),
                 )
                 iva_perc_pdf = st.number_input(
                     "Aliquota IVA (%)",
                     min_value=0.0,
                     step=1.0,
-                    value=float(parsed_data["iva_perc"]),
+                    value=float(parsed_data.get("iva_perc", 22.0)),
                 )
                 stato_pagamento_pdf = st.selectbox(
                     "Stato pagamento",
@@ -2028,6 +4082,15 @@ def page_finance_invoices():
                 st.warning("Il numero fattura è obbligatorio.")
             else:
                 client_id_sel_pdf = int(client_label_pdf.split(" - ")[0])
+
+                commessa_id_sel_pdf: int | None = None
+                if commessa_label_pdf != "(nessuna)":
+                    commessa_id_sel_pdf = int(commessa_label_pdf.split(" - ")[0])
+
+                fase_id_sel_pdf: int | None = None
+                if fase_label_pdf != "(nessuna)":
+                    fase_id_sel_pdf = int(fase_label_pdf.split(" - ")[0])
+
                 iva_val_pdf = imponibile_pdf * iva_perc_pdf / 100.0
                 totale_pdf = imponibile_pdf + iva_val_pdf
 
@@ -2042,6 +4105,8 @@ def page_finance_invoices():
                         importo_totale=totale_pdf,
                         stato_pagamento=stato_pagamento_pdf,
                         data_incasso=data_incasso_pdf if stato_pagamento_pdf == "incassata" else None,
+                        commessa_id=commessa_id_sel_pdf,
+                        fase_id=fase_id_sel_pdf,
                     )
                     session.add(new_inv_pdf)
                     session.commit()
@@ -2050,36 +4115,134 @@ def page_finance_invoices():
                 st.rerun()
 
     st.markdown("---")
-
     # =========================
     # 3) ELENCO FATTURE + KPI
     # =========================
     st.subheader("📊 Elenco fatture")
 
-    col_f1, col_f2 = st.columns(2)
+    # -------------------------
+    # FILTRI RICERCA FATTURE
+    # -------------------------
+    col_f1, col_f2, col_f3 = st.columns(3)
     with col_f1:
         data_da = st.date_input("Da data (fattura)", value=None)
     with col_f2:
         data_a = st.date_input("A data (fattura)", value=None)
+    with col_f3:
+        stato_filter = st.selectbox(
+            "Stato pagamento",
+            ["tutti", "emessa", "parzialmente_incassata", "incassata", "scaduta"],
+            index=0,
+        )
 
+    # filtro per cliente e anno
+    col_f4, col_f5 = st.columns(2)
+    with col_f4:
+        with get_session() as session:
+            clients_all = session.exec(select(Client)).all()
+        df_clients_all = pd.DataFrame([c.__dict__ for c in clients_all]) if clients_all else pd.DataFrame()
+        cliente_filter = "tutti"
+        if not df_clients_all.empty:
+            clienti_labels = ["tutti"] + (
+                df_clients_all["client_id"].astype(str) + " - " + df_clients_all["ragione_sociale"]
+            ).tolist()
+            cliente_filter = st.selectbox("Cliente", clienti_labels, index=0)
+    with col_f5:
+        anno_filter = st.selectbox(
+            "Anno fattura",
+            ["tutti"] + [str(y) for y in range(2023, date.today().year + 1)],
+            index=0,
+        )
+
+    # -------------------------
+    # CARICO FATTURE DAL DB
+    # -------------------------
     with get_session() as session:
         invoices = session.exec(select(Invoice)).all()
 
     if not invoices:
         st.info("Nessuna fattura registrata.")
-        return
+        st.stop()
 
     df_inv = pd.DataFrame([i.__dict__ for i in invoices])
     df_inv["data_fattura"] = pd.to_datetime(df_inv["data_fattura"], errors="coerce")
 
+    # -------------------------
+    # MERGE COMMESSE / FASI
+    # -------------------------
+    with get_session() as session:
+        commesse_all = session.exec(select(ProjectCommessa)).all()
+        fasi_all = session.exec(select(TaskFase)).all()
+
+    df_comm_all = pd.DataFrame([c.__dict__ for c in commesse_all]) if commesse_all else pd.DataFrame()
+    df_fasi_all = pd.DataFrame([f.__dict__ for f in fasi_all]) if fasi_all else pd.DataFrame()
+
+    if not df_comm_all.empty and "commessa_id" in df_inv.columns:
+        df_inv = df_inv.merge(
+            df_comm_all[["commessa_id", "cod_commessa"]],
+            how="left",
+            on="commessa_id",
+        )
+
+    if not df_fasi_all.empty and "fase_id" in df_inv.columns:
+        df_inv = df_inv.merge(
+            df_fasi_all[["fase_id", "nome_fase"]],
+            how="left",
+            on="fase_id",
+        )
+
+    # -------------------------
+    # FILTRO PER COMMESSA
+    # -------------------------
+    commessa_filter = "tutte"
+    if "cod_commessa" in df_inv.columns:
+        commesse_opts = ["tutte"] + sorted(df_inv["cod_commessa"].dropna().unique().tolist())
+        commessa_filter = st.selectbox("Commessa", commesse_opts, index=0)
+
+    # -------------------------
+    # APPLICA FILTRI
+    # -------------------------
     if data_da:
         df_inv = df_inv[df_inv["data_fattura"] >= pd.to_datetime(data_da)]
     if data_a:
         df_inv = df_inv[df_inv["data_fattura"] <= pd.to_datetime(data_a)]
 
-    st.dataframe(df_inv)
+    if stato_filter != "tutti" and "stato_pagamento" in df_inv.columns:
+        df_inv = df_inv[df_inv["stato_pagamento"] == stato_filter]
 
-    # KPI base: totale fatturato per anno
+    if cliente_filter != "tutti" and "client_id" in df_inv.columns:
+        client_id_sel = int(cliente_filter.split(" - ")[0])
+        df_inv = df_inv[df_inv["client_id"] == client_id_sel]
+
+    if anno_filter != "tutti":
+        df_inv["anno"] = df_inv["data_fattura"].dt.year
+        df_inv = df_inv[df_inv["anno"] == int(anno_filter)]
+
+    if commessa_filter != "tutte" and "cod_commessa" in df_inv.columns:
+        df_inv = df_inv[df_inv["cod_commessa"] == commessa_filter]
+
+    if df_inv.empty:
+        st.info("Nessuna fattura trovata con i filtri selezionati.")
+        st.stop()
+
+    # -------------------------
+    # VISTA TABELLA PULITA
+    # -------------------------
+    cols_show = [
+        "invoice_id",
+        "num_fattura",
+        "data_fattura",
+        "importo_totale",
+        "stato_pagamento",
+        "cod_commessa",
+        "nome_fase",
+    ]
+    cols_show = [c for c in cols_show if c in df_inv.columns]
+    st.dataframe(df_inv[cols_show])
+
+    # -------------------------
+    # KPI BASE: TOTALE PER ANNO
+    # -------------------------
     if {"data_fattura", "importo_totale"}.issubset(df_inv.columns):
         df_inv["data_fattura"] = pd.to_datetime(df_inv["data_fattura"], errors="coerce")
         df_inv["anno"] = df_inv["data_fattura"].dt.year
@@ -2092,7 +4255,7 @@ def page_finance_invoices():
     # =========================
     if role != "admin":
         st.info("Modifica, eliminazione ed export XML disponibili solo per ruolo 'admin'.")
-        return
+        st.stop()
 
     st.markdown("---")
     st.subheader("✏️ Modifica / elimina / esporta fattura (solo admin)")
@@ -2106,7 +4269,7 @@ def page_finance_invoices():
 
     if not inv_obj:
         st.warning("Fattura non trovata.")
-        return
+        st.stop()
 
     df_clients_all = pd.DataFrame([c.__dict__ for c in clients_all]) if clients_all else pd.DataFrame()
     if not df_clients_all.empty:
@@ -2188,8 +4351,8 @@ def page_finance_invoices():
                     obj.data_incasso = data_incasso_e if stato_pagamento_e == "incassata" else None
                     session.add(obj)
                     session.commit()
-            st.success("Fattura aggiornata.")
-            st.rerun()
+        st.success("Fattura aggiornata.")
+        st.rerun()
 
     if delete_clicked:
         with get_session() as session:
@@ -2249,10 +4412,15 @@ def page_finance_invoices():
 
         # Progressivo invio
         prefisso = my.get("progressivo_invio_prefisso", "FL")
-        raw_prog = f"{prefisso}{inv.invoice_id:08d}"
-        progressivo_invio = raw_prog[:10] 
+        progressivo_invio = f"{prefisso}_{(inv.num_fattura or '1').replace('/', '_')}"
 
-        aliquota_iva = (inv.iva / inv.importo_imponibile * 100) if inv.importo_imponibile else 22.0
+        # Aliquota IVA: calcolata da imponibile e iva
+        if inv.importo_imponibile:
+            aliquota_iva = round((inv.iva / inv.importo_imponibile) * 100, 2)
+        else:
+            aliquota_iva = 22.0
+
+        descrizione_riga = "Servizi di consulenza ForgiaLean"
 
         xml_content = f"""<?xml version="1.0" encoding="UTF-8"?>
 <FatturaElettronica versione="{formato_trasm}">
@@ -2264,8 +4432,7 @@ def page_finance_invoices():
       </IdTrasmittente>
       <ProgressivoInvio>{progressivo_invio}</ProgressivoInvio>
       <FormatoTrasmissione>{formato_trasm}</FormatoTrasmissione>
-      <CodiceDestinatario>{cli_cod_dest}</CodiceDestinatario>
-      {"<PECDestinatario>" + cli_pec + "</PECDestinatario>" if cli_cod_dest == "0000000" and cli_pec else ""}
+      <CodiceDestinatario>{cli_cod_dest}</CodiceDestinatario>{("<PECDestinatario>" + cli_pec + "</PECDestinatario>") if cli_cod_dest == "0000000" and cli_pec else ""}
     </DatiTrasmissione>
     <CedentePrestatore>
       <DatiAnagrafici>
@@ -2320,7 +4487,7 @@ def page_finance_invoices():
     <DatiBeniServizi>
       <DettaglioLinee>
         <NumeroLinea>1</NumeroLinea>
-        <Descrizione>Servizi di consulenza ForgiaLean</Descrizione>
+        <Descrizione>{descrizione_riga}</Descrizione>
         <Quantita>1.00</Quantita>
         <PrezzoUnitario>{inv.importo_imponibile:.2f}</PrezzoUnitario>
         <PrezzoTotale>{inv.importo_imponibile:.2f}</PrezzoTotale>
@@ -2367,7 +4534,7 @@ def page_payments():
 
     if not invoices:
         st.info("Nessuna fattura registrata. Prima inserisci almeno una fattura nella pagina Finanza / Fatture.")
-        return
+        st.stop()
 
     df_inv = pd.DataFrame([i.__dict__ for i in invoices])
 
@@ -2402,7 +4569,7 @@ def page_payments():
     def aggiorna_stato_fattura(session, invoice_id, payment_date):
         inv_obj = session.get(Invoice, invoice_id)
         if not inv_obj:
-            return
+            st.stop()
 
         pays_all = session.exec(
             select(Payment).where(Payment.invoice_id == invoice_id)
@@ -2616,7 +4783,7 @@ def page_payments():
 
     if not pays:
         st.info("Nessun pagamento registrato.")
-        return
+        st.stop()
 
     df_pay = pd.DataFrame([p.__dict__ for p in pays])
 
@@ -2695,6 +4862,10 @@ def page_payments():
     # =========================
     st.subheader("📎 Carica fattura PDF e precompila")
 
+    # Carico i clienti una volta sola, li userò dopo per il form
+    with get_session() as session:
+        clients = session.exec(select(Client)).all()
+
     uploaded_file = st.file_uploader("Carica file PDF fattura", type=["pdf"])
 
     parsed_data = {
@@ -2731,20 +4902,43 @@ def page_payments():
             # Imponibile e totale (euristica)
             numbers = re.findall(r"(\d{1,3}(?:[\.\,]\d{3})*(?:[\.\,]\d{2}))", full_text)
             if len(numbers) >= 2:
-                def to_float(s):
+                def to_float(s: str) -> float:
                     s = s.replace(".", "").replace(",", ".")
                     return float(s)
+
                 parsed_data["imponibile"] = to_float(numbers[-2])
                 totale_pdf = to_float(numbers[-1])
                 if parsed_data["imponibile"] > 0:
-                    parsed_data["iva_perc"] = round((totale_pdf / parsed_data["imponibile"] - 1) * 100, 2)
+                    parsed_data["iva_perc"] = round(
+                        (totale_pdf / parsed_data["imponibile"] - 1) * 100, 2
+                    )
 
             st.success("PDF letto, controlla e conferma i dati sotto.")
 
         except Exception as e:
             st.error(f"Errore lettura PDF: {e}")
 
+    # Se ho un PDF caricato e ho almeno un cliente, mostro il form di conferma
     if uploaded_file is not None and clients:
+        # Carico commesse/fasi
+        with get_session() as session:
+            commesse_pdf = session.exec(select(ProjectCommessa)).all()
+            fasi_pdf = session.exec(select(TaskFase)).all()
+
+        df_comm_pdf = pd.DataFrame([c.__dict__ for c in commesse_pdf]) if commesse_pdf else pd.DataFrame()
+        df_fasi_pdf = pd.DataFrame([f.__dict__ for f in fasi_pdf]) if fasi_pdf else pd.DataFrame()
+
+        commesse_labels_pdf = ["(nessuna)"]
+        if not df_comm_pdf.empty:
+            df_comm_pdf["label"] = df_comm_pdf["commessa_id"].astype(str) + " - " + df_comm_pdf["cod_commessa"]
+            commesse_labels_pdf += df_comm_pdf["label"].tolist()
+
+        fasi_labels_pdf = ["(nessuna)"]
+        if not df_fasi_pdf.empty:
+            df_fasi_pdf["label"] = df_fasi_pdf["fase_id"].astype(str) + " - " + df_fasi_pdf["nome_fase"]
+            fasi_labels_pdf += df_fasi_pdf["label"].tolist()
+
+        # Clienti per la select
         df_clients = pd.DataFrame([c.__dict__ for c in clients])
         df_clients["label"] = df_clients["client_id"].astype(str) + " - " + df_clients["ragione_sociale"]
 
@@ -2754,6 +4948,8 @@ def page_payments():
             col1, col2 = st.columns(2)
             with col1:
                 client_label_pdf = st.selectbox("Cliente", df_clients["label"].tolist())
+                commessa_label_pdf = st.selectbox("Commessa (opzionale)", commesse_labels_pdf)
+                fase_label_pdf = st.selectbox("Fase (opzionale)", fasi_labels_pdf)
                 num_fattura_pdf = st.text_input("Numero fattura", parsed_data["num_fattura"])
                 data_fattura_pdf = st.date_input("Data fattura", value=parsed_data["data_fattura"])
                 data_scadenza_pdf = st.date_input("Data scadenza", value=parsed_data["data_fattura"])
@@ -2784,6 +4980,15 @@ def page_payments():
                 st.warning("Il numero fattura è obbligatorio.")
             else:
                 client_id_sel_pdf = int(client_label_pdf.split(" - ")[0])
+
+                commessa_id_sel_pdf = None
+                if commessa_label_pdf != "(nessuna)":
+                    commessa_id_sel_pdf = int(commessa_label_pdf.split(" - ")[0])
+
+                fase_id_sel_pdf = None
+                if fase_label_pdf != "(nessuna)":
+                    fase_id_sel_pdf = int(fase_label_pdf.split(" - ")[0])
+
                 iva_val_pdf = imponibile_pdf * iva_perc_pdf / 100.0
                 totale_pdf = imponibile_pdf + iva_val_pdf
 
@@ -2798,6 +5003,8 @@ def page_payments():
                         importo_totale=totale_pdf,
                         stato_pagamento=stato_pagamento_pdf,
                         data_incasso=data_incasso_pdf if stato_pagamento_pdf == "incassata" else None,
+                        commessa_id=commessa_id_sel_pdf,
+                        fase_id=fase_id_sel_pdf,
                     )
                     session.add(new_inv_pdf)
                     session.commit()
@@ -2840,19 +5047,60 @@ def page_payments():
             ).tolist()
             cliente_filter = st.selectbox("Cliente", clienti_labels, index=0)
     with col_f5:
-        anno_filter = st.selectbox("Anno fattura", ["tutti"] + [str(y) for y in range(2023, date.today().year + 1)], index=0)
+        anno_filter = st.selectbox(
+            "Anno fattura",
+            ["tutti"] + [str(y) for y in range(2023, date.today().year + 1)],
+            index=0,
+        )
 
+    # -------------------------
+    # CARICO FATTURE DAL DB
+    # -------------------------
     with get_session() as session:
         invoices = session.exec(select(Invoice)).all()
 
     if not invoices:
         st.info("Nessuna fattura registrata.")
-        return
+        st.stop()
 
     df_inv = pd.DataFrame([i.__dict__ for i in invoices])
     df_inv["data_fattura"] = pd.to_datetime(df_inv["data_fattura"], errors="coerce")
 
-    # Applica filtri
+    # -------------------------
+    # MERGE COMMESSE / FASI
+    # -------------------------
+    with get_session() as session:
+        commesse_all = session.exec(select(ProjectCommessa)).all()
+        fasi_all = session.exec(select(TaskFase)).all()
+
+    df_comm_all = pd.DataFrame([c.__dict__ for c in commesse_all]) if commesse_all else pd.DataFrame()
+    df_fasi_all = pd.DataFrame([f.__dict__ for f in fasi_all]) if fasi_all else pd.DataFrame()
+
+    if not df_comm_all.empty and "commessa_id" in df_inv.columns:
+        df_inv = df_inv.merge(
+            df_comm_all[["commessa_id", "cod_commessa"]],
+            how="left",
+            on="commessa_id",
+        )
+
+    if not df_fasi_all.empty and "fase_id" in df_inv.columns:
+        df_inv = df_inv.merge(
+            df_fasi_all[["fase_id", "nome_fase"]],
+            how="left",
+            on="fase_id",
+        )
+
+    # -------------------------
+    # FILTRO PER COMMESSA
+    # -------------------------
+    commessa_filter = "tutte"
+    if "cod_commessa" in df_inv.columns:
+        commesse_opts = ["tutte"] + sorted(df_inv["cod_commessa"].dropna().unique().tolist())
+        commessa_filter = st.selectbox("Commessa", commesse_opts, index=0)
+
+    # -------------------------
+    # APPLICA FILTRI
+    # -------------------------
     if data_da:
         df_inv = df_inv[df_inv["data_fattura"] >= pd.to_datetime(data_da)]
     if data_a:
@@ -2869,27 +5117,31 @@ def page_payments():
         df_inv["anno"] = df_inv["data_fattura"].dt.year
         df_inv = df_inv[df_inv["anno"] == int(anno_filter)]
 
+    if commessa_filter != "tutte" and "cod_commessa" in df_inv.columns:
+        df_inv = df_inv[df_inv["cod_commessa"] == commessa_filter]
+
     if df_inv.empty:
         st.info("Nessuna fattura trovata con i filtri selezionati.")
-        return
+        st.stop()
 
-    st.dataframe(df_inv)
+    # -------------------------
+    # VISTA TABELLA PULITA
+    # -------------------------
+    cols_show = [
+        "invoice_id",
+        "num_fattura",
+        "data_fattura",
+        "importo_totale",
+        "stato_pagamento",
+        "cod_commessa",
+        "nome_fase",
+    ]
+    cols_show = [c for c in cols_show if c in df_inv.columns]
+    st.dataframe(df_inv[cols_show])
 
-    if not invoices:
-        st.info("Nessuna fattura registrata.")
-        return
-
-    df_inv = pd.DataFrame([i.__dict__ for i in invoices])
-    df_inv["data_fattura"] = pd.to_datetime(df_inv["data_fattura"], errors="coerce")
-
-    if data_da:
-        df_inv = df_inv[df_inv["data_fattura"] >= pd.to_datetime(data_da)]
-    if data_a:
-        df_inv = df_inv[df_inv["data_fattura"] <= pd.to_datetime(data_a)]
-
-    st.dataframe(df_inv)
-
-    # KPI base: totale fatturato per anno
+    # -------------------------
+    # KPI BASE: TOTALE PER ANNO
+    # -------------------------
     if {"data_fattura", "importo_totale"}.issubset(df_inv.columns):
         df_inv["data_fattura"] = pd.to_datetime(df_inv["data_fattura"], errors="coerce")
         df_inv["anno"] = df_inv["data_fattura"].dt.year
@@ -2902,7 +5154,7 @@ def page_payments():
     # =========================
     if role != "admin":
         st.info("Modifica, eliminazione ed export XML disponibili solo per ruolo 'admin'.")
-        return
+        st.stop()
 
     st.markdown("---")
     st.subheader("✏️ Modifica / elimina / esporta fattura (solo admin)")
@@ -2916,7 +5168,7 @@ def page_payments():
 
     if not inv_obj:
         st.warning("Fattura non trovata.")
-        return
+        st.stop()
 
     df_clients_all = pd.DataFrame([c.__dict__ for c in clients_all]) if clients_all else pd.DataFrame()
     if not df_clients_all.empty:
@@ -2998,17 +5250,23 @@ def page_payments():
                     obj.data_incasso = data_incasso_e if stato_pagamento_e == "incassata" else None
                     session.add(obj)
                     session.commit()
-            st.success("Fattura aggiornata.")
-            st.rerun()
+        st.success("Fattura aggiornata.")
+        st.rerun()
 
     if delete_clicked:
         with get_session() as session:
             obj = session.get(Invoice, inv_id_sel)
             if obj:
-                session.delete(obj)
-                session.commit()
-        st.success("Fattura eliminata.")
-        st.rerun()
+                pays_linked = session.exec(
+                    select(Payment).where(Payment.invoice_id == inv_id_sel)
+                ).all()
+                if pays_linked:
+                    st.warning("Impossibile eliminare: esistono incassi collegati a questa fattura.")
+                else:
+                    session.delete(obj)
+                    session.commit()
+                    st.success("Fattura eliminata.")
+                    st.rerun()
 
     if export_xml_clicked:
         inv = inv_obj
@@ -3061,7 +5319,6 @@ def page_payments():
         else:
             aliquota_iva = 22.0
 
-        # Descrizione riga (per ora fissa, ma parametrizzabile)
         descrizione_riga = "Servizi di consulenza ForgiaLean"
 
         xml_content = f"""<?xml version="1.0" encoding="UTF-8"?>
@@ -3165,13 +5422,14 @@ def page_payments():
         st.info("XML FatturaPA di bozza generato. Verifica con un validatore/gestionale prima dell'invio allo SdI.")
 
 def page_operations():
-    st.title("🏭 Operations / Commesse (SQLite)")
     role = st.session_state.get("role", "user")
+
+    st.title("🏭 Operations / Commesse (SQLite)")
 
     # =========================
     # FORM INSERIMENTO COMMESSA
     # =========================
-    st.subheader("➕ Inserisci nuova commessa")
+    st.subheader("📁 Inserisci nuova commessa")
 
     with st.form("new_commessa"):
         col1, col2 = st.columns(2)
@@ -3189,9 +5447,9 @@ def page_operations():
             ore_previste = st.number_input("Ore previste", min_value=0.0, step=1.0)
             costo_previsto = st.number_input("Costo previsto (€)", min_value=0.0, step=100.0)
 
-        submitted_commessa = st.form_submit_button("Salva commessa")
+        submitted = st.form_submit_button("Salva commessa")
 
-    if submitted_commessa:
+    if submitted:
         if not cod_commessa.strip():
             st.warning("Il codice commessa è obbligatorio.")
         else:
@@ -3205,7 +5463,6 @@ def page_operations():
                     ore_previste=ore_previste,
                     ore_consumate=0.0,
                     costo_previsto=costo_previsto,
-                    costo_consuntivo=0.0,
                 )
                 session.add(new_comm)
                 session.commit()
@@ -3293,7 +5550,6 @@ def page_operations():
             col1, col2 = st.columns(2)
             with col1:
                 commessa_label_ts = st.selectbox("Commessa (timesheet)", df_comm_ts["label"].tolist())
-                # filtra le fasi per commessa selezionata
                 commessa_id_ts = int(commessa_label_ts.split(" - ")[0])
                 df_fasi_comm = df_fasi_ts[df_fasi_ts["commessa_id"] == commessa_id_ts]
                 if df_fasi_comm.empty:
@@ -3326,7 +5582,6 @@ def page_operations():
                     )
                     session.add(new_entry)
 
-                    # aggiorna ore_consumate fase
                     total_ore_fase = session.exec(
                         select(TimeEntry.ore).where(TimeEntry.fase_id == fase_id_ts)
                     ).all()
@@ -3336,7 +5591,6 @@ def page_operations():
                     if fase_obj:
                         fase_obj.ore_consumate = somma_fase
 
-                    # aggiorna ore_consumate commessa
                     total_ore_comm = session.exec(
                         select(TimeEntry.ore).where(TimeEntry.commessa_id == commessa_id_ts)
                     ).all()
@@ -3365,7 +5619,7 @@ def page_operations():
 
     if not commesse_all:
         st.info("Nessuna commessa ancora registrata.")
-        return
+        st.stop()
 
     df_all = pd.DataFrame([c.__dict__ for c in commesse_all])
     st.dataframe(df_all)
@@ -3381,10 +5635,9 @@ def page_operations():
             barmode="group",
             title="Ore previste vs consumate per commessa",
         )
-        st.plotly_chart(fig_kpi, use_container_width=True)
+        st.plotly_chart(fig_kpi, width="stretch")
     else:
         st.info("Mancano colonne per il grafico ore previste/consumate.")
-
 
     st.markdown("---")
     st.subheader("📋 Fasi / Task commesse")
@@ -3417,7 +5670,6 @@ def page_operations():
         df_comm_all = pd.DataFrame([c.__dict__ for c in commesse_all_kpi])
         df_time_all = pd.DataFrame([t.__dict__ for t in time_all_kpi])
 
-        # KPI sintetici
         ore_totali = df_time_all["ore"].sum()
         n_commesse_aperte = df_comm_all[
             df_comm_all["stato_commessa"].isin(["aperta", "in corso"])
@@ -3436,7 +5688,6 @@ def page_operations():
         st.markdown("---")
         st.subheader("📦 Avanzamento commesse")
 
-        # Avanzamento per commessa: ore_consumate vs ore_previste
         df_comm_all["Avanzamento_ore_%"] = df_comm_all.apply(
             lambda r: (r["ore_consumate"] / r["ore_previste"] * 100.0) if r["ore_previste"] > 0 else 0.0,
             axis=1,
@@ -3469,7 +5720,7 @@ def page_operations():
             },
             range_y=[0, 150],
         )
-        st.plotly_chart(fig_comm_av, use_container_width=True)
+        st.plotly_chart(fig_comm_av, width="stretch")
 
         st.caption("Valori >100% indicano commesse che hanno superato le ore previste.")
 
@@ -3477,7 +5728,7 @@ def page_operations():
     # SEZIONE EDIT / DELETE (SOLO ADMIN)
     # =========================
     if role != "admin":
-        return  # niente edit/delete per utenti normali
+        st.stop()  # niente edit/delete per utenti normali
 
     st.markdown("---")
     st.subheader("✏️ Modifica / elimina dati Operations (solo admin)")
@@ -3548,7 +5799,6 @@ def page_operations():
 
             if delete_comm:
                 with get_session() as session:
-                    # opzionale: eliminare anche fasi e timeentry collegati
                     session.exec(delete(TimeEntry).where(TimeEntry.commessa_id == comm_id_sel))
                     session.exec(delete(TaskFase).where(TaskFase.commessa_id == comm_id_sel))
                     obj = session.get(ProjectCommessa, comm_id_sel)
@@ -3625,7 +5875,6 @@ def page_operations():
 
             if delete_fase:
                 with get_session() as session:
-                    # elimina anche timeentry relativi alla fase
                     session.exec(delete(TimeEntry).where(TimeEntry.fase_id == fase_id_sel))
                     obj = session.get(TaskFase, fase_id_sel)
                     if obj:
@@ -3654,7 +5903,6 @@ def page_operations():
                     session.delete(te)
                     session.commit()
 
-                    # ricalcola ore_consumate fase
                     total_ore_fase = session.exec(
                         select(TimeEntry.ore).where(TimeEntry.fase_id == fase_id)
                     ).all()
@@ -3663,7 +5911,6 @@ def page_operations():
                     if fase_obj2:
                         fase_obj2.ore_consumate = somma_fase
 
-                    # ricalcola ore_consumate commessa
                     total_ore_comm = session.exec(
                         select(TimeEntry.ore).where(TimeEntry.commessa_id == comm_id)
                     ).all()
@@ -3675,7 +5922,6 @@ def page_operations():
                     session.commit()
             st.success("Riga timesheet eliminata e ore ricalcolate.")
             st.rerun()
-
 
 def page_people_departments():
     st.title("👥 People & Reparti (SQLite)")
@@ -3971,7 +6217,7 @@ def page_people_departments():
     # =========================
     role = st.session_state.get("role", "user")
     if role != "admin":
-        return
+        st.stop()
 
     st.markdown("---")
     st.subheader("✏️ Modifica / elimina dati People (solo admin)")
@@ -4123,7 +6369,7 @@ def page_capacity_people():
 
     if not entries:
         st.info("Nessuna riga timesheet registrata.")
-        return
+        st.stop()
 
     df_te = pd.DataFrame([e.__dict__ for e in entries])
     df_te["data_lavoro"] = pd.to_datetime(df_te["data_lavoro"], errors="coerce")
@@ -4136,7 +6382,7 @@ def page_capacity_people():
 
     if df_te.empty:
         st.info("Nessuna riga timesheet nel periodo selezionato.")
-        return
+        st.stop()
 
     # ---------- Mapping operatore -> employee / reparto ----------
     df_emp = pd.DataFrame([e.__dict__ for e in (employees or [])])
@@ -4188,7 +6434,7 @@ def page_capacity_people():
         title="Utilization % per persona",
         labels={"operatore": "Operatore", "Utilization_%": "Utilization (%)"},
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
 # =========================
 # PAGINE FINANZA AVANZATE
@@ -4222,7 +6468,7 @@ def page_finance_payments():
 
     if not data_rows:
         st.info("Nessuna fattura presente.")
-        return
+        st.stop()
 
     df = pd.DataFrame(data_rows)
 
@@ -4269,7 +6515,7 @@ def page_invoice_transmission():
 
     if not invoices:
         st.info("Nessuna fattura presente.")
-        return
+        st.stop()
 
     data_rows = []
     for inv in invoices:
@@ -4319,6 +6565,70 @@ def page_tax_inps():
 
     current_year = date.today().year
 
+    # ===== ALERT SCADENZE PROSSIMI 60 GIORNI =====
+    st.markdown("### ⚠️ Scadenze Fisco/INPS prossimi 60 giorni")
+    
+    oggi = date.today()
+    orizzonte = oggi + timedelta(days=60)
+    
+    with get_session() as session:
+        deadlines_alert = session.exec(
+            select(TaxDeadline).where(
+                TaxDeadline.due_date >= oggi,
+                TaxDeadline.due_date <= orizzonte,
+            )
+        ).all()
+        inps_alert = session.exec(
+            select(InpsContribution).where(
+                InpsContribution.due_date >= oggi,
+                InpsContribution.due_date <= orizzonte,
+            )
+        ).all()
+    
+    alerts_list = []
+    
+    for d in (deadlines_alert or []):
+        residuo = (d.estimated_amount or 0.0) - (d.amount_paid or 0.0)
+        if residuo > 0:
+            giorni_residui = (d.due_date - oggi).days
+            urgenza = "🔴 URGENTE" if giorni_residui <= 7 else "🟡 ATTENZIONE"
+            alerts_list.append({
+                "tipo": "Imposta",
+                "descrizione": d.type,
+                "scadenza": d.due_date,
+                "residuo": residuo,
+                "giorni": giorni_residui,
+                "urgenza": urgenza,
+            })
+    
+    for c in (inps_alert or []):
+        residuo = (c.amount_due or 0.0) - (c.amount_paid or 0.0)
+        if residuo > 0:
+            giorni_residui = (c.due_date - oggi).days
+            urgenza = "🔴 URGENTE" if giorni_residui <= 7 else "🟡 ATTENZIONE"
+            alerts_list.append({
+                "tipo": "INPS",
+                "descrizione": c.description,
+                "scadenza": c.due_date,
+                "residuo": residuo,
+                "giorni": giorni_residui,
+                "urgenza": urgenza,
+            })
+    
+    if alerts_list:
+        df_alerts = pd.DataFrame(alerts_list).sort_values("scadenza")
+        
+        # Mostra avvisi colorati
+        for _, alert in df_alerts.iterrows():
+            if alert["giorni"] <= 7:
+                st.error(f"{alert['urgenza']} {alert['tipo']} - {alert['descrizione']}: **{alert['residuo']:,.2f} €** scadenza **{alert['scadenza']}** ({alert['giorni']} giorni)")
+            else:
+                st.warning(f"{alert['urgenza']} {alert['tipo']} - {alert['descrizione']}: **{alert['residuo']:,.2f} €** scadenza **{alert['scadenza']}** ({alert['giorni']} giorni)")
+    else:
+        st.success("✅ Nessuna scadenza Fisco/INPS nei prossimi 60 giorni.")
+    
+    st.markdown("---")
+
     # =========================
     # CONFIGURAZIONE FISCALE
     # =========================
@@ -4338,7 +6648,7 @@ def page_tax_inps():
     regime = st.selectbox("Regime", regime_options, index=default_regime_idx)
     aliquota_imposta = st.number_input(
         "Aliquota imposta (es. 0.15)",
-        value=cfg.aliquota_imposta if cfg else 0.15,
+        value=cfg.aliquota_imposta if cfg else 0.05,
         min_value=0.0,
         max_value=1.0,
         step=0.01,
@@ -4378,123 +6688,353 @@ def page_tax_inps():
             session.commit()
         st.success("Configurazione fiscale salvata.")
 
-    # =========================
-    # STIMA IMPOSTE & CONTRIBUTI
-    # =========================
-    st.subheader("Stima imposte e contributi anno in corso")
-    st.write(f"Fatturato {current_year}: {fatturato:.2f} €")
-    if fatture:
-        if regime == "forfettario":
-            base_imponibile = fatturato * redditivita
-        else:
-            base_imponibile = fatturato
+    # ========= QUI IL NUOVO BLOCCO =========
+    st.subheader("📊 Calcolo normativo reddito, imposta e INPS")
 
-        imposta = base_imponibile * aliquota_imposta
-        inps = base_imponibile * aliquota_inps
-        netto = fatturato - imposta - inps  # nuovo calcolo
-
-        st.write(f"Base imponibile stimata: {base_imponibile:.2f} €")
-        st.write(f"Imposta stimata (IRPEF/Imposta sostitutiva): {imposta:.2f} €")
-        st.write(f"Contributi INPS Gestione Separata stimati: {inps:.2f} €")
-        st.write(f"**Netto stimato dopo imposte e contributi:** {netto:.2f} €")
-    else:
-        st.info("Nessuna fattura emessa nell'anno corrente.")
-
-    st.markdown("---")
-
-    # =========================
-    # SCADENZE FISCALI & INPS (TaxDeadline)
-    # =========================
-    st.subheader(f"Scadenze fiscali & INPS {current_year}")
-
-    with get_session() as session:
-        deadlines = session.exec(
-            select(TaxDeadline).where(TaxDeadline.year == current_year)
-        ).all()
-
-    df_dead = pd.DataFrame(
-        [
-            {
-                "ID": d.deadline_id,
-                "Data scadenza": d.due_date,
-                "Tipo": d.type,
-                "Importo stimato": d.estimated_amount,
-                "Importo pagato": d.amount_paid,
-                "Data pagamento": d.payment_date,
-                "Stato": d.status,
-                "Note": d.note,
-            }
-            for d in (deadlines or [])
-        ]
+    anno_sel = st.number_input(
+        "Anno di calcolo",
+        min_value=2020,
+        max_value=2100,
+        value=date.today().year,
+        step=1,
     )
 
-    if df_dead.empty:
-        st.info("Nessuna scadenza registrata per l'anno corrente.")
+    res = calcola_imposte_e_inps_normative(anno_sel)
+
+    if res.get("errore"):
+        st.warning(res["errore"])
     else:
-        st.dataframe(df_dead)
-
-    st.markdown("### ➕ Aggiungi / modifica scadenza")
-
-    # Tipologie suggerite: puoi aggiungerne altre a piacere
-    tipo_opzioni = [
-        "Saldo imposta",
-        "Acconto 1 imposta",
-        "Acconto 2 imposta",
-        "Saldo INPS Gestione Separata",
-        "Acconto 1 INPS Gestione Separata",
-        "Acconto 2 INPS Gestione Separata",
-        "Altro",
-    ]
-
-    with st.form("tax_deadline_form"):
         col1, col2 = st.columns(2)
         with col1:
-            # Se vuoi modificare una scadenza esistente, seleziona ID; 0 = nuova
-            existing_ids = [0] + [d.deadline_id for d in (deadlines or [])]
-            selected_id = st.selectbox("ID scadenza (0 = nuova)", existing_ids)
-            type_sel = st.selectbox("Tipo scadenza", tipo_opzioni)
-            due_date = st.date_input("Data scadenza", value=date(current_year, 6, 30))
+            st.markdown("**Regime fiscale**")
+            st.write(res["regime"])
+            st.markdown("**Ricavi fiscali anno**")
+            st.write(f"{res['ricavi_fiscali']:,.2f} €")
+            if res["regime"] == "forfettario" and res.get("redditivita_forfettario") is not None:
+                st.markdown("**Coefficiente di redditività**")
+                st.write(f"{res['redditivita_forfettario']*100:.1f} %")
+            st.markdown("**Reddito imponibile**")
+            st.write(f"{res['reddito_imponibile']:,.2f} €")
+
         with col2:
-            estimated_amount = st.number_input("Importo stimato", min_value=0.0, step=50.0)
-            amount_paid = st.number_input("Importo pagato", min_value=0.0, step=50.0)
-            payment_date = st.date_input("Data pagamento", value=date.today())
-            status = st.selectbox("Stato", ["planned", "paid", "partial"])
-        note = st.text_input("Note (opzionali)", "")
+            st.markdown("**Aliquota imposta**")
+            st.write(f"{res['aliquota_imposta']*100:.1f} %")
+            st.markdown("**Imposta dovuta (teorica)**")
+            st.write(f"{res['imposta_dovuta']:,.2f} €")
+            st.markdown("**Aliquota INPS**")
+            st.write(f"{res['aliquota_inps']*100:.1f} %")
+            st.markdown("**Contributi INPS dovuti (teorici)**")
+            st.write(f"{res['inps_dovuti']:,.2f} €")
 
-        submit_deadline = st.form_submit_button("💾 Salva scadenza")
+        st.markdown("---")
+        col3, col4 = st.columns(2)
+        with col3:
+            st.markdown("**Imposte registrate (TaxDeadline)**")
+            st.write(f"{res['imposte_registrate']:,.2f} €")
+        with col4:
+            st.markdown("**INPS registrati (InpsContribution)**")
+            st.write(f"{res['inps_registrati']:,.2f} €")
 
-    if submit_deadline:
-        with get_session() as session:
-            if selected_id == 0:
-                # nuova scadenza
-                d = TaxDeadline(
-                    year=current_year,
-                    due_date=due_date,
-                    type=type_sel,
-                    estimated_amount=estimated_amount,
-                    amount_paid=amount_paid,
-                    payment_date=payment_date if amount_paid > 0 else None,
-                    status=status,
-                    note=note or None,
-                )
-                session.add(d)
-            else:
-                # aggiorna esistente
-                d = session.get(TaxDeadline, selected_id)
-                if d:
-                    d.year = current_year
+        # ===== PIANO SCADENZE DA CALCOLO NORMATIVO =====
+        st.markdown("### 🧾 Genera piano scadenze da calcolo normativo")
+
+        oggi = date.today()
+        anno = anno_sel
+
+        # Date standard (puoi raffinarle dopo)
+        data_saldo = date(anno + 1, 6, 30)      # saldo anno precedente
+        data_acconto1 = date(anno, 6, 30)       # primo acconto anno in corso
+        data_acconto2 = date(anno, 11, 30)      # secondo acconto anno in corso
+
+        imposta_tot = res["imposta_dovuta"]
+        inps_tot = res["inps_dovuti"]
+
+        # Ripartizione 40% saldo, 30% acconto1, 30% acconto2
+        imp_saldo = round(imposta_tot * 0.4, 2)
+        imp_acc1 = round(imposta_tot * 0.3, 2)
+        imp_acc2 = round(imposta_tot * 0.3, 2)
+
+        inps_saldo = round(inps_tot * 0.4, 2)
+        inps_acc1 = round(inps_tot * 0.3, 2)
+        inps_acc2 = round(inps_tot * 0.3, 2)
+
+        st.write("Proposta di piano scadenze (imposta + INPS):")
+        st.write(f"- Saldo imposta {anno-1}: {imp_saldo:,.2f} € al {data_saldo}")
+        st.write(f"- Acconto 1 imposta {anno}: {imp_acc1:,.2f} € al {data_acconto1}")
+        st.write(f"- Acconto 2 imposta {anno}: {imp_acc2:,.2f} € al {data_acconto2}")
+        st.write(f"- Saldo INPS {anno-1}: {inps_saldo:,.2f} € al {data_saldo}")
+        st.write(f"- Acconto 1 INPS {anno}: {inps_acc1:,.2f} € al {data_acconto1}")
+        st.write(f"- Acconto 2 INPS {anno}: {inps_acc2:,.2f} € al {data_acconto2}")
+
+        if st.button("💾 Genera/aggiorna scadenze da calcolo normativo"):
+            with get_session() as session:
+                # IMPOSTA - saldo + acconti
+                def upsert_tax_deadline(desc, due_date, amount):
+                    d = session.exec(
+                        select(TaxDeadline).where(
+                            TaxDeadline.year == anno,
+                            TaxDeadline.type == desc,
+                        )
+                    ).first()
+                    if not d:
+                        d = TaxDeadline(
+                            year=anno,
+                            type=desc,
+                        )
                     d.due_date = due_date
-                    d.type = type_sel
-                    d.estimated_amount = estimated_amount
-                    d.amount_paid = amount_paid
-                    d.payment_date = payment_date if amount_paid > 0 else None
-                    d.status = status
-                    d.note = note or None
+                    d.estimated_amount = amount
                     session.add(d)
-            session.commit()
-        st.success("Scadenza salvata.")
-        st.rerun()
 
+                upsert_tax_deadline(f"Saldo imposta {anno-1}", data_saldo, imp_saldo)
+                upsert_tax_deadline(f"Acconto 1 imposta {anno}", data_acconto1, imp_acc1)
+                upsert_tax_deadline(f"Acconto 2 imposta {anno}", data_acconto2, imp_acc2)
+
+                # INPS - saldo + acconti
+                def upsert_inps_contribution(desc, due_date, amount):
+                    c = session.exec(
+                        select(InpsContribution).where(
+                            InpsContribution.year == anno,
+                            InpsContribution.description == desc,
+                        )
+                    ).first()
+                    if not c:
+                        c = InpsContribution(
+                            year=anno,
+                            description=desc,
+                        )
+                    c.due_date = due_date
+                    c.amount_due = amount 
+                    session.add(c)
+
+                upsert_inps_contribution(f"Saldo INPS {anno-1}", data_saldo, inps_saldo)
+                upsert_inps_contribution(f"Acconto 1 INPS {anno}", data_acconto1, inps_acc1)
+                upsert_inps_contribution(f"Acconto 2 INPS {anno}", data_acconto2, inps_acc2)
+
+                session.commit()
+
+            st.success("Piano scadenze imposta e INPS generato/aggiornato.")
+            st.rerun()
+
+        # ===== REGISTRA PAGAMENTI FISCO/INPS =====
+        st.markdown("---")
+        st.markdown("### 💳 Registra pagamenti Fisco/INPS")
+
+        with get_session() as session:
+            # Carica scadenze non ancora completamente pagate
+            tax_deadlines = session.exec(
+                select(TaxDeadline).where(TaxDeadline.year == anno)
+            ).all()
+            inps_contributions = session.exec(
+                select(InpsContribution).where(InpsContribution.year == anno)
+            ).all()
+
+        # Filtra solo scadenze con saldo residuo
+        deadlines_open = []
+        for d in (tax_deadlines or []):
+            residuo = (d.estimated_amount or 0.0) - (d.amount_paid or 0.0)
+            if residuo > 0:
+                deadlines_open.append({
+                    "id": d.id,
+                    "type": "tax",
+                    "descrizione": d.type,
+                    "scadenza": d.due_date,
+                    "importo_dovuto": d.estimated_amount or 0.0,
+                    "importo_pagato": d.amount_paid or 0.0,
+                    "residuo": residuo,
+                })
+
+        for c in (inps_contributions or []):
+            residuo = (c.amount_due or 0.0) - (c.amount_paid or 0.0)
+            if residuo > 0:
+                deadlines_open.append({
+                    "id": c.id,
+                    "type": "inps",
+                    "descrizione": c.description,
+                    "scadenza": c.due_date,
+                    "importo_dovuto": c.amount_due or 0.0,
+                    "importo_pagato": c.amount_paid or 0.0,
+                    "residuo": residuo,
+                })
+
+        if not deadlines_open:
+            st.info("✅ Nessuna scadenza aperta per questo anno.")
+        else:
+            st.write(f"**Scadenze con saldo residuo ({len(deadlines_open)})**")
+            
+            # Selectbox per scegliere quale scadenza pagare
+            opzioni = [
+                f"{d['descrizione']} - Residuo: {d['residuo']:,.2f} € (Scadenza: {d['scadenza']})"
+                for d in deadlines_open
+            ]
+            scadenza_sel_idx = st.selectbox("Seleziona scadenza da pagare", range(len(opzioni)), format_func=lambda i: opzioni[i])
+            scadenza_sel = deadlines_open[scadenza_sel_idx]
+
+            col_pag1, col_pag2 = st.columns(2)
+            with col_pag1:
+                importo_pagato_new = st.number_input(
+                    f"Importo da pagare (residuo: {scadenza_sel['residuo']:,.2f} €)",
+                    value=scadenza_sel['residuo'],
+                    min_value=0.0,
+                    step=0.01,
+                )
+            with col_pag2:
+                data_pagamento = st.date_input(
+                    "Data pagamento",
+                    value=date.today(),
+                )
+
+            if st.button("✅ Registra pagamento"):
+                if importo_pagato_new <= 0:
+                    st.warning("L'importo deve essere maggiore di zero.")
+                else:
+                    with get_session() as session:
+                        if scadenza_sel["type"] == "tax":
+                            # Aggiorna TaxDeadline
+                            d = session.exec(
+                                select(TaxDeadline).where(TaxDeadline.id == scadenza_sel["id"])
+                            ).first()
+                            if d:
+                                d.amount_paid = (d.amount_paid or 0.0) + importo_pagato_new
+                                d.payment_date = data_pagamento
+                                # Se pagato completamente, segna come "paid"
+                                if d.amount_paid >= (d.estimated_amount or 0.0):
+                                    d.status = "paid"
+                                else:
+                                    d.status = "partial"
+                                session.add(d)
+                                
+                                # Registra uscita in CashflowEvent
+                                ev = CashflowEvent(
+                                    data=data_pagamento,
+                                    tipo="uscita",
+                                    categoria="Fisco/INPS",
+                                    descrizione=f"Pagamento {d.type}",
+                                    importo=-importo_pagato_new,
+                                    client_id=None,
+                                    commessa_id=None,
+                                )
+                                session.add(ev)
+                        else:
+                            # Aggiorna InpsContribution
+                            c = session.exec(
+                                select(InpsContribution).where(InpsContribution.id == scadenza_sel["id"])
+                            ).first()
+                            if c:
+                                c.amount_paid = (c.amount_paid or 0.0) + importo_pagato_new
+                                c.payment_date = data_pagamento
+                                # Se pagato completamente, segna come "paid"
+                                if c.amount_paid >= (c.amount_due or 0.0):
+                                    c.status = "paid"
+                                else:
+                                    c.status = "partial"
+                                session.add(c)
+                                
+                                # Registra uscita in CashflowEvent
+                                ev = CashflowEvent(
+                                    data=data_pagamento,
+                                    tipo="uscita",
+                                    categoria="Fisco/INPS",
+                                    descrizione=f"Pagamento {c.description}",
+                                    importo=-importo_pagato_new,
+                                    client_id=None,
+                                    commessa_id=None,
+                                )
+                                session.add(ev)
+                        
+                        session.commit()
+                    
+                    st.success(f"✅ Pagamento di {importo_pagato_new:,.2f} € registrato per {scadenza_sel['descrizione']}. Uscita aggiunta al cashflow.")
+                    st.rerun()
+        # ===== RIEPILOGO SCADENZE =====
+        st.markdown("---")
+        st.markdown("### 📋 Riepilogo scadenze Fisco/INPS")
+
+        with get_session() as session:
+            all_tax = session.exec(select(TaxDeadline).where(TaxDeadline.year == anno)).all()
+            all_inps = session.exec(select(InpsContribution).where(InpsContribution.year == anno)).all()
+
+        df_tax = pd.DataFrame([
+            {
+                "Tipo": "Imposta",
+                "Descrizione": d.type,
+                "Scadenza": d.due_date,
+                "Dovuto": d.estimated_amount or 0.0,
+                "Pagato": d.amount_paid or 0.0,
+                "Residuo": (d.estimated_amount or 0.0) - (d.amount_paid or 0.0),
+                "Stato": d.status or "planned",
+            }
+            for d in (all_tax or [])
+        ])
+
+        df_inps = pd.DataFrame([
+            {
+                "Tipo": "INPS",
+                "Descrizione": c.description,
+                "Scadenza": c.due_date,
+                "Dovuto": c.amount_due or 0.0,
+                "Pagato": c.amount_paid or 0.0,
+                "Residuo": (c.amount_due or 0.0) - (c.amount_paid or 0.0),
+                "Stato": c.status or "planned",
+            }
+            for c in (all_inps or [])
+        ])
+
+        if not df_tax.empty or not df_inps.empty:
+            df_riepilogo = pd.concat([df_tax, df_inps], ignore_index=True)
+            st.dataframe(df_riepilogo.style.format({
+                "Dovuto": "{:,.2f}",
+                "Pagato": "{:,.2f}",
+                "Residuo": "{:,.2f}",
+            }))
+        else:
+            st.info("Nessuna scadenza registrata per questo anno.")
+def page_management_vs_tax():
+    st.title("Gestionale vs Fisco")
+
+    anno_sel = st.number_input(
+        "Anno di analisi",
+        min_value=2020,
+        max_value=2100,
+        value=date.today().year,
+        step=1,
+    )
+
+    # Conto economico gestionale (annuale)
+    df_ce = build_income_statement(anno_sel)
+
+    # Conto economico gestionale mensile
+    df_ce_mese = build_income_statement_monthly(anno_sel)
+
+    # Cashflow mensile
+    df_cf = build_cashflow_monthly(anno_sel)
+
+    # Calcolo normativo
+    res = calcola_imposte_e_inps_normative(anno_sel)
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.subheader("Conto economico gestionale")
+        st.dataframe(df_ce)
+
+        st.subheader("Gestionale mensile")
+        st.dataframe(df_ce_mese)
+
+    with col2:
+        st.subheader("Cashflow mensile")
+        st.dataframe(df_cf)
+
+        st.subheader("Calcolo normativo Fisco & INPS")
+        if res.get("errore"):
+            st.warning(res["errore"])
+        else:
+            st.write(f"Regime fiscale: {res['regime']}")
+            st.write(f"Ricavi fiscali anno: {res['ricavi_fiscali']:,.2f} €")
+            st.write(f"Reddito imponibile: {res['reddito_imponibile']:,.2f} €")
+            st.write(f"Imposta dovuta (teorica): {res['imposta_dovuta']:,.2f} €")
+            st.write(f"INPS dovuti (teorici): {res['inps_dovuti']:,.2f} €")
+            st.write(f"Imposte registrate (TaxDeadline): {res['imposte_registrate']:,.2f} €")
+            st.write(f"INPS registrati (InpsContribution): {res['inps_registrati']:,.2f} €")
 
 def page_expenses():
     st.title("💸 Costi & Fornitori")
@@ -4582,7 +7122,7 @@ def page_finance_dashboard():
 
     if df_inv.empty and df_exp.empty:
         st.info("Nessun dato di entrate o uscite nel sistema.")
-        return
+        st.stop()
 
     # =========================
     # Conto Economico gestionale (annuale)
@@ -4628,7 +7168,7 @@ def page_finance_dashboard():
         markers=True,
         title=f"Risultato netto mensile {anno_ce}",
     )
-    st.plotly_chart(fig_ce_m, use_container_width=True)
+    st.plotly_chart(fig_ce_m, width="stretch")
 
     # =========================
     # Cashflow operativo mensile (anno selezionato)
@@ -4658,7 +7198,7 @@ def page_finance_dashboard():
             y="Net_cash_flow",
             title=f"Net cash flow mensile {anno_ce}",
         )
-        st.plotly_chart(fig_cf_m, use_container_width=True)
+        st.plotly_chart(fig_cf_m, width="stretch")
 
     # =========================
     # Stato Patrimoniale minimale
@@ -4724,12 +7264,18 @@ def page_finance_dashboard():
         totale_uscite = 0.0
 
     # Merge Entrate/Uscite
-    df_kpi = pd.merge(
-        entrate_mensili,
-        uscite_mensili,
-        on="mese",
-        how="outer",
-    ).fillna(0.0)
+    with pd.option_context("future.no_silent_downcasting", True):
+        df_kpi = (
+            pd.merge(
+                entrate_mensili,
+                uscite_mensili,
+                on="mese",
+                how="outer",
+            )
+            .fillna(0.0)
+            .infer_objects(copy=False)
+        )
+
     df_kpi["Margine"] = df_kpi["Entrate"] - df_kpi["Uscite"]
 
     # ---------- KPI sintetici ----------
@@ -4762,7 +7308,7 @@ def page_finance_dashboard():
             labels={"value": "Importo (€)", "mese": "Mese", "variable": "Voce"},
         )
         fig_eu.update_layout(legend_title_text="")
-        st.plotly_chart(fig_eu, use_container_width=True)
+        st.plotly_chart(fig_eu, width="stretch")
 
         st.subheader("Margine per mese")
         fig_m = px.line(
@@ -4772,7 +7318,7 @@ def page_finance_dashboard():
             markers=True,
             title="Margine mensile",
         )
-        st.plotly_chart(fig_m, use_container_width=True)
+        st.plotly_chart(fig_m, width="stretch")
 
         st.dataframe(df_kpi)
     else:
@@ -4808,7 +7354,7 @@ def page_finance_dashboard():
                 values="importo_totale",
                 title="Distribuzione entrate per cliente",
             )
-            st.plotly_chart(fig_cli, use_container_width=True)
+            st.plotly_chart(fig_cli, width="stretch")
     else:
         st.info("Nessuna entrata nel periodo selezionato per analisi per cliente.")
 
@@ -4851,7 +7397,7 @@ def page_finance_dashboard():
                 values="importo_totale",
                 title="Distribuzione uscite per categoria",
             )
-            st.plotly_chart(fig_cat, use_container_width=True)
+            st.plotly_chart(fig_cat, width="stretch")
     else:
         st.info("Nessuna uscita nel periodo selezionato per analisi per categoria.")
 
@@ -4893,12 +7439,17 @@ def page_finance_dashboard():
             uscite_commessa = pd.DataFrame(columns=["commessa_id", "Commessa", "Uscite_commessa"])
 
         if not entrate_commessa.empty or not uscite_commessa.empty:
-            df_comm = pd.merge(
-                entrate_commessa,
-                uscite_commessa,
-                on=["commessa_id", "Commessa"],
-                how="outer",
-            ).fillna(0.0)
+            with pd.option_context("future.no_silent_downcasting", True):
+                df_comm = (
+                    pd.merge(
+                        entrate_commessa,
+                        uscite_commessa,
+                        on=["commessa_id", "Commessa"],
+                        how="outer",
+                    )
+                    .fillna(0.0)
+                    .infer_objects(copy=False)
+                )
 
             df_comm["Margine_commessa"] = df_comm["Entrate_commessa"] - df_comm["Uscite_commessa"]
             df_comm = df_comm.sort_values("Margine_commessa", ascending=False)
@@ -4921,12 +7472,11 @@ def page_finance_dashboard():
                 y="Margine_commessa",
                 title="Margine per commessa",
             )
-            st.plotly_chart(fig_comm, use_container_width=True)
+            st.plotly_chart(fig_comm, width="stretch")
         else:
             st.info("Nessuna entrata o uscita collegata a commesse nel periodo selezionato.")
     else:
         st.info("Nessuna entrata o uscita disponibile per calcolare il margine per commessa.")
-
     # ---------- Uscite per conto finanziario ----------
     st.markdown("---")
     st.subheader("🏦 Uscite per conto finanziario (periodo)")
@@ -4966,7 +7516,7 @@ def page_finance_dashboard():
                 values="importo_totale",
                 title="Distribuzione uscite per conto",
             )
-            st.plotly_chart(fig_acc, use_container_width=True)
+            st.plotly_chart(fig_acc, width="stretch")
     else:
         st.info("Nessuna uscita nel periodo selezionato per analisi per conto.")
 
@@ -5011,7 +7561,13 @@ def page_finance_dashboard():
         else:
             uscite_anno = pd.DataFrame(columns=["anno", "Uscite"])
 
-        df_year = pd.merge(entrate_anno, uscite_anno, on="anno", how="outer").fillna(0.0)
+        with pd.option_context("future.no_silent_downcasting", True):
+            df_year = (
+                pd.merge(entrate_anno, uscite_anno, on="anno", how="outer")
+                .fillna(0.0)
+                .infer_objects(copy=False)
+            )
+
         if df_year.empty:
             st.info("Nessun dato aggregato per anno disponibile.")
         else:
@@ -5027,7 +7583,7 @@ def page_finance_dashboard():
                 barmode="group",
                 title="Entrate, Uscite e Margine per anno",
             )
-            st.plotly_chart(fig_year, use_container_width=True)
+            st.plotly_chart(fig_year, width="stretch")
 
     # ---------- 2) CATEGORIE & CONTI ----------
     st.subheader("📂 Categorie costi & Conti")
@@ -5095,7 +7651,7 @@ def page_finance_dashboard():
 
     if not categories or not accounts:
         st.info("Per registrare una spesa serve almeno una categoria e un conto.")
-        return
+        st.stop()
 
     df_cat = pd.DataFrame([c.__dict__ for c in categories])
     df_cat["label"] = df_cat["category_id"].astype(str) + " - " + df_cat["nome"]
@@ -5185,7 +7741,7 @@ def page_finance_dashboard():
 
     if not expenses:
         st.info("Nessuna spesa registrata.")
-        return
+        st.stop()
 
     df_exp = pd.DataFrame([e.__dict__ for e in expenses])
     st.dataframe(df_exp)
@@ -5578,102 +8134,122 @@ def page_cashflow_forecast():
         "Saldo_finale",
     ]
 
-    df_view = df_view[cols_show]
+    # Filtra solo le colonne che esistono effettivamente
+    cols_show = [col for col in cols_show if col in df_view.columns]
 
-    st.subheader("Tabella mensile Actual vs Budget + saldo proiettato")
-    st.dataframe(df_view.style.format("{:,.2f}", subset=df_view.columns[1:]))
+    if cols_show:
+        df_view = df_view[cols_show]
+        st.subheader("Tabella mensile Actual vs Budget + saldo proiettato")
+        st.dataframe(df_view.style.format("{:,.2f}", subset=df_view.columns[1:]))
+    else:
+        st.warning("Nessun dato disponibile per visualizzare il cashflow.")
+        return
 
     # ---------------------------
     # Grafico saldo proiettato
     # ---------------------------
     st.subheader("Andamento saldo proiettato per mese")
-    fig = px.line(
-        df_saldi,
-        x="mese",
-        y="Saldo_finale",
-        markers=True,
-        labels={"mese": "Mese", "Saldo_finale": "Saldo finale previsto (€)"},
-    )
-    st.plotly_chart(fig, use_container_width=True)
-
+    if not df_saldi.empty:
+        fig = px.line(
+            df_saldi,
+            x="mese",
+            y="Saldo_finale",
+            markers=True,
+            labels={"mese": "Mese", "Saldo_finale": "Saldo finale previsto (€)"},
+        )
+        st.plotly_chart(fig, width="stretch")
+    else:
+        st.info("Nessun dato di saldo disponibile.")
 
 PAGES = {
-    "Presentazione": page_presentation,
-    "Overview": page_overview,
-    "Clienti": page_clients,
-    "CRM & Vendite": page_crm_sales,
-    "Finanza / Fatture": page_finance_invoices,    # pagina fatture
-    "Finanza / Pagamenti": page_finance_payments,  # se è una pagina distinta
-    "Incassi / Scadenze": page_payments,
-    "Cashflow proiettato": page_cashflow_forecast,
-    "Fatture → AE": page_invoice_transmission,
-    "Fisco & INPS": page_tax_inps,
-    "Spese": page_expenses,
-    "Finanza / Dashboard": page_finance_dashboard,
-    "Bilancio gestionale": page_bilancio_gestionale,
-    "Nota integrativa gestionale": page_nota_integrativa,
-    "Operations / Commesse": page_operations,
-    "People & Reparti": page_people_departments,
-    "Capacità People": page_capacity_people,
+    "🏠 Home": {
+        "Presentazione": page_presentation,
+        "Overview": page_overview,
+    },
+    "📊 Gestionale Operativo": {
+        "Clienti": page_clients,
+        "CRM & Vendite": page_crm_sales,
+        "Treno vendite": page_sales_train,
+        "Lead da campagne": page_lead_capture,
+        "Operations / Commesse": page_operations,
+    },
+    "💰 Finanza & Pagamenti": {
+        "Finanza / Fatture": page_finance_invoices,
+        "Finanza / Pagamenti": page_finance_payments,
+        "Incassi / Scadenze": page_payments,
+        "Spese": page_expenses,
+        "Finanza / Dashboard": page_finance_dashboard,
+    },
+    "📋 Checklist Mensile": {
+        "Bilancio gestionale": page_bilancio_gestionale,
+        "Gestionale vs Fisco": page_management_vs_tax,
+        "Cashflow proiettato": page_cashflow_forecast,
+        "Nota integrativa gestionale": page_nota_integrativa,
+    },
+    "🏛️ Preparazione Fiscale": {
+        "Fisco & INPS": page_tax_inps,
+        "Fatture → AE": page_invoice_transmission,
+    },
+    "👥 People & Organizzazione": {
+        "People & Reparti": page_people_departments,
+        "Capacità People": page_capacity_people,
+    },
 }
+
+# =========================
+# BREADCRUMB HELPER
+# =========================
+
+def render_breadcrumb(section: str, page: str):
+    """Renderizza breadcrumb di navigazione con stile"""
+    breadcrumb_html = f"""
+    <style>
+        .breadcrumb {{
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 20px;
+        }}
+        .breadcrumb-separator {{
+            margin: 0 8px;
+            color: #999;
+        }}
+    </style>
+    <div class="breadcrumb">
+        <strong>{section}</strong>
+        <span class="breadcrumb-separator">›</span>
+        <strong>{page}</strong>
+    </div>
+    """
+    st.markdown(breadcrumb_html, unsafe_allow_html=True)
+
 
 # =========================
 # LOGIN & MAIN
 # =========================
 
-def check_login_sidebar():
-    if "logged_in" not in st.session_state:
-        st.session_state.logged_in = False
-        st.session_state.username = ""
-        st.session_state.role = "user"
-
-    with st.sidebar:
-        if not st.session_state.logged_in:
-            st.markdown("### 🔐 Login")
-
-            with st.form("login_form"):
-                username = st.text_input("Username")
-                password = st.text_input("Password", type="password")
-                submit = st.form_submit_button("Login")
-
-            if submit:
-                if username == "Marian Dutu" and password == "mariand":
-                    st.session_state.logged_in = True
-                    st.session_state.username = username
-                    st.session_state.role = "admin"
-                    st.rerun()
-                elif username == "Demo User" and password == "demodemo":
-                    st.session_state.logged_in = True
-                    st.session_state.username = username
-                    st.session_state.role = "user"
-                    st.rerun()
-                else:
-                    st.error("Credenziali non valide.")
-        else:
-            if st.button("Logout", key="logout_button"):
-                st.session_state.logged_in = False
-                st.session_state.username = ""
-                st.session_state.role = "user"
-                st.rerun()
-
-    if not st.session_state.logged_in:
-        st.stop()
-
-
 def main():
+    # 👉 chiamata subito all'inizio
+    capture_utm_params()
+
     # ---------- Inizializzazione stato ----------
     if "authenticated" not in st.session_state:
         st.session_state["authenticated"] = False
-        st.session_state["role"] = "anon"  # visitatore non loggato
+        st.session_state["role"] = "anon"
         st.session_state["username"] = ""
+    
+    if "current_section" not in st.session_state:
+        st.session_state["current_section"] = "🏠 Home"
+    
+    if "current_page" not in st.session_state:
+        st.session_state["current_page"] = "Presentazione"
 
     # ---------- SIDEBAR ----------
     st.sidebar.title(APP_NAME)
     st.sidebar.caption("Versione SQLite")
 
-    # Blocco login admin (semplice)
+    # Blocco login admin
     if not st.session_state["authenticated"]:
-        st.sidebar.subheader("Area riservata")
+        st.sidebar.subheader("🔐 Area riservata")
         username_input = st.sidebar.text_input("Username")
         password_input = st.sidebar.text_input("Password", type="password")
         if st.sidebar.button("Login"):
@@ -5681,29 +8257,52 @@ def main():
                 st.session_state["authenticated"] = True
                 st.session_state["role"] = "admin"
                 st.session_state["username"] = username_input
+                st.rerun()
             else:
                 st.sidebar.error("Credenziali non valide")
     else:
-        st.sidebar.write("✅ Accesso admin")
+        st.sidebar.write(f"✅ {st.session_state['username']}")
         if st.sidebar.button("Logout"):
             st.session_state["authenticated"] = False
             st.session_state["role"] = "anon"
             st.session_state["username"] = ""
+            st.rerun()
 
-    # Menu pagine in base al ruolo
+    st.sidebar.markdown("---")
+
+    # Menu gerarchico per flussi di lavoro
     role = st.session_state["role"]
+    
     if role == "anon":
-        pages = ["Presentazione"]
+        available_sections = ["🏠 Home"]
     else:
-        pages = list(PAGES.keys())
+        available_sections = list(PAGES.keys())
 
-    page = st.sidebar.radio("Pagina", pages)
+    # Seleziona sezione
+    section = st.sidebar.radio("📂 Sezione", available_sections)
+    st.session_state["current_section"] = section
 
+    # Seleziona pagina dentro la sezione
+    if section in PAGES:
+        pages_in_section = PAGES[section]
+        page_names = list(pages_in_section.keys())
+        
+        selected_page = st.sidebar.selectbox(
+            "📄 Pagina",
+            page_names,
+        )
+        st.session_state["current_page"] = selected_page
+        
+        # Breadcrumb navigazione
+        render_breadcrumb(section, selected_page)
+        
+        # Esegui la pagina selezionata
+        page_func = pages_in_section[selected_page]
+        page_func()
+    
     if LOGO_PATH.exists():
         st.sidebar.markdown("---")
-        st.sidebar.image(str(LOGO_PATH), use_container_width=True)
-
-    PAGES[page]()
+        st.sidebar.image(str(LOGO_PATH), width="stretch")
 
 
 if __name__ == "__main__":
