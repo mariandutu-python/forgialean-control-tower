@@ -1105,7 +1105,7 @@ ForgiaLean unisce **Black Belt Lean Six Sigma**, **Operations Management** e **D
         )
         fig_oee.update_traces(texttemplate="%{y}%", textposition="outside")
         fig_oee.update_layout(showlegend=False)
-        st.plotly_chart(fig_oee, use_container_width=True)
+        st.plotly_chart(fig_oee, width="stretch")
 
     with col_g2:
         fig_fermi = px.bar(
@@ -1119,7 +1119,7 @@ ForgiaLean unisce **Black Belt Lean Six Sigma**, **Operations Management** e **D
         )
         fig_fermi.update_traces(texttemplate="%{y:.1f} h", textposition="outside")
         fig_fermi.update_layout(showlegend=False)
-        st.plotly_chart(fig_fermi, use_container_width=True)
+        st.plotly_chart(fig_fermi, width="stretch")
 
     # DIFFERENZIAZIONE: perché voi
     st.subheader("Perché scegliere ForgiaLean rispetto ad altre soluzioni")
@@ -1452,7 +1452,7 @@ def page_overview():
         kpi_sel = st.selectbox("Seleziona KPI", sorted(df["kpi_name"].unique()))
         df_f = df[df["kpi_name"] == kpi_sel].sort_values("data")
         fig = px.line(df_f, x="data", y=["valore", "target"], title=f"KPI reparto: {kpi_sel}")
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
     else:
         st.info("Nessun KPI reparto ancora registrato.")
 
@@ -1733,12 +1733,12 @@ def page_crm_sales():
         col_t, col_g = st.columns(2)
 
         with col_t:
-            st.dataframe(df_utm, hide_index=True, use_container_width=True)
+            st.dataframe(df_utm, hide_index=True, width="stretch")
 
         with col_g:
             st.bar_chart(
                 df_utm.set_index("utm_campaign")["num_lead"],
-                use_container_width=True,
+                width="stretch",
             )
     else:
         st.info("Nessun dato UTM disponibile sui lead.")
@@ -1772,7 +1772,7 @@ def page_crm_sales():
             agg.sort_values("lead_tot", ascending=False).style.format(
                 {"valore_tot": "{:,.0f}", "win_rate_%": "{:,.1f}"}
             ),
-            use_container_width=True,
+            width="stretch",
         )
 
         # --- STATO CAMPAGNA NEL FUNNEL ---
@@ -1804,7 +1804,7 @@ def page_crm_sales():
             camp_funnel.sort_values("opp_vinte", ascending=False).style.format(
                 {"valore_vinto": "{:,.0f}"}
             ),
-            use_container_width=True,
+            width="stretch",
         )
 
         # --- CONVERSIONI PRONTE PER EXPORT (GOOGLE/META OFFLINE) ---
@@ -1834,7 +1834,7 @@ def page_crm_sales():
                         "data_apertura": "conversion_date",
                     }
                 ),
-                use_container_width=True,
+                width="stretch",
             )
         else:
             st.info("Nessuna opportunità vinta legata a campagne UTM.")
@@ -2143,7 +2143,7 @@ def page_crm_sales():
         cols_list = [c for c in cols_list if c in df_f.columns]
 
         df_list = df_f[cols_list].copy()
-        st.dataframe(df_list, hide_index=True, use_container_width=True)
+        st.dataframe(df_list, hide_index=True, width="stretch")
 
         st.markdown("---")
         st.markdown("**Dettaglio opportunità**")
@@ -2300,7 +2300,7 @@ def page_crm_sales():
                 .reset_index()
             )
             azioni_owner.columns = ["owner", "num_azioni_future"]
-            st.dataframe(azioni_owner, hide_index=True, use_container_width=True)
+            st.dataframe(azioni_owner, hide_index=True, width="stretch")
     else:
         st.info(
             "Nessuna colonna 'data_prossima_azione' disponibile per la sintesi attività."
@@ -5329,7 +5329,7 @@ def page_operations():
             barmode="group",
             title="Ore previste vs consumate per commessa",
         )
-        st.plotly_chart(fig_kpi, use_container_width=True)
+        st.plotly_chart(fig_kpi, width="stretch")
     else:
         st.info("Mancano colonne per il grafico ore previste/consumate.")
 
@@ -5414,7 +5414,7 @@ def page_operations():
             },
             range_y=[0, 150],
         )
-        st.plotly_chart(fig_comm_av, use_container_width=True)
+        st.plotly_chart(fig_comm_av, width="stretch")
 
         st.caption("Valori >100% indicano commesse che hanno superato le ore previste.")
 
@@ -6128,7 +6128,7 @@ def page_capacity_people():
         title="Utilization % per persona",
         labels={"operatore": "Operatore", "Utilization_%": "Utilization (%)"},
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
 # =========================
 # PAGINE FINANZA AVANZATE
@@ -6625,7 +6625,7 @@ def page_finance_dashboard():
         markers=True,
         title=f"Risultato netto mensile {anno_ce}",
     )
-    st.plotly_chart(fig_ce_m, use_container_width=True)
+    st.plotly_chart(fig_ce_m, width="stretch")
 
     # =========================
     # Cashflow operativo mensile (anno selezionato)
@@ -6655,7 +6655,7 @@ def page_finance_dashboard():
             y="Net_cash_flow",
             title=f"Net cash flow mensile {anno_ce}",
         )
-        st.plotly_chart(fig_cf_m, use_container_width=True)
+        st.plotly_chart(fig_cf_m, width="stretch")
 
     # =========================
     # Stato Patrimoniale minimale
@@ -6759,7 +6759,7 @@ def page_finance_dashboard():
             labels={"value": "Importo (€)", "mese": "Mese", "variable": "Voce"},
         )
         fig_eu.update_layout(legend_title_text="")
-        st.plotly_chart(fig_eu, use_container_width=True)
+        st.plotly_chart(fig_eu, width="stretch")
 
         st.subheader("Margine per mese")
         fig_m = px.line(
@@ -6769,7 +6769,7 @@ def page_finance_dashboard():
             markers=True,
             title="Margine mensile",
         )
-        st.plotly_chart(fig_m, use_container_width=True)
+        st.plotly_chart(fig_m, width="stretch")
 
         st.dataframe(df_kpi)
     else:
@@ -6805,7 +6805,7 @@ def page_finance_dashboard():
                 values="importo_totale",
                 title="Distribuzione entrate per cliente",
             )
-            st.plotly_chart(fig_cli, use_container_width=True)
+            st.plotly_chart(fig_cli, width="stretch")
     else:
         st.info("Nessuna entrata nel periodo selezionato per analisi per cliente.")
 
@@ -6848,7 +6848,7 @@ def page_finance_dashboard():
                 values="importo_totale",
                 title="Distribuzione uscite per categoria",
             )
-            st.plotly_chart(fig_cat, use_container_width=True)
+            st.plotly_chart(fig_cat, width="stretch")
     else:
         st.info("Nessuna uscita nel periodo selezionato per analisi per categoria.")
 
@@ -6918,7 +6918,7 @@ def page_finance_dashboard():
                 y="Margine_commessa",
                 title="Margine per commessa",
             )
-            st.plotly_chart(fig_comm, use_container_width=True)
+            st.plotly_chart(fig_comm, width="stretch")
         else:
             st.info("Nessuna entrata o uscita collegata a commesse nel periodo selezionato.")
     else:
@@ -6963,7 +6963,7 @@ def page_finance_dashboard():
                 values="importo_totale",
                 title="Distribuzione uscite per conto",
             )
-            st.plotly_chart(fig_acc, use_container_width=True)
+            st.plotly_chart(fig_acc, width="stretch")
     else:
         st.info("Nessuna uscita nel periodo selezionato per analisi per conto.")
 
@@ -7024,7 +7024,7 @@ def page_finance_dashboard():
                 barmode="group",
                 title="Entrate, Uscite e Margine per anno",
             )
-            st.plotly_chart(fig_year, use_container_width=True)
+            st.plotly_chart(fig_year, width="stretch")
 
     # ---------- 2) CATEGORIE & CONTI ----------
     st.subheader("📂 Categorie costi & Conti")
@@ -7591,7 +7591,7 @@ def page_cashflow_forecast():
         markers=True,
         labels={"mese": "Mese", "Saldo_finale": "Saldo finale previsto (€)"},
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
 
 PAGES = {
@@ -7704,7 +7704,7 @@ def main():
 
     if LOGO_PATH.exists():
         st.sidebar.markdown("---")
-        st.sidebar.image(str(LOGO_PATH), use_container_width=True)
+        st.sidebar.image(str(LOGO_PATH), width="stretch")
 
     PAGES[page]()
 
