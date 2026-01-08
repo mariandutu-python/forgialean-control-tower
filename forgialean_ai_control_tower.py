@@ -1915,7 +1915,32 @@ def page_crm_sales():
             opp_id = int(opp_id)
         except ValueError:
             opp_id = None
-
+    # Se arriva dal calendario con opp_id, mostra SOLO quella Opportunity
+    if opp_id:
+        with get_session() as session:
+            opp = session.get(Opportunity, opp_id)
+            client = session.get(Client, opp.client_id) if opp else None
+        
+        if opp:
+            st.subheader(f"📌 {opp.nome_opportunita}")
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Cliente", client.ragione_sociale if client else "N/A")
+            with col2:
+                st.metric("Fase", opp.fase_pipeline)
+            with col3:
+                st.metric("Probabilità", f"{opp.probabilita:.0f}%")
+            
+            st.write(f"**Owner:** {opp.owner}")
+            st.write(f"**Prossima azione:** {getattr(opp, 'tipo_prossima_azione', 'N/A')}")
+            st.write(f"**Data azione:** {getattr(opp, 'data_prossima_azione', 'N/A')}")
+            st.write(f"**Note:** {getattr(opp, 'note_prossima_azione', '')}")
+            
+            if st.button("← Torna alla lista CRM"):
+                st.query_params.clear()
+                st.rerun()
+            
+            st.stop()
     # Cattura eventuali parametri UTM dall'URL
     capture_utm_params()
 
@@ -2679,7 +2704,7 @@ def page_crm_sales():
         for _, row in df_agenda_f.iterrows():
             if pd.notnull(row["data_prossima_azione"]):
                 opp_id_event = row["opportunity_id"]
-                event_url = f"{base_url}?page=crm&opp_id={opp_id_event}"
+                event_url = f"{base_url}?step=crm_detail&opp_id={opp_id_event}"
 
                 events.append(
                     {
