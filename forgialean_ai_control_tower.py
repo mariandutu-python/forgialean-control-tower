@@ -6354,8 +6354,88 @@ def page_tax_inps():
             st.markdown("**Imposte registrate (TaxDeadline)**")
             st.write(f"{res['imposte_registrate']:,.2f} €")
         with col4:
-            st.markmondown("**INPS registrati (InpsContribution)**")
+            st.markdown("**INPS registrati (InpsContribution)**")
             st.write(f"{res['inps_registrati']:,.2f} €")
+
+        # ===== PIANO SCADENZE DA CALCOLO NORMATIVO =====
+        st.markdown("### 🧾 Genera piano scadenze da calcolo normativo")
+
+        oggi = date.today()
+        anno = anno_sel
+
+        # Date standard (puoi raffinarle dopo)
+        data_saldo = date(anno + 1, 6, 30)      # saldo anno precedente
+        data_acconto1 = date(anno, 6, 30)       # primo acconto anno in corso
+        data_acconto2 = date(anno, 11, 30)      # secondo acconto anno in corso
+
+        imposta_tot = res["imposta_dovuta"]
+        inps_tot = res["inps_dovuti"]
+
+        # Ripartizione 40% saldo, 30% acconto1, 30% acconto2
+        imp_saldo = round(imposta_tot * 0.4, 2)
+        imp_acc1 = round(imposta_tot * 0.3, 2)
+        imp_acc2 = round(imposta_tot * 0.3, 2)
+
+        inps_saldo = round(inps_tot * 0.4, 2)
+        inps_acc1 = round(inps_tot * 0.3, 2)
+        inps_acc2 = round(inps_tot * 0.3, 2)
+
+        st.write("Proposta di piano scadenze (imposta + INPS):")
+        st.write(f"- Saldo imposta {anno-1}: {imp_saldo:,.2f} € al {data_saldo}")
+        st.write(f"- Acconto 1 imposta {anno}: {imp_acc1:,.2f} € al {data_acconto1}")
+        st.write(f"- Acconto 2 imposta {anno}: {imp_acc2:,.2f} € al {data_acconto2}")
+        st.write(f"- Saldo INPS {anno-1}: {inps_saldo:,.2f} € al {data_saldo}")
+        st.write(f"- Acconto 1 INPS {anno}: {inps_acc1:,.2f} € al {data_acconto1}")
+        st.write(f"- Acconto 2 INPS {anno}: {inps_acc2:,.2f} € al {data_acconto2}")
+
+        if st.button("💾 Genera/aggiorna scadenze da calcolo normativo"):
+            with get_session() as session:
+                # IMPOSTA - saldo + acconti
+                def upsert_tax_deadline(desc, due_date, amount):
+                    d = session.exec(
+                        select(TaxDeadline).where(
+                            TaxDeadline.year == anno,
+                            TaxDeadline.description == desc,
+                        )
+                    ).first()
+                    if not d:
+                        d = TaxDeadline(
+                            year=anno,
+                            description=desc,
+                        )
+                    d.due_date = due_date
+                    d.amount_planned = amount
+                    session.add(d)
+
+                upsert_tax_deadline(f"Saldo imposta {anno-1}", data_saldo, imp_saldo)
+                upsert_tax_deadline(f"Acconto 1 imposta {anno}", data_acconto1, imp_acc1)
+                upsert_tax_deadline(f"Acconto 2 imposta {anno}", data_acconto2, imp_acc2)
+
+                # INPS - saldo + acconti
+                def upsert_inps_contribution(desc, due_date, amount):
+                    c = session.exec(
+                        select(InpsContribution).where(
+                            InpsContribution.year == anno,
+                            InpsContribution.description == desc,
+                        )
+                    ).first()
+                    if not c:
+                        c = InpsContribution(
+                            year=anno,
+                            description=desc,
+                        )
+                    c.due_date = due_date
+                    c.amount_planned = amount
+                    session.add(c)
+
+                upsert_inps_contribution(f"Saldo INPS {anno-1}", data_saldo, inps_saldo)
+                upsert_inps_contribution(f"Acconto 1 INPS {anno}", data_acconto1, inps_acc1)
+                upsert_inps_contribution(f"Acconto 2 INPS {anno}", data_acconto2, inps_acc2)
+
+                session.commit()
+
+            st.success("Piano scadenze imposta e INPS generato/aggiornato.")
+            st.rerun()
 
     # =========================
     # STIMA IMPOSTE & CONTRIBUTI
