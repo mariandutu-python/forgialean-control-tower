@@ -6316,7 +6316,7 @@ def page_tax_inps():
     regime = st.selectbox("Regime", regime_options, index=default_regime_idx)
     aliquota_imposta = st.number_input(
         "Aliquota imposta (es. 0.15)",
-        value=cfg.aliquota_imposta if cfg else 0.15,
+        value=cfg.aliquota_imposta if cfg else 0.05,
         min_value=0.0,
         max_value=1.0,
         step=0.01,
