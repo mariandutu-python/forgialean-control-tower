@@ -7629,24 +7629,32 @@ def page_cashflow_forecast():
         "Saldo_finale",
     ]
 
-    df_view = df_view[cols_show]
+    # Filtra solo le colonne che esistono effettivamente
+    cols_show = [col for col in cols_show if col in df_view.columns]
 
-    st.subheader("Tabella mensile Actual vs Budget + saldo proiettato")
-    st.dataframe(df_view.style.format("{:,.2f}", subset=df_view.columns[1:]))
+    if cols_show:
+        df_view = df_view[cols_show]
+        st.subheader("Tabella mensile Actual vs Budget + saldo proiettato")
+        st.dataframe(df_view.style.format("{:,.2f}", subset=df_view.columns[1:]))
+    else:
+        st.warning("Nessun dato disponibile per visualizzare il cashflow.")
+        return
 
     # ---------------------------
     # Grafico saldo proiettato
     # ---------------------------
     st.subheader("Andamento saldo proiettato per mese")
-    fig = px.line(
-        df_saldi,
-        x="mese",
-        y="Saldo_finale",
-        markers=True,
-        labels={"mese": "Mese", "Saldo_finale": "Saldo finale previsto (€)"},
-    )
-    st.plotly_chart(fig, width="stretch")
-
+    if not df_saldi.empty:
+        fig = px.line(
+            df_saldi,
+            x="mese",
+            y="Saldo_finale",
+            markers=True,
+            labels={"mese": "Mese", "Saldo_finale": "Saldo finale previsto (€)"},
+        )
+        st.plotly_chart(fig, width="stretch")
+    else:
+        st.info("Nessun dato di saldo disponibile.")
 
 PAGES = {
     "Presentazione": page_presentation,
