@@ -12,6 +12,7 @@ from finance_utils import (
     build_full_management_balance,
     calcola_imposte_e_inps_normative,
 )
+from sqlalchemy import text
 from config import CACHE_TTL, PAGES_BY_ROLE, APP_NAME, LOGO_PATH, MY_COMPANY_DATA
 from enum import Enum
 
@@ -415,33 +416,33 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-def build_income_statement_monthly(anno_sel: int) -> pd.DataFrame:
-    """Conto Economico gestionale per mese: Proventi, Costi, Netto."""
-    with get_session() as session:
-        invoices = session.exec(
-            select(Invoice).where(
-                Invoice.data_fattura.is_not(None),
-                SQLModel.raw_column("strftime('%Y', data_fattura) = :anno")
-            ).params(anno=str(anno_sel))
-        ).all()
-        expenses = session.exec(
-            select(Expense).where(
-                Expense.data.is_not(None),
-                SQLModel.raw_column("strftime('%Y', data) = :anno")
-            ).params(anno=str(anno_sel))
-        ).all()
-        inps = session.exec(
-            select(InpsContribution).where(
-                InpsContribution.payment_date.is_not(None),
-                SQLModel.raw_column("strftime('%Y', payment_date) = :anno")
-            ).params(anno=str(anno_sel))
-        ).all()
-        taxes = session.exec(
-            select(TaxDeadline).where(
-                TaxDeadline.payment_date.is_not(None),
-                SQLModel.raw_column("strftime('%Y', payment_date) = :anno")
-            ).params(anno=str(anno_sel))
-        ).all()
+invoices = session.exec(
+    select(Invoice).where(
+        Invoice.data_fattura.is_not(None),
+        text("strftime('%Y', data_fattura) = :anno"),
+    ).params(anno=str(anno_sel))
+).all()
+
+expenses = session.exec(
+    select(Expense).where(
+        Expense.data.is_not(None),
+        text("strftime('%Y', data) = :anno"),
+    ).params(anno=str(anno_sel))
+).all()
+
+inps = session.exec(
+    select(InpsContribution).where(
+        InpsContribution.payment_date.is_not(None),
+        text("strftime('%Y', payment_date) = :anno"),
+    ).params(anno=str(anno_sel))
+).all()
+
+taxes = session.exec(
+    select(TaxDeadline).where(
+        TaxDeadline.payment_date.is_not(None),
+        text("strftime('%Y', payment_date) = :anno"),
+    ).params(anno=str(anno_sel))
+).all()
 
     df_inv = pd.DataFrame([i.__dict__ for i in invoices]) if invoices else pd.DataFrame()
     df_exp = pd.DataFrame([e.__dict__ for e in expenses]) if expenses else pd.DataFrame()
