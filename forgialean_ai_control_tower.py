@@ -6643,40 +6643,15 @@ def page_tax_inps():
     fatturato = sum(inv.importo_totale or 0 for inv in (fatture or []))
 
     st.subheader("Configurazione fiscale anno in corso")
-    
-    info_box(
-        "Cos'è questa sezione?",
-        "Configura i parametri fiscali per l'anno: regime (forfettario/ordinario), aliquote imposta e INPS, e il coefficiente di redditività ATECO.",
-        "info"
-    )
-    
     regime_options = ["forfettario", "ordinario"]
     default_regime_idx = 0 if not cfg else regime_options.index(cfg.regime)
-    
-    add_tooltip(
-        "Regime",
-        "Forfettario: reddito = ricavi × coefficiente ATECO. Ordinario: reddito = ricavi - costi"
-    )
-    regime = st.selectbox("Regime", regime_options, index=default_regime_idx, label_visibility="collapsed")
-    
-    add_tooltip(
-        "Aliquota imposta",
-        "Percentuale di imposta sostitutiva: 5% per start-up nei primi 5 anni, 15% ordinaria",
-        "https://www.agenziaentrate.gov.it/portale/web/guest/patentini"
-    )
+    regime = st.selectbox("Regime", regime_options, index=default_regime_idx)
     aliquota_imposta = st.number_input(
         "Aliquota imposta (es. 0.15)",
         value=cfg.aliquota_imposta if cfg else 0.05,
         min_value=0.0,
         max_value=1.0,
         step=0.01,
-        label_visibility="collapsed",
-    )
-    
-    add_tooltip(
-        "Aliquota INPS Gestione Separata",
-        "Percentuale dei contributi INPS sulla Gestione Separata: 26,07% per professionisti senza cassa",
-        "https://www.inps.it/it/it/dettagli-articolo.html?articolo=4d2f3030336d2d343432352d343430302d383230333736"
     )
     aliquota_inps = st.number_input(
         "Aliquota INPS Gestione Separata (es. 0.26)",
@@ -6684,13 +6659,6 @@ def page_tax_inps():
         min_value=0.0,
         max_value=1.0,
         step=0.01,
-        label_visibility="collapsed",
-    )
-    
-    add_tooltip(
-        "Redditività forfettario",
-        "Coefficiente ATECO: percentuale di reddito presunto dai ricavi. Es. 78% per consulenza tecnica (ATECO 74.90.99)",
-        "https://www.agenziaentrate.gov.it/portale/web/guest/schede/novita-regime-forfettario"
     )
     redditivita = st.number_input(
         "Redditività forfettario (es. 0.78)",
@@ -6698,14 +6666,8 @@ def page_tax_inps():
         min_value=0.0,
         max_value=1.0,
         step=0.01,
-        label_visibility="collapsed",
     )
-    
-    info_box(
-        "Tip: Verificare con commercialista",
-        "I parametri fiscali variano ogni anno. Controlla sempre con il tuo commercialista i valori corretti per la tua situazione.",
-        "warning"
-    )
+
     if st.button("💾 Salva configurazione fiscale"):
         with get_session() as session:
             cfg_db = session.exec(select(TaxConfig).where(TaxConfig.year == current_year)).first()
@@ -8239,98 +8201,27 @@ PAGES = {
 # =========================
 
 def render_breadcrumb(section: str, page: str):
-    """Renderizza breadcrumb di navigazione coerente con sidebar"""
+    """Renderizza breadcrumb di navigazione con stile"""
     breadcrumb_html = f"""
     <style>
         .breadcrumb {{
-            font-size: 13px;
-            color: #1f77b4;
-            margin-bottom: 15px;
-            padding: 8px 12px;
-            background-color: rgba(31, 119, 180, 0.05);
-            border-radius: 5px;
-            border-left: 3px solid #1f77b4;
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 20px;
         }}
         .breadcrumb-separator {{
-            margin: 0 6px;
+            margin: 0 8px;
             color: #999;
-        }}
-        .breadcrumb-current {{
-            font-weight: 600;
-            color: #1f77b4;
         }}
     </style>
     <div class="breadcrumb">
-        🏠 <span class="breadcrumb-separator">›</span>
-        <span class="breadcrumb-current">{section}</span>
+        <strong>{section}</strong>
         <span class="breadcrumb-separator">›</span>
-        <span class="breadcrumb-current">{page}</span>
+        <strong>{page}</strong>
     </div>
     """
     st.markdown(breadcrumb_html, unsafe_allow_html=True)
 
-def add_tooltip(label: str, tooltip_text: str, help_url: str = None):
-    """
-    Aggiunge tooltip con icona (?) accanto a un label.
-    
-    Uso:
-        add_tooltip("Aliquota imposta", 
-                   "Percentuale di imposta sostitutiva da applicare al reddito imponibile",
-                   "https://www.agenziaentrate.gov.it/...")
-    """
-    col1, col2 = st.columns([10, 1])
-    with col1:
-        st.markdown(f"**{label}**")
-    with col2:
-        if help_url:
-            st.markdown(f"[❓]('{help_url}' 'Click for more info')", unsafe_allow_html=True)
-        else:
-            st.markdown(f"**?**", help=tooltip_text)
-
-
-def tooltip(text: str, help_url: str = None):
-    """
-    Aggiunge icona tooltip inline con hover.
-    
-    Uso:
-        st.write("Inserisci il fatturato " + tooltip("annuale", "Somma di tutti gli incassi dell'anno"))
-    """
-    if help_url:
-        return f"[{text}]({help_url})"
-    else:
-        return f"**{text}** {st.write('ℹ️', help=text)}"
-
-
-def info_box(title: str, content: str, help_level: str = "info"):
-    """
-    Box informativo con icone diversa a seconda del level.
-    
-    Uso:
-        info_box("Come compilare", "Inserisci l'importo lordo della fattura...", "info")
-    """
-    if help_level == "info":
-        icon = "ℹ️"
-        color = "#0099ff"
-    elif help_level == "warning":
-        icon = "⚠️"
-        color = "#ff9900"
-    elif help_level == "success":
-        icon = "✅"
-        color = "#00cc00"
-    else:
-        icon = "❓"
-        color = "#666666"
-    
-    st.markdown(f"""
-    <div style="background-color: rgba({color[1:3]}, {color[3:5]}, {color[5:7]}, 0.1); 
-                border-left: 4px solid {color}; 
-                padding: 10px; 
-                border-radius: 5px;
-                margin: 10px 0;">
-        <strong>{icon} {title}</strong><br>
-        {content}
-    </div>
-    """, unsafe_allow_html=True)
 
 # =========================
 # LOGIN & MAIN
@@ -8370,19 +8261,16 @@ def main():
             else:
                 st.sidebar.error("Credenziali non valide")
     else:
-        col_user1, col_user2 = st.sidebar.columns([3, 1])
-        with col_user1:
-            st.sidebar.write(f"✅ {st.session_state['username']}")
-        with col_user2:
-            if st.sidebar.button("🚪"):
-                st.session_state["authenticated"] = False
-                st.session_state["role"] = "anon"
-                st.session_state["username"] = ""
-                st.rerun()
+        st.sidebar.write(f"✅ {st.session_state['username']}")
+        if st.sidebar.button("Logout"):
+            st.session_state["authenticated"] = False
+            st.session_state["role"] = "anon"
+            st.session_state["username"] = ""
+            st.rerun()
 
     st.sidebar.markdown("---")
 
-    # Menu gerarchico con active state
+    # Menu gerarchico per flussi di lavoro
     role = st.session_state["role"]
     
     if role == "anon":
@@ -8390,61 +8278,23 @@ def main():
     else:
         available_sections = list(PAGES.keys())
 
-    # CSS per active state
-    st.markdown("""
-    <style>
-        .sidebar-section-active {
-            background-color: rgba(31, 119, 180, 0.2);
-            padding: 10px;
-            border-radius: 5px;
-            border-left: 4px solid #1f77b4;
-            margin-bottom: 5px;
-        }
-        .sidebar-section {
-            padding: 10px;
-            margin-bottom: 5px;
-            cursor: pointer;
-            border-radius: 5px;
-        }
-        .sidebar-section:hover {
-            background-color: rgba(200, 200, 200, 0.1);
-        }
-    </style>
-    """, unsafe_allow_html=True)
-
-    # Seleziona sezione con indicatore visivo
-    st.sidebar.markdown("### 📂 **Sezioni**")
-    section = None
-    for sec in available_sections:
-        is_active = sec == st.session_state["current_section"]
-        col1, col2 = st.sidebar.columns([4, 1])
-        
-        with col1:
-            if st.button(sec, key=f"sec_{sec}", use_container_width=True):
-                st.session_state["current_section"] = sec
-                section = sec
-        
-        if is_active:
-            st.sidebar.markdown('<div class="sidebar-section-active">✓ Attivo</div>', unsafe_allow_html=True)
-
-    section = st.session_state["current_section"]
+    # Seleziona sezione
+    section = st.sidebar.radio("📂 Sezione", available_sections)
+    st.session_state["current_section"] = section
 
     # Seleziona pagina dentro la sezione
     if section in PAGES:
         pages_in_section = PAGES[section]
         page_names = list(pages_in_section.keys())
         
-        st.sidebar.markdown("### 📄 **Pagine**")
         selected_page = st.sidebar.selectbox(
-            "Seleziona pagina",
+            "📄 Pagina",
             page_names,
-            label_visibility="collapsed",
         )
         st.session_state["current_page"] = selected_page
         
-        # Breadcrumb coerente con sidebar
+        # Breadcrumb navigazione
         render_breadcrumb(section, selected_page)
-        st.markdown("---")
         
         # Esegui la pagina selezionata
         page_func = pages_in_section[selected_page]
