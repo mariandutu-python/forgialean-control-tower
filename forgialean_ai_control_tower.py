@@ -6395,16 +6395,16 @@ def page_tax_inps():
                     d = session.exec(
                         select(TaxDeadline).where(
                             TaxDeadline.year == anno,
-                            TaxDeadline.description == desc,
+                            TaxDeadline.type == desc,
                         )
                     ).first()
                     if not d:
                         d = TaxDeadline(
                             year=anno,
-                            description=desc,
+                            type=desc,
                         )
                     d.due_date = due_date
-                    d.amount_planned = amount
+                    d.estimated_amount = amount
                     session.add(d)
 
                 upsert_tax_deadline(f"Saldo imposta {anno-1}", data_saldo, imp_saldo)
@@ -6425,7 +6425,7 @@ def page_tax_inps():
                             description=desc,
                         )
                     c.due_date = due_date
-                    c.amount_planned = amount
+                    c.amount_due = amount 
                     session.add(c)
 
                 upsert_inps_contribution(f"Saldo INPS {anno-1}", data_saldo, inps_saldo)
