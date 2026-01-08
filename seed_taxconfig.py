@@ -1,7 +1,10 @@
 from sqlmodel import select
-from db import TaxConfig, get_session
+from db import TaxConfig, get_session, init_db
 
 def seed_taxconfig_for_year(year: int):
+    # assicura che tutte le tabelle (inclusa TaxConfig) esistano
+    init_db()
+
     with get_session() as session:
         existing = session.exec(
             select(TaxConfig).where(TaxConfig.year == year)
@@ -22,4 +25,4 @@ def seed_taxconfig_for_year(year: int):
         print(f"Creata TaxConfig per l'anno {year}.")
 
 if __name__ == "__main__":
-    seed_taxconfig_for_year(2026)   # metti qui l'anno che usi in "Anno di analisi"
+    seed_taxconfig_for_year(2026)   # stesso anno che usi in "Anno di analisi"
