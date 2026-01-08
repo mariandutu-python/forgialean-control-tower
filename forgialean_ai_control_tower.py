@@ -4545,6 +4545,10 @@ def page_payments():
     # =========================
     st.subheader("📎 Carica fattura PDF e precompila")
 
+    # Carico i clienti una volta sola, li userò dopo per il form
+    with get_session() as session:
+        clients = session.exec(select(Client)).all()
+
     uploaded_file = st.file_uploader("Carica file PDF fattura", type=["pdf"])
 
     parsed_data = {
@@ -4581,111 +4585,115 @@ def page_payments():
             # Imponibile e totale (euristica)
             numbers = re.findall(r"(\d{1,3}(?:[\.\,]\d{3})*(?:[\.\,]\d{2}))", full_text)
             if len(numbers) >= 2:
-                def to_float(s):
+                def to_float(s: str) -> float:
                     s = s.replace(".", "").replace(",", ".")
                     return float(s)
+
                 parsed_data["imponibile"] = to_float(numbers[-2])
                 totale_pdf = to_float(numbers[-1])
                 if parsed_data["imponibile"] > 0:
-                    parsed_data["iva_perc"] = round((totale_pdf / parsed_data["imponibile"] - 1) * 100, 2)
+                    parsed_data["iva_perc"] = round(
+                        (totale_pdf / parsed_data["imponibile"] - 1) * 100, 2
+                    )
 
             st.success("PDF letto, controlla e conferma i dati sotto.")
 
         except Exception as e:
             st.error(f"Errore lettura PDF: {e}")
 
-if uploaded_file is not None and clients:
-    # Carico commesse/fasi
-    with get_session() as session:
-        commesse_pdf = session.exec(select(ProjectCommessa)).all()
-        fasi_pdf = session.exec(select(TaskFase)).all()
+    # Se ho un PDF caricato e ho almeno un cliente, mostro il form di conferma
+    if uploaded_file is not None and clients:
+        # Carico commesse/fasi
+        with get_session() as session:
+            commesse_pdf = session.exec(select(ProjectCommessa)).all()
+            fasi_pdf = session.exec(select(TaskFase)).all()
 
-    df_comm_pdf = pd.DataFrame([c.__dict__ for c in commesse_pdf]) if commesse_pdf else pd.DataFrame()
-    df_fasi_pdf = pd.DataFrame([f.__dict__ for f in fasi_pdf]) if fasi_pdf else pd.DataFrame()
+        df_comm_pdf = pd.DataFrame([c.__dict__ for c in commesse_pdf]) if commesse_pdf else pd.DataFrame()
+        df_fasi_pdf = pd.DataFrame([f.__dict__ for f in fasi_pdf]) if fasi_pdf else pd.DataFrame()
 
-    commesse_labels_pdf = ["(nessuna)"]
-    if not df_comm_pdf.empty:
-        df_comm_pdf["label"] = df_comm_pdf["commessa_id"].astype(str) + " - " + df_comm_pdf["cod_commessa"]
-        commesse_labels_pdf += df_comm_pdf["label"].tolist()
+        commesse_labels_pdf = ["(nessuna)"]
+        if not df_comm_pdf.empty:
+            df_comm_pdf["label"] = df_comm_pdf["commessa_id"].astype(str) + " - " + df_comm_pdf["cod_commessa"]
+            commesse_labels_pdf += df_comm_pdf["label"].tolist()
 
-    fasi_labels_pdf = ["(nessuna)"]
-    if not df_fasi_pdf.empty:
-        df_fasi_pdf["label"] = df_fasi_pdf["fase_id"].astype(str) + " - " + df_fasi_pdf["nome_fase"]
-        fasi_labels_pdf += df_fasi_pdf["label"].tolist()
+        fasi_labels_pdf = ["(nessuna)"]
+        if not df_fasi_pdf.empty:
+            df_fasi_pdf["label"] = df_fasi_pdf["fase_id"].astype(str) + " - " + df_fasi_pdf["nome_fase"]
+            fasi_labels_pdf += df_fasi_pdf["label"].tolist()
 
-    # Clienti (questo deve stare fuori dagli if sopra)
-    df_clients = pd.DataFrame([c.__dict__ for c in clients])
-    df_clients["label"] = df_clients["client_id"].astype(str) + " - " + df_clients["ragione_sociale"]
+        # Clienti per la select
+        df_clients = pd.DataFrame([c.__dict__ for c in clients])
+        df_clients["label"] = df_clients["client_id"].astype(str) + " - " + df_clients["ragione_sociale"]
 
-    with st.form("new_invoice_from_pdf"):
-        st.markdown("#### Dati fattura precompilati")
+        with st.form("new_invoice_from_pdf"):
+            st.markdown("#### Dati fattura precompilati")
 
-        col1, col2 = st.columns(2)
-        with col1:
-            client_label_pdf = st.selectbox("Cliente", df_clients["label"].tolist())
-            commessa_label_pdf = st.selectbox("Commessa (opzionale)", commesse_labels_pdf)
-            fase_label_pdf = st.selectbox("Fase (opzionale)", fasi_labels_pdf)
-            num_fattura_pdf = st.text_input("Numero fattura", parsed_data["num_fattura"])
-            data_fattura_pdf = st.date_input("Data fattura", value=parsed_data["data_fattura"])
-            data_scadenza_pdf = st.date_input("Data scadenza", value=parsed_data["data_fattura"])
-        with col2:
-            imponibile_pdf = st.number_input(
-                "Imponibile (€)",
-                min_value=0.0,
-                step=100.0,
-                value=float(parsed_data["imponibile"]),
-            )
-            iva_perc_pdf = st.number_input(
-                "Aliquota IVA (%)",
-                min_value=0.0,
-                step=1.0,
-                value=float(parsed_data["iva_perc"]),
-            )
-            stato_pagamento_pdf = st.selectbox(
-                "Stato pagamento",
-                ["emessa", "incassata", "scaduta"],
-                index=0,
-            )
-            data_incasso_pdf = st.date_input("Data incasso (se incassata)", value=date.today())
-
-        submitted_pdf = st.form_submit_button("Salva fattura da PDF")
-
-    if submitted_pdf:
-        if not num_fattura_pdf.strip():
-            st.warning("Il numero fattura è obbligatorio.")
-        else:
-            client_id_sel_pdf = int(client_label_pdf.split(" - ")[0])
-
-            commessa_id_sel_pdf = None
-            if commessa_label_pdf != "(nessuna)":
-                commessa_id_sel_pdf = int(commessa_label_pdf.split(" - ")[0])
-
-            fase_id_sel_pdf = None
-            if fase_label_pdf != "(nessuna)":
-                fase_id_sel_pdf = int(fase_label_pdf.split(" - ")[0])
-
-            iva_val_pdf = imponibile_pdf * iva_perc_pdf / 100.0
-            totale_pdf = imponibile_pdf + iva_val_pdf
-
-            with get_session() as session:
-                new_inv_pdf = Invoice(
-                    client_id=client_id_sel_pdf,
-                    num_fattura=num_fattura_pdf.strip(),
-                    data_fattura=data_fattura_pdf,
-                    data_scadenza=data_scadenza_pdf,
-                    importo_imponibile=imponibile_pdf,
-                    iva=iva_val_pdf,
-                    importo_totale=totale_pdf,
-                    stato_pagamento=stato_pagamento_pdf,
-                    data_incasso=data_incasso_pdf if stato_pagamento_pdf == "incassata" else None,
-                    commessa_id=commessa_id_sel_pdf,
-                    fase_id=fase_id_sel_pdf,
+            col1, col2 = st.columns(2)
+            with col1:
+                client_label_pdf = st.selectbox("Cliente", df_clients["label"].tolist())
+                commessa_label_pdf = st.selectbox("Commessa (opzionale)", commesse_labels_pdf)
+                fase_label_pdf = st.selectbox("Fase (opzionale)", fasi_labels_pdf)
+                num_fattura_pdf = st.text_input("Numero fattura", parsed_data["num_fattura"])
+                data_fattura_pdf = st.date_input("Data fattura", value=parsed_data["data_fattura"])
+                data_scadenza_pdf = st.date_input("Data scadenza", value=parsed_data["data_fattura"])
+            with col2:
+                imponibile_pdf = st.number_input(
+                    "Imponibile (€)",
+                    min_value=0.0,
+                    step=100.0,
+                    value=float(parsed_data["imponibile"]),
                 )
-                session.add(new_inv_pdf)
-                session.commit()
-                session.refresh(new_inv_pdf)
-            st.success(f"Fattura {new_inv_pdf.num_fattura} (da PDF) registrata.")
-            st.rerun()
+                iva_perc_pdf = st.number_input(
+                    "Aliquota IVA (%)",
+                    min_value=0.0,
+                    step=1.0,
+                    value=float(parsed_data["iva_perc"]),
+                )
+                stato_pagamento_pdf = st.selectbox(
+                    "Stato pagamento",
+                    ["emessa", "incassata", "scaduta"],
+                    index=0,
+                )
+                data_incasso_pdf = st.date_input("Data incasso (se incassata)", value=date.today())
+
+            submitted_pdf = st.form_submit_button("Salva fattura da PDF")
+
+        if submitted_pdf:
+            if not num_fattura_pdf.strip():
+                st.warning("Il numero fattura è obbligatorio.")
+            else:
+                client_id_sel_pdf = int(client_label_pdf.split(" - ")[0])
+
+                commessa_id_sel_pdf = None
+                if commessa_label_pdf != "(nessuna)":
+                    commessa_id_sel_pdf = int(commessa_label_pdf.split(" - ")[0])
+
+                fase_id_sel_pdf = None
+                if fase_label_pdf != "(nessuna)":
+                    fase_id_sel_pdf = int(fase_label_pdf.split(" - ")[0])
+
+                iva_val_pdf = imponibile_pdf * iva_perc_pdf / 100.0
+                totale_pdf = imponibile_pdf + iva_val_pdf
+
+                with get_session() as session:
+                    new_inv_pdf = Invoice(
+                        client_id=client_id_sel_pdf,
+                        num_fattura=num_fattura_pdf.strip(),
+                        data_fattura=data_fattura_pdf,
+                        data_scadenza=data_scadenza_pdf,
+                        importo_imponibile=imponibile_pdf,
+                        iva=iva_val_pdf,
+                        importo_totale=totale_pdf,
+                        stato_pagamento=stato_pagamento_pdf,
+                        data_incasso=data_incasso_pdf if stato_pagamento_pdf == "incassata" else None,
+                        commessa_id=commessa_id_sel_pdf,
+                        fase_id=fase_id_sel_pdf,
+                    )
+                    session.add(new_inv_pdf)
+                    session.commit()
+                    session.refresh(new_inv_pdf)
+                st.success(f"Fattura {new_inv_pdf.num_fattura} (da PDF) registrata.")
+                st.rerun()
 
     st.markdown("---")
 
