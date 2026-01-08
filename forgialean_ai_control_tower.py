@@ -6297,6 +6297,70 @@ def page_tax_inps():
 
     current_year = date.today().year
 
+    # ===== ALERT SCADENZE PROSSIMI 60 GIORNI =====
+    st.markdown("### ⚠️ Scadenze Fisco/INPS prossimi 60 giorni")
+    
+    oggi = date.today()
+    orizzonte = oggi + timedelta(days=60)
+    
+    with get_session() as session:
+        deadlines_alert = session.exec(
+            select(TaxDeadline).where(
+                TaxDeadline.due_date >= oggi,
+                TaxDeadline.due_date <= orizzonte,
+            )
+        ).all()
+        inps_alert = session.exec(
+            select(InpsContribution).where(
+                InpsContribution.due_date >= oggi,
+                InpsContribution.due_date <= orizzonte,
+            )
+        ).all()
+    
+    alerts_list = []
+    
+    for d in (deadlines_alert or []):
+        residuo = (d.estimated_amount or 0.0) - (d.amount_paid or 0.0)
+        if residuo > 0:
+            giorni_residui = (d.due_date - oggi).days
+            urgenza = "🔴 URGENTE" if giorni_residui <= 7 else "🟡 ATTENZIONE"
+            alerts_list.append({
+                "tipo": "Imposta",
+                "descrizione": d.type,
+                "scadenza": d.due_date,
+                "residuo": residuo,
+                "giorni": giorni_residui,
+                "urgenza": urgenza,
+            })
+    
+    for c in (inps_alert or []):
+        residuo = (c.amount_due or 0.0) - (c.amount_paid or 0.0)
+        if residuo > 0:
+            giorni_residui = (c.due_date - oggi).days
+            urgenza = "🔴 URGENTE" if giorni_residui <= 7 else "🟡 ATTENZIONE"
+            alerts_list.append({
+                "tipo": "INPS",
+                "descrizione": c.description,
+                "scadenza": c.due_date,
+                "residuo": residuo,
+                "giorni": giorni_residui,
+                "urgenza": urgenza,
+            })
+    
+    if alerts_list:
+        df_alerts = pd.DataFrame(alerts_list).sort_values("scadenza")
+        
+        # Mostra avvisi colorati
+        for _, alert in df_alerts.iterrows():
+            if alert["giorni"] <= 7:
+                st.error(f"{alert['urgenza']} {alert['tipo']} - {alert['descrizione']}: **{alert['residuo']:,.2f} €** scadenza **{alert['scadenza']}** ({alert['giorni']} giorni)")
+            else:
+                st.warning(f"{alert['urgenza']} {alert['tipo']} - {alert['descrizione']}: **{alert['residuo']:,.2f} €** scadenza **{alert['scadenza']}** ({alert['giorni']} giorni)")
+    else:
+        st.success("✅ Nessuna scadenza Fisco/INPS nei prossimi 60 giorni.")
+    
+    st.markdown("---")
+
     # =========================
     # CONFIGURAZIONE FISCALE
     # =========================
@@ -6570,6 +6634,18 @@ def page_tax_inps():
                                 else:
                                     d.status = "partial"
                                 session.add(d)
+                                
+                                # Registra uscita in CashflowEvent
+                                ev = CashflowEvent(
+                                    data=data_pagamento,
+                                    tipo="uscita",
+                                    categoria="Fisco/INPS",
+                                    descrizione=f"Pagamento {d.type}",
+                                    importo=-importo_pagato_new,
+                                    client_id=None,
+                                    commessa_id=None,
+                                )
+                                session.add(ev)
                         else:
                             # Aggiorna InpsContribution
                             c = session.exec(
@@ -6584,12 +6660,23 @@ def page_tax_inps():
                                 else:
                                     c.status = "partial"
                                 session.add(c)
+                                
+                                # Registra uscita in CashflowEvent
+                                ev = CashflowEvent(
+                                    data=data_pagamento,
+                                    tipo="uscita",
+                                    categoria="Fisco/INPS",
+                                    descrizione=f"Pagamento {c.description}",
+                                    importo=-importo_pagato_new,
+                                    client_id=None,
+                                    commessa_id=None,
+                                )
+                                session.add(ev)
                         
                         session.commit()
                     
-                    st.success(f"✅ Pagamento di {importo_pagato_new:,.2f} € registrato per {scadenza_sel['descrizione']}.")
+                    st.success(f"✅ Pagamento di {importo_pagato_new:,.2f} € registrato per {scadenza_sel['descrizione']}. Uscita aggiunta al cashflow.")
                     st.rerun()
-
         # ===== RIEPILOGO SCADENZE =====
         st.markdown("---")
         st.markdown("### 📋 Riepilogo scadenze Fisco/INPS")
