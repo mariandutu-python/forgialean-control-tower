@@ -6493,21 +6493,6 @@ def page_management_vs_tax():
             st.write(f"Imposte registrate (TaxDeadline): {res['imposte_registrate']:,.2f} €")
             st.write(f"INPS registrati (InpsContribution): {res['inps_registrati']:,.2f} €")
 
-    # =========================
-    # STIMA IMPOSTE & CONTRIBUTI
-    # =========================
-    st.subheader("Stima imposte e contributi anno in corso")
-    st.write(f"Fatturato {current_year}: {fatturato:.2f} €")
-    if fatture:
-        if regime == "forfettario":
-            base_imponibile = fatturato * redditivita
-        else:
-            base_imponibile = fatturato
-
-        imposta = base_imponibile * aliquota_imposta
-        inps = base_imponibile * aliquota_inps
-        netto = fatturato - imposta - inps  # nuovo calcolo
-
         st.write(f"Base imponibile stimata: {base_imponibile:.2f} €")
         st.write(f"Imposta stimata (IRPEF/Imposta sostitutiva): {imposta:.2f} €")
         st.write(f"Contributi INPS Gestione Separata stimati: {inps:.2f} €")
