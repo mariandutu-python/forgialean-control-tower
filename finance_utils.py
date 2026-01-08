@@ -186,18 +186,24 @@ def build_full_management_balance(year: int, ref_date: date, saldo_cassa: float)
 def calcola_imposte_e_inps_normative(year: int) -> dict:
     """
     Calcolo 'normativo' semplificato di reddito, imposta e INPS per l'anno.
-    Usa TaxConfig.regime:
-      - 'forfettario': reddito = ricavi_fiscali * redditivita_forfettario
-      - 'ordinario':   reddito = ricavi_fiscali - costi_fiscali (semplificato)
-    Restituisce un dict con:
-      - regime, ricavi_fiscali, costi_fiscali, redditivita_forfettario
-      - reddito_imponibile, base_inps, imposta_dovuta, inps_dovuti
-      - imposte_registrate, inps_registrati (da TaxDeadline / InpsContribution)
     """
     with get_session() as session:
         cfg = session.exec(
             select(TaxConfig).where(TaxConfig.year == year)
         ).first()
+
+        # se manca la TaxConfig, la creo di default invece di restituire errore
+        if cfg is None:
+            cfg = TaxConfig(
+                year=year,
+                regime="forfettario",        # oppure "ordinario"
+                aliquota_imposta=0.15,       # metti i tuoi valori reali
+                aliquota_inps=0.26,
+                redditivita_forfettario=0.78,
+            )
+            session.add(cfg)
+            session.commit()
+
         invoices = session.exec(select(Invoice)).all()
         expenses = session.exec(select(Expense)).all()
         deadlines = session.exec(
@@ -207,12 +213,6 @@ def calcola_imposte_e_inps_normative(year: int) -> dict:
             select(InpsContribution).where(InpsContribution.year == year)
         ).all()
 
-    if not cfg:
-        return {
-            "year": year,
-            "regime": None,
-            "errore": "Nessuna TaxConfig definita per questo anno.",
-        }
 
     regime = (cfg.regime or "").lower()
 
