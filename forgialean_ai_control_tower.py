@@ -1660,7 +1660,6 @@ def page_crm_sales():
     st.markdown("---")
     st.subheader("📌 KPI riepilogo CRM")
 
-    # Carico opportunità per KPI (se non già caricate sopra)
     with get_session() as session:
         opps_kpi = session.exec(select(Opportunity)).all()
 
@@ -1669,33 +1668,32 @@ def page_crm_sales():
     else:
         df_kpi = pd.DataFrame([o.__dict__ for o in opps_kpi])
 
-        # Totale opportunità
         tot_opp = len(df_kpi)
-
-        # Opportunità aperte / vinte / perse
         num_open = (df_kpi["stato_opportunita"] == "aperta").sum()
         num_won = (df_kpi["stato_opportunita"] == "vinta").sum()
         num_lost = (df_kpi["stato_opportunita"] == "persa").sum()
 
-        # Win rate complessivo su chiuse
         num_closed = num_won + num_lost
         win_rate = (num_won / num_closed * 100) if num_closed > 0 else 0
 
-        # Valore pipeline aperta
         df_open_kpi = df_kpi[df_kpi["stato_opportunita"] == "aperta"].copy()
-        valore_pipeline = df_open_kpi["valore_stimato"].sum() if not df_open_kpi.empty else 0
+        valore_pipeline = (
+            df_open_kpi["valore_stimato"].sum() if not df_open_kpi.empty else 0
+        )
 
-        # Durata media ciclo (solo vinte)
         durata_media = None
         if {"data_apertura", "data_chiusura_prevista"}.issubset(df_kpi.columns):
             df_won_kpi = df_kpi[df_kpi["stato_opportunita"] == "vinta"].copy()
             if not df_won_kpi.empty:
-                df_won_kpi["data_apertura"] = pd.to_datetime(df_won_kpi["data_apertura"])
+                df_won_kpi["data_apertura"] = pd.to_datetime(
+                    df_won_kpi["data_apertura"]
+                )
                 df_won_kpi["data_chiusura_prevista"] = pd.to_datetime(
                     df_won_kpi["data_chiusura_prevista"]
                 )
                 df_won_kpi["giorni_ciclo"] = (
-                    df_won_kpi["data_chiusura_prevista"] - df_won_kpi["data_apertura"]
+                    df_won_kpi["data_chiusura_prevista"]
+                    - df_won_kpi["data_apertura"]
                 ).dt.days
                 durata_media = df_won_kpi["giorni_ciclo"].mean()
 
@@ -1715,35 +1713,81 @@ def page_crm_sales():
                 f"{durata_media:.1f} giorni" if durata_media is not None else "n/d",
             )
 
-    # --- LEAD PER CAMPAGNA (UTM) ---
+    # =========================
+    # LEAD PER CAMPAGNA (UTM)
+    # =========================
+    st.markdown("---")
     st.subheader("Lead per campagna (UTM)")
 
-    if "utm_campaign" in df_leads.columns:
-        df_utm = (
-            df_leads.assign(
-                utm_campaign=lambda d: d["utm_campaign"]
-                .fillna("(no campaign)")
-                .replace("", "(no campaign)")
-                .astype(str)
-            )
-            .groupby("utm_campaign")
-            .size()
-            .reset_index(name="num_lead")
-            .sort_values("num_lead", ascending=False)
-        )
-
-        col_t, col_g = st.columns(2)
-
-        with col_t:
-            st.dataframe(df_utm, hide_index=True, width="stretch")
-
-        with col_g:
-            st.bar_chart(
-                df_utm.set_index("utm_campaign")["num_lead"],
-                width="stretch",
-            )
+    if "df_leads" in st.session_state:
+        df_leads = st.session_state["df_leads"]
     else:
-        st.info("Nessun dato UTM disponibile sui lead.")
+        df_leads = pd.DataFrame()
+
+    if df_leads is None or df_leads.empty:
+        st.info("Nessun lead disponibile per analizzare le UTM.")
+    else:
+        if "utm_campaign" in df_leads.columns:
+            df_utm = (
+                df_leads.assign(
+                    utm_campaign=lambda d: d["utm_campaign"]
+                    .fillna("(no campaign)")
+                    .replace("", "(no campaign)")
+                    .astype(str)
+                )
+                .groupby("utm_campaign")
+                .size()
+                .reset_index(name="num_lead")
+                .sort_values("num_lead", ascending=False)
+            )
+
+            col_t, col_g = st.columns(2)
+            with col_t:
+                st.dataframe(df_utm, hide_index=True, width="stretch")
+            with col_g:
+                st.bar_chart(
+                    df_utm.set_index("utm_campaign")["num_lead"],
+                    width="stretch",
+                )
+        else:
+            st.info("Nessun dato UTM disponibile sui lead.")
+
+    # =========================
+    # VISTA / FILTRI OPPORTUNITÀ
+    # (carico df_opps UNA VOLTA qui)
+    # =========================
+    st.markdown("---")
+    st.subheader("🎯 Funnel Opportunità")
+
+    with get_session() as session:
+        opps = session.exec(select(Opportunity)).all()
+        clients_all = session.exec(select(Client)).all()
+
+    if not opps:
+        st.info("Nessuna opportunità presente.")
+        st.stop()
+
+    df_opps = pd.DataFrame([o.__dict__ for o in opps])
+    df_clients_all = (
+        pd.DataFrame([c.__dict__ for c in clients_all])
+        if clients_all
+        else pd.DataFrame()
+    )
+    client_map = (
+        {c["client_id"]: c["ragione_sociale"] for _, c in df_clients_all.iterrows()}
+        if not df_clients_all.empty
+        else {}
+    )
+    df_opps["Cliente"] = df_opps["client_id"].map(client_map).fillna(
+        df_opps["client_id"]
+    )
+
+    # Se ho opp_id da querystring, salvo la riga selezionata
+    selected_opp = None
+    if opp_id is not None and not df_opps.empty:
+        df_match = df_opps[df_opps["opportunity_id"] == opp_id]
+        if not df_match.empty:
+            selected_opp = df_match.iloc[0]
 
     # =========================
     # REPORT CAMPAGNE (UTM) - OPPORTUNITÀ + FUNNEL
@@ -1848,7 +1892,6 @@ def page_crm_sales():
     # =========================
     st.subheader("➕ Inserisci nuova opportunità")
 
-    # Carico lista clienti per selezione
     with get_session() as session:
         clients = session.exec(select(Client)).all()
 
@@ -1992,37 +2035,8 @@ def page_crm_sales():
     st.markdown("---")
 
     # =========================
-    # VISTA / FILTRI OPPORTUNITÀ
+    # KPI E FILTRI FUNNEL (usano df_opps già caricato)
     # =========================
-    st.subheader("🎯 Funnel Opportunità")
-
-    with get_session() as session:
-        opps = session.exec(select(Opportunity)).all()
-        clients_all = session.exec(select(Client)).all()
-
-    if not opps:
-        st.info("Nessuna opportunità presente.")
-        st.stop()
-
-    df_opps = pd.DataFrame([o.__dict__ for o in opps])
-    df_clients_all = (
-        pd.DataFrame([c.__dict__ for c in clients_all]) if clients_all else pd.DataFrame()
-    )
-    client_map = (
-        {c["client_id"]: c["ragione_sociale"] for _, c in df_clients_all.iterrows()}
-        if not df_clients_all.empty
-        else {}
-    )
-
-    df_opps["Cliente"] = df_opps["client_id"].map(client_map).fillna(df_opps["client_id"])
-
-    # Se ho opp_id da querystring, salvo la riga selezionata
-    selected_opp = None
-    if opp_id is not None and not df_opps.empty:
-        df_match = df_opps[df_opps["opportunity_id"] == opp_id]
-        if not df_match.empty:
-            selected_opp = df_match.iloc[0]
-
     df_open = df_opps[df_opps["stato_opportunita"] == "aperta"].copy()
     if not df_open.empty:
         df_open["valore_ponderato"] = (
@@ -2045,7 +2059,7 @@ def page_crm_sales():
                 "N. opportunità aperte",
                 int(df_open.shape[0]),
             )
-    # KPI attività per opportunità aperta (azioni future)
+
     if "data_prossima_azione" in df_opps.columns:
         df_future_actions = df_opps[
             (df_opps["stato_opportunita"] == "aperta")
@@ -2061,20 +2075,23 @@ def page_crm_sales():
                 f"{act_per_opp:.2f}",
             )
 
-    # KPI win rate complessivo (solo opportunità chiuse)
-    df_closed = df_opps[df_opps["stato_opportunita"].isin(["vinta", "persa"])].copy()
+    df_closed = df_opps[
+        df_opps["stato_opportunita"].isin(["vinta", "persa"])
+    ].copy()
     if not df_closed.empty:
         num_won = (df_closed["stato_opportunita"] == "vinta").sum()
         num_closed = len(df_closed)
         win_rate = num_won / num_closed * 100
-
         st.metric("Win rate complessivo", f"{win_rate:.1f}%")
 
-    # KPI durata ciclo di vendita (solo opportunità vinte)
     df_won = df_opps[df_opps["stato_opportunita"] == "vinta"].copy()
-    if not df_won.empty and {"data_apertura", "data_chiusura_prevista"}.issubset(df_won.columns):
+    if not df_won.empty and {"data_apertura", "data_chiusura_prevista"}.issubset(
+        df_won.columns
+    ):
         df_won["data_apertura"] = pd.to_datetime(df_won["data_apertura"])
-        df_won["data_chiusura_prevista"] = pd.to_datetime(df_won["data_chiusura_prevista"])
+        df_won["data_chiusura_prevista"] = pd.to_datetime(
+            df_won["data_chiusura_prevista"]
+        )
         df_won["giorni_ciclo"] = (
             df_won["data_chiusura_prevista"] - df_won["data_apertura"]
         ).dt.days
@@ -2086,22 +2103,16 @@ def page_crm_sales():
         )
 
     col_c, col1, col2 = st.columns(3)
-
-    # Filtro cliente
     with col_c:
         clienti_opt = ["Tutti"] + sorted(
             df_opps["Cliente"].dropna().astype(str).unique().tolist()
         )
         f_cliente = st.selectbox("Filtro cliente", clienti_opt)
-
-    # Filtro fase
     with col1:
         fase_opt = ["Tutte"] + sorted(
             df_opps["fase_pipeline"].dropna().unique().tolist()
         )
         f_fase = st.selectbox("Filtro fase pipeline", fase_opt)
-
-    # Filtro owner
     with col2:
         owner_opt = (
             ["Tutti"]
@@ -2111,15 +2122,11 @@ def page_crm_sales():
         )
         f_owner = st.selectbox("Filtro owner", owner_opt)
 
-    # Applicazione filtri
     df_f = df_opps.copy()
-
     if f_cliente != "Tutti":
         df_f = df_f[df_f["Cliente"] == f_cliente]
-
     if f_fase != "Tutte":
         df_f = df_f[df_f["fase_pipeline"] == f_fase]
-
     if f_owner != "Tutti":
         df_f = df_f[df_f["owner"] == f_owner]
 
@@ -2128,7 +2135,6 @@ def page_crm_sales():
     if df_f.empty:
         st.info("Nessuna opportunità trovata con i filtri selezionati.")
     else:
-        # === LISTA COMPATTA OPPORTUNITÀ (TABELLARE) ===
         st.markdown("**Vista tabellare pipeline**")
 
         cols_list = [
@@ -2150,7 +2156,6 @@ def page_crm_sales():
         st.markdown("---")
         st.markdown("**Dettaglio opportunità**")
 
-        # === DETTAGLIO CON EXPANDER ===
         for _, row in df_f.iterrows():
             expanded_default = bool(
                 selected_opp is not None and row["opportunity_id"] == opp_id
@@ -2168,13 +2173,16 @@ def page_crm_sales():
                 st.write(f"Probabilità: {row['probabilita']} %")
                 st.write(f"Data apertura: {row['data_apertura']}")
                 st.write(f"Data chiusura prevista: {row['data_chiusura_prevista']}")
-                st.write(f"Data prossima azione: {row.get('data_prossima_azione', '')}")
-                st.write(f"Tipo prossima azione: {row.get('tipo_prossima_azione', '')}")
+                st.write(
+                    f"Data prossima azione: {row.get('data_prossima_azione', '')}"
+                )
+                st.write(
+                    f"Tipo prossima azione: {row.get('tipo_prossima_azione', '')}"
+                )
                 st.write(
                     f"Note prossima azione: {row.get('note_prossima_azione', '')}"
                 )
 
-                # --- INFO UTM CAMPAGNA ---
                 st.markdown("**Dati campagna (UTM)**")
                 st.write(f"utm_source: {row.get('utm_source', '')}")
                 st.write(f"utm_medium: {row.get('utm_medium', '')}")
@@ -2196,11 +2204,22 @@ def page_crm_sales():
                         "Nuovo tipo azione",
                         ["", "Telefonata", "Email", "Visita", "Preventivo", "Follow‑up"],
                         index=(
-                            ["", "Telefonata", "Email", "Visita", "Preventivo", "Follow‑up"].index(
-                                row.get("tipo_prossima_azione")
-                            )
+                            [
+                                "",
+                                "Telefonata",
+                                "Email",
+                                "Visita",
+                                "Preventivo",
+                                "Follow‑up",
+                            ].index(row.get("tipo_prossima_azione"))
                             if row.get("tipo_prossima_azione")
-                            in ["Telefonata", "Email", "Visita", "Preventivo", "Follow‑up"]
+                            in [
+                                "Telefonata",
+                                "Email",
+                                "Visita",
+                                "Preventivo",
+                                "Follow‑up",
+                            ]
                             else 0
                         ),
                         key=f"nuovo_tipo_{row['opportunity_id']}",
@@ -2250,6 +2269,7 @@ def page_crm_sales():
                                 session.commit()
                         st.success("Nuova prossima azione salvata.")
                         st.rerun()
+
     # =========================
     # SINTESI ATTIVITÀ COMMERCIALI
     # =========================
@@ -2262,7 +2282,6 @@ def page_crm_sales():
     if "data_prossima_azione" in df_act.columns:
         df_act["data_prossima_azione"] = pd.to_datetime(df_act["data_prossima_azione"])
 
-        # filtro opzionale per owner
         owner_opt = ["Tutti"] + sorted(
             df_act["owner"].dropna().astype(str).unique().tolist()
         )
@@ -2276,7 +2295,6 @@ def page_crm_sales():
         future = df_act[df_act["data_prossima_azione"] > today]
         overdue = df_act[df_act["data_prossima_azione"] < today]
 
-        # se hai un flag/completata, adatta il nome colonna
         if "completata" in df_act.columns:
             done_last_7 = df_act[
                 (df_act["completata"] == True)
@@ -2284,14 +2302,13 @@ def page_crm_sales():
                 & (df_act["data_prossima_azione"] <= today)
             ]
         else:
-            done_last_7 = df_act.iloc[0:0]  # nessun dato disponibile
+            done_last_7 = df_act.iloc[0:0]
 
         c1, c2, c3 = st.columns(3)
         c1.metric("Azioni future", len(future))
         c2.metric("Azioni scadute", len(overdue))
         c3.metric("Azioni completate (7g)", len(done_last_7))
 
-        # Distribuzione azioni future per owner
         if not future.empty and "owner" in future.columns:
             st.subheader("Azioni future per owner")
             azioni_owner = (
@@ -2309,7 +2326,7 @@ def page_crm_sales():
         )
 
     # =========================
-    # AGENDA VENDITORE (tutti i ruoli)
+    # AGENDA VENDITORE
     # =========================
     st.markdown("---")
     st.subheader("📞 Agenda venditore")
@@ -2321,7 +2338,6 @@ def page_crm_sales():
         df_agenda = df_agenda[df_agenda["data_prossima_azione"] >= oggi]
         df_agenda = df_agenda.sort_values("data_prossima_azione")
 
-        # --- FILTRI AGENDA ---
         col_f1, col_f2, col_f3 = st.columns(3)
         with col_f1:
             owner_opt = ["Tutti"] + sorted(
@@ -2369,6 +2385,7 @@ def page_crm_sales():
                 df_agenda_f = df_agenda_f[df_agenda_f["utm_campaign"] == f_camp_ag]
 
         cols_agenda = [
+            "opportunity_id",
             "data_prossima_azione",
             "Cliente",
             "nome_opportunita",
@@ -2378,15 +2395,14 @@ def page_crm_sales():
             "probabilita",
             "owner",
         ]
+        cols_agenda = [c for c in cols_agenda if c in df_agenda_f.columns]
         df_agenda_f = df_agenda_f[cols_agenda]
-        st.dataframe(df_agenda_f)
+        st.dataframe(df_agenda_f, hide_index=True, width="stretch")
 
-        # 🔔 bottone test notifica Telegram
         if st.button("🔔 Invia agenda di oggi su Telegram"):
             send_agenda_oggi_telegram()
             st.success("Agenda di oggi inviata su Telegram (se ci sono azioni).")
 
-        # 📅 CALENDARIO PROSSIME AZIONI
         st.subheader("📅 Calendario prossime azioni")
 
         base_url = "https://forgialean.streamlit.app"
@@ -2400,7 +2416,7 @@ def page_crm_sales():
                 events.append(
                     {
                         "title": f"{row['Cliente']} – {row['nome_opportunita']} "
-                                 f"({row.get('tipo_prossima_azione', '')})",
+                        f"({row.get('tipo_prossima_azione', '')})",
                         "start": row["data_prossima_azione"].strftime("%Y-%m-%d"),
                         "url": event_url,
                     }
@@ -2416,13 +2432,13 @@ def page_crm_sales():
         }
 
         calendar(events=events, options=options, key="crm_calendar")
-
     else:
         st.info(
             "Per usare l’agenda venditore aggiungi i campi 'data_prossima_azione', "
             "'tipo_prossima_azione' e 'note_prossima_azione' al modello Opportunity."
         )
         st.stop()
+
     # =========================
     # SEZIONE EDIT / DELETE (SOLO ADMIN)
     # =========================
@@ -2528,7 +2544,6 @@ def page_crm_sales():
                 value=opp_obj.data_chiusura_prevista or date.today(),
             )
 
-        # --- PROSSIMA AZIONE (EDIT) ---
         col_a1_e, col_a2_e = st.columns(2)
         with col_a1_e:
             data_prossima_azione_e = st.date_input(
@@ -2540,11 +2555,22 @@ def page_crm_sales():
                 "📌 Tipo prossima azione",
                 ["", "Telefonata", "Email", "Visita", "Preventivo", "Follow‑up"],
                 index=(
-                    ["", "Telefonata", "Email", "Visita", "Preventivo", "Follow‑up"].index(
-                        opp_obj.tipo_prossima_azione
-                    )
+                    [
+                        "",
+                        "Telefonata",
+                        "Email",
+                        "Visita",
+                        "Preventivo",
+                        "Follow‑up",
+                    ].index(opp_obj.tipo_prossima_azione)
                     if opp_obj.tipo_prossima_azione
-                    in ["Telefonata", "Email", "Visita", "Preventivo", "Follow‑up"]
+                    in [
+                        "Telefonata",
+                        "Email",
+                        "Visita",
+                        "Preventivo",
+                        "Follow‑up",
+                    ]
                     else 0
                 ),
             )
@@ -2591,26 +2617,24 @@ def page_crm_sales():
         st.success("Opportunità eliminata.")
         st.rerun()
 
-    # === QUI SOTTO AGGIUNGIAMO LA PARTE COMMESSE DA OPPORTUNITÀ VINTA ===
-
+    # =========================
+    # CREA COMMESSA DA OPPORTUNITÀ VINTA
+    # =========================
     st.markdown("---")
     st.subheader("📦 Crea commessa da opportunità vinta")
 
     with get_session() as session:
-        # Opportunità vinte
         opp_vinte = session.exec(
             select(Opportunity).where(Opportunity.fase_pipeline == "Vinta")
         ).all()
         commesse = session.exec(select(ProjectCommessa)).all()
 
-    # Mappa delle commesse già legate a un'opportunity (se hai il campo opportunity_id)
     commesse_by_opp = set()
     if commesse and hasattr(ProjectCommessa, "opportunity_id"):
         for c in commesse:
             if getattr(c, "opportunity_id", None) is not None:
                 commesse_by_opp.add(c.opportunity_id)
 
-    # Filtra solo le opportunity vinte che NON hanno ancora una commessa collegata
     opp_vinte_creabili = [
         o
         for o in opp_vinte
@@ -2626,7 +2650,6 @@ def page_crm_sales():
         )
         st.stop()
 
-    # Selectbox per scegliere l'opportunity vinta
     opp_options = [
         f"{o.opportunity_id} - {o.nome_opportunita}" for o in opp_vinte_creabili
     ]
@@ -2662,7 +2685,6 @@ def page_crm_sales():
 
     if crea_commessa and opp_sel and client_sel:
         with get_session() as session:
-            # ricarico opportunità e cliente
             opp_db = session.get(Opportunity, opp_sel.opportunity_id)
             client_db = session.get(Client, client_sel.client_id)
 
@@ -2681,10 +2703,10 @@ def page_crm_sales():
             session.commit()
             session.refresh(new_comm)
 
-        opp_id = opp_db.opportunity_id
+        opp_id_created = opp_db.opportunity_id
         comm_id = new_comm.commessa_id
         st.success(
-            f"Commessa creata da opportunità {opp_id} con ID {comm_id}."
+            f"Commessa creata da opportunità {opp_id_created} con ID {comm_id}."
         )
         st.rerun()
 
