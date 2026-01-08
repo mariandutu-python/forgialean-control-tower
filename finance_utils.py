@@ -2,7 +2,7 @@
 from datetime import date
 import pandas as pd
 
-from db import get_session, Invoice, Expense, TaxDeadline
+from db import get_session, Invoice, Expense, TaxDeadline, TaxConfig, InpsContribution
 from sqlmodel import select
 def build_full_management_balance(year: int, ref_date: date, saldo_cassa: float) -> dict:
     """
@@ -181,4 +181,109 @@ def build_full_management_balance(year: int, ref_date: date, saldo_cassa: float)
         "stato_patrimoniale": df_sp,
         "conto_economico": df_ce,
         "indicatori": df_ind,
+    }
+
+def calcola_imposte_e_inps_normative(year: int) -> dict:
+    """
+    Calcolo 'normativo' semplificato di reddito, imposta e INPS per l'anno.
+    Usa TaxConfig.regime:
+      - 'forfettario': reddito = ricavi_fiscali * redditivita_forfettario
+      - 'ordinario':   reddito = ricavi_fiscali - costi_fiscali (semplificato)
+    Restituisce un dict con:
+      - regime, ricavi_fiscali, costi_fiscali, redditivita_forfettario
+      - reddito_imponibile, base_inps, imposta_dovuta, inps_dovuti
+      - imposte_registrate, inps_registrati (da TaxDeadline / InpsContribution)
+    """
+    with get_session() as session:
+        cfg = session.exec(
+            select(TaxConfig).where(TaxConfig.year == year)
+        ).first()
+        invoices = session.exec(select(Invoice)).all()
+        expenses = session.exec(select(Expense)).all()
+        deadlines = session.exec(
+            select(TaxDeadline).where(TaxDeadline.year == year)
+        ).all()
+        inps_rows = session.exec(
+            select(InpsContribution).where(InpsContribution.year == year)
+        ).all()
+
+    if not cfg:
+        return {
+            "year": year,
+            "regime": None,
+            "errore": "Nessuna TaxConfig definita per questo anno.",
+        }
+
+    regime = (cfg.regime or "").lower()
+
+    df_inv = pd.DataFrame([i.__dict__ for i in (invoices or [])])
+    ricavi_fiscali = 0.0
+    if not df_inv.empty:
+        df_inv["data_rif"] = pd.to_datetime(
+            df_inv["data_incasso"].fillna(df_inv["data_fattura"]),
+            errors="coerce",
+        )
+        df_inv = df_inv.dropna(subset=["data_rif"])
+        df_inv["anno"] = df_inv["data_rif"].dt.year
+        ricavi_fiscali = float(
+            df_inv.loc[df_inv["anno"] == year, "importo_totale"].sum()
+        )
+
+    df_exp = pd.DataFrame([e.__dict__ for e in (expenses or [])])
+    costi_fiscali = 0.0
+    if regime == "ordinario" and not df_exp.empty:
+        df_exp["data_rif"] = pd.to_datetime(
+            df_exp["data_pagamento"].fillna(df_exp["data"]),
+            errors="coerce",
+        )
+        df_exp = df_exp.dropna(subset=["data_rif"])
+        df_exp["anno"] = df_exp["data_rif"].dt.year
+        costi_fiscali = float(
+            df_exp.loc[df_exp["anno"] == year, "importo_totale"].sum()
+        )
+
+    redditivita = cfg.redditivita_forfettario or 1.0
+
+    if regime == "forfettario":
+        reddito_imponibile = ricavi_fiscali * redditivita
+    else:
+        reddito_imponibile = ricavi_fiscali - costi_fiscali
+
+    aliquota_imposta = cfg.aliquota_imposta or 0.0
+    imposta_dovuta = max(reddito_imponibile, 0.0) * aliquota_imposta
+
+    aliquota_inps = cfg.aliquota_inps or 0.0
+    base_inps = max(reddito_imponibile, 0.0)
+    inps_dovuti = base_inps * aliquota_inps
+
+    imposte_registrate = 0.0
+    for d in (deadlines or []):
+        tipo = (d.type or "").lower()
+        if "imposta" in tipo or "tasse" in tipo or "irpef" in tipo:
+            if d.amount_paid:
+                imposte_registrate += d.amount_paid
+            else:
+                imposte_registrate += d.estimated_amount or 0.0
+
+    inps_registrati = 0.0
+    for r in (inps_rows or []):
+        if r.amount_paid:
+            inps_registrati += r.amount_paid
+        else:
+            inps_registrati += r.amount_due or 0.0
+
+    return {
+        "year": year,
+        "regime": regime,
+        "ricavi_fiscali": ricavi_fiscali,
+        "costi_fiscali": costi_fiscali,
+        "redditivita_forfettario": redditivita if regime == "forfettario" else None,
+        "reddito_imponibile": reddito_imponibile,
+        "aliquota_imposta": aliquota_imposta,
+        "imposta_dovuta": imposta_dovuta,
+        "base_inps": base_inps,
+        "aliquota_inps": aliquota_inps,
+        "inps_dovuti": inps_dovuti,
+        "imposte_registrate": imposte_registrate,
+        "inps_registrati": inps_registrati,
     }

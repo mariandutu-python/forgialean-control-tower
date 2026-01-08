@@ -8,7 +8,10 @@ import pandas as pd
 import plotly.express as px
 import pdfplumber
 from sqlmodel import SQLModel, Field, Session, select, delete
-from finance_utils import build_full_management_balance
+from finance_utils import (
+    build_full_management_balance,
+    calcola_imposte_e_inps_normative,
+)
 from config import CACHE_TTL, PAGES_BY_ROLE, APP_NAME, LOGO_PATH, MY_COMPANY_DATA
 from enum import Enum
 
@@ -6306,6 +6309,53 @@ def page_tax_inps():
             session.add(cfg_db)
             session.commit()
         st.success("Configurazione fiscale salvata.")
+
+    # ========= QUI IL NUOVO BLOCCO =========
+    st.subheader("📊 Calcolo normativo reddito, imposta e INPS")
+
+    anno_sel = st.number_input(
+        "Anno di calcolo",
+        min_value=2020,
+        max_value=2100,
+        value=date.today().year,
+        step=1,
+    )
+
+    res = calcola_imposte_e_inps_normative(anno_sel)
+
+    if res.get("errore"):
+        st.warning(res["errore"])
+    else:
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown("**Regime fiscale**")
+            st.write(res["regime"])
+            st.markdown("**Ricavi fiscali anno**")
+            st.write(f"{res['ricavi_fiscali']:,.2f} €")
+            if res["regime"] == "forfettario" and res.get("redditivita_forfettario") is not None:
+                st.markdown("**Coefficiente di redditività**")
+                st.write(f"{res['redditivita_forfettario']*100:.1f} %")
+            st.markdown("**Reddito imponibile**")
+            st.write(f"{res['reddito_imponibile']:,.2f} €")
+
+        with col2:
+            st.markdown("**Aliquota imposta**")
+            st.write(f"{res['aliquota_imposta']*100:.1f} %")
+            st.markdown("**Imposta dovuta (teorica)**")
+            st.write(f"{res['imposta_dovuta']:,.2f} €")
+            st.markdown("**Aliquota INPS**")
+            st.write(f"{res['aliquota_inps']*100:.1f} %")
+            st.markdown("**Contributi INPS dovuti (teorici)**")
+            st.write(f"{res['inps_dovuti']:,.2f} €")
+
+        st.markdown("---")
+        col3, col4 = st.columns(2)
+        with col3:
+            st.markdown("**Imposte registrate (TaxDeadline)**")
+            st.write(f"{res['imposte_registrate']:,.2f} €")
+        with col4:
+            st.markmondown("**INPS registrati (InpsContribution)**")
+            st.write(f"{res['inps_registrati']:,.2f} €")
 
     # =========================
     # STIMA IMPOSTE & CONTRIBUTI
