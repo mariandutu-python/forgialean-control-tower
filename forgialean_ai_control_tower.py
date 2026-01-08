@@ -6723,12 +6723,18 @@ def page_finance_dashboard():
         totale_uscite = 0.0
 
     # Merge Entrate/Uscite
-    df_kpi = pd.merge(
-        entrate_mensili,
-        uscite_mensili,
-        on="mese",
-        how="outer",
-    ).fillna(0.0)
+    with pd.option_context("future.no_silent_downcasting", True):
+        df_kpi = (
+            pd.merge(
+                entrate_mensili,
+                uscite_mensili,
+                on="mese",
+                how="outer",
+            )
+            .fillna(0.0)
+            .infer_objects(copy=False)
+        )
+
     df_kpi["Margine"] = df_kpi["Entrate"] - df_kpi["Uscite"]
 
     # ---------- KPI sintetici ----------
