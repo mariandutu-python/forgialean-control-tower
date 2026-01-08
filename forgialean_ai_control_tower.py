@@ -4843,7 +4843,7 @@ if uploaded_file is not None and clients:
 
     if not inv_obj:
         st.warning("Fattura non trovata.")
-        return
+        st.stop()
 
     df_clients_all = pd.DataFrame([c.__dict__ for c in clients_all]) if clients_all else pd.DataFrame()
     if not df_clients_all.empty:
