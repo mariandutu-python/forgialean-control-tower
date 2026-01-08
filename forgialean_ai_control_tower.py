@@ -6437,6 +6437,54 @@ def page_tax_inps():
             st.success("Piano scadenze imposta e INPS generato/aggiornato.")
             st.rerun()
 
+def page_management_vs_tax():
+    st.title("Gestionale vs Fisco")
+
+    anno_sel = st.number_input(
+        "Anno di analisi",
+        min_value=2020,
+        max_value=2100,
+        value=date.today().year,
+        step=1,
+    )
+
+    # Conto economico gestionale (annuale)
+    df_ce = build_income_statement(anno_sel)
+
+    # Conto economico gestionale mensile
+    df_ce_mese = build_income_statement_monthly(anno_sel)
+
+    # Cashflow mensile
+    df_cf = build_cashflow_monthly(anno_sel)
+
+    # Calcolo normativo
+    res = calcola_imposte_e_inps_normative(anno_sel)
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.subheader("Conto economico gestionale")
+        st.dataframe(df_ce)
+
+        st.subheader("Gestionale mensile")
+        st.dataframe(df_ce_mese)
+
+    with col2:
+        st.subheader("Cashflow mensile")
+        st.dataframe(df_cf)
+
+        st.subheader("Calcolo normativo Fisco & INPS")
+        if res.get("errore"):
+            st.warning(res["errore"])
+        else:
+            st.write(f"Regime fiscale: {res['regime']}")
+            st.write(f"Ricavi fiscali anno: {res['ricavi_fiscali']:,.2f} €")
+            st.write(f"Reddito imponibile: {res['reddito_imponibile']:,.2f} €")
+            st.write(f"Imposta dovuta (teorica): {res['imposta_dovuta']:,.2f} €")
+            st.write(f"INPS dovuti (teorici): {res['inps_dovuti']:,.2f} €")
+            st.write(f"Imposte registrate (TaxDeadline): {res['imposte_registrate']:,.2f} €")
+            st.write(f"INPS registrati (InpsContribution): {res['inps_registrati']:,.2f} €")
+
     # =========================
     # STIMA IMPOSTE & CONTRIBUTI
     # =========================
@@ -7663,12 +7711,13 @@ PAGES = {
     "CRM & Vendite": page_crm_sales,
     "Treno vendite": page_sales_train,
     "Lead da campagne": page_lead_capture,
-    "Finanza / Fatture": page_finance_invoices,    # pagina fatture
-    "Finanza / Pagamenti": page_finance_payments,  # se è una pagina distinta
+    "Finanza / Fatture": page_finance_invoices,
+    "Finanza / Pagamenti": page_finance_payments,
     "Incassi / Scadenze": page_payments,
     "Cashflow proiettato": page_cashflow_forecast,
     "Fatture → AE": page_invoice_transmission,
     "Fisco & INPS": page_tax_inps,
+    "Gestionale vs Fisco": page_management_vs_tax,  # <--- aggiunta qui
     "Spese": page_expenses,
     "Finanza / Dashboard": page_finance_dashboard,
     "Bilancio gestionale": page_bilancio_gestionale,
