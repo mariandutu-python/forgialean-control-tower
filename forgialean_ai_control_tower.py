@@ -4829,7 +4829,7 @@ if uploaded_file is not None and clients:
     # =========================
     if role != "admin":
         st.info("Modifica, eliminazione ed export XML disponibili solo per ruolo 'admin'.")
-        return
+        st.stop()
 
     st.markdown("---")
     st.subheader("✏️ Modifica / elimina / esporta fattura (solo admin)")
