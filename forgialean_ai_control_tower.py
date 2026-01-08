@@ -110,7 +110,7 @@ def send_agenda_oggi_telegram():
         opps_oggi = get_opps_di_oggi(session)
 
     if not opps_oggi:
-        return
+        st.stop()
 
     lines = []
     for o in opps_oggi:
@@ -1020,7 +1020,7 @@ def page_presentation():
                 )
                 st.stop()
         st.stop()
-        return
+        
 
     # HERO: chi sei e che beneficio dai
     st.title("🏭 Turni lunghi, OEE basso e margini sotto pressione?")
@@ -1314,7 +1314,7 @@ Se hai linee o impianti che lavorano sotto l'80% di OEE, **continuare così è l
 Compila il form qui sopra per il mini‑report OEE gratuito: sarà la base per valutare
 se un progetto ForgiaLean può portarti **+16% OEE e più margine**, senza perdere altro tempo in riunioni sterili.
 """)
-        return
+        st.stop()
 
     st.markdown("---")
     st.subheader("Calcolatore rapido OEE e perdita economica (uso interno)")
@@ -1542,7 +1542,7 @@ def page_clients():
 
     if not clients:
         st.info("Nessun cliente presente. Inseriscine uno con il form sopra.")
-        return
+        st.stop()
 
     df_clients = pd.DataFrame([c.__dict__ for c in clients])
     st.dataframe(df_clients)
@@ -1552,7 +1552,7 @@ def page_clients():
     # =========================
     if role != "admin":
         st.info("Modifica ed eliminazione clienti disponibili solo per ruolo 'admin'.")
-        return
+        st.stop()
 
     st.markdown("---")
     st.subheader("✏️ Modifica / elimina cliente (solo admin)")
@@ -1567,7 +1567,7 @@ def page_clients():
 
     if not client_obj:
         st.warning("Cliente non trovato.")
-        return
+        st.stop()
 
     with st.form("edit_client"):
         col1, col2 = st.columns(2)
@@ -1989,7 +1989,7 @@ def page_crm_sales():
 
     if not opps:
         st.info("Nessuna opportunità presente.")
-        return
+        st.stop()
 
     df_opps = pd.DataFrame([o.__dict__ for o in opps])
     df_clients_all = (
@@ -2409,19 +2409,19 @@ def page_crm_sales():
             "Per usare l’agenda venditore aggiungi i campi 'data_prossima_azione', "
             "'tipo_prossima_azione' e 'note_prossima_azione' al modello Opportunity."
         )
-
+        st.stop()
     # =========================
     # SEZIONE EDIT / DELETE (SOLO ADMIN)
     # =========================
     if role != "admin":
-        return
+        st.stop()
 
     st.markdown("---")
     st.subheader("✏️ Modifica / elimina opportunità (solo admin)")
 
     if not opps:
         st.info("Nessuna opportunità da modificare/eliminare.")
-        return
+        st.stop()
 
     df_opp_all = pd.DataFrame([o.__dict__ for o in opps])
     opp_ids = df_opp_all["opportunity_id"].tolist()
@@ -2432,7 +2432,7 @@ def page_crm_sales():
 
     if not opp_obj:
         st.warning("Opportunità non trovata.")
-        return
+        st.stop()
 
     if not df_clients_all.empty:
         df_clients_all["label"] = (
@@ -2611,7 +2611,7 @@ def page_crm_sales():
         st.info(
             "Nessuna opportunità 'Vinta' disponibile per creare una nuova commessa."
         )
-        return
+        st.stop()
 
     # Selectbox per scegliere l'opportunity vinta
     opp_options = [
@@ -2726,10 +2726,10 @@ def page_lead_capture():
         # Validazioni base
         if not azienda.strip() or not nome.strip() or not email.strip():
             st.warning("Compila almeno Azienda, Nome e Email.")
-            return
+            st.stop()
         if not accetta_privacy:
             st.warning("Devi accettare l'informativa privacy per procedere.")
-            return
+            st.stop()
 
         # 1) Crea / trova Client
         with get_session() as session:
@@ -2855,7 +2855,7 @@ def page_sales_train():
 
     if not opps:
         st.info("Nessuna opportunità presente. Crea prima almeno una opportunità nel CRM.")
-        return
+        st.stop()
 
     df_opps = pd.DataFrame([o.__dict__ for o in opps])
     df_clients = pd.DataFrame([c.__dict__ for c in clients]) if clients else pd.DataFrame()
@@ -3906,7 +3906,7 @@ def page_finance_invoices():
 
     if df_inv.empty:
         st.info("Nessuna fattura trovata con i filtri selezionati.")
-        return
+        st.stop()
 
     # -------------------------
     # VISTA TABELLA PULITA
@@ -3938,7 +3938,7 @@ def page_finance_invoices():
     # =========================
     if role != "admin":
         st.info("Modifica, eliminazione ed export XML disponibili solo per ruolo 'admin'.")
-        return
+        st.stop()
 
     st.markdown("---")
     st.subheader("✏️ Modifica / elimina / esporta fattura (solo admin)")
@@ -3952,7 +3952,7 @@ def page_finance_invoices():
 
     if not inv_obj:
         st.warning("Fattura non trovata.")
-        return
+        st.stop()
 
     df_clients_all = pd.DataFrame([c.__dict__ for c in clients_all]) if clients_all else pd.DataFrame()
     if not df_clients_all.empty:
@@ -4217,7 +4217,7 @@ def page_payments():
 
     if not invoices:
         st.info("Nessuna fattura registrata. Prima inserisci almeno una fattura nella pagina Finanza / Fatture.")
-        return
+        st.stop()
 
     df_inv = pd.DataFrame([i.__dict__ for i in invoices])
 
@@ -4252,7 +4252,7 @@ def page_payments():
     def aggiorna_stato_fattura(session, invoice_id, payment_date):
         inv_obj = session.get(Invoice, invoice_id)
         if not inv_obj:
-            return
+            st.stop()
 
         pays_all = session.exec(
             select(Payment).where(Payment.invoice_id == invoice_id)
@@ -4466,7 +4466,7 @@ def page_payments():
 
     if not pays:
         st.info("Nessun pagamento registrato.")
-        return
+        st.stop()
 
     df_pay = pd.DataFrame([p.__dict__ for p in pays])
 
@@ -5302,7 +5302,7 @@ def page_operations():
 
     if not commesse_all:
         st.info("Nessuna commessa ancora registrata.")
-        return
+        st.stop()
 
     df_all = pd.DataFrame([c.__dict__ for c in commesse_all])
     st.dataframe(df_all)
@@ -5411,7 +5411,7 @@ def page_operations():
     # SEZIONE EDIT / DELETE (SOLO ADMIN)
     # =========================
     if role != "admin":
-        return  # niente edit/delete per utenti normali
+        st.stop()  # niente edit/delete per utenti normali
 
     st.markdown("---")
     st.subheader("✏️ Modifica / elimina dati Operations (solo admin)")
@@ -5900,7 +5900,7 @@ def page_people_departments():
     # =========================
     role = st.session_state.get("role", "user")
     if role != "admin":
-        return
+        st.stop()
 
     st.markdown("---")
     st.subheader("✏️ Modifica / elimina dati People (solo admin)")
@@ -6052,7 +6052,7 @@ def page_capacity_people():
 
     if not entries:
         st.info("Nessuna riga timesheet registrata.")
-        return
+        st.stop()
 
     df_te = pd.DataFrame([e.__dict__ for e in entries])
     df_te["data_lavoro"] = pd.to_datetime(df_te["data_lavoro"], errors="coerce")
@@ -6065,7 +6065,7 @@ def page_capacity_people():
 
     if df_te.empty:
         st.info("Nessuna riga timesheet nel periodo selezionato.")
-        return
+        st.stop()
 
     # ---------- Mapping operatore -> employee / reparto ----------
     df_emp = pd.DataFrame([e.__dict__ for e in (employees or [])])
@@ -6151,7 +6151,7 @@ def page_finance_payments():
 
     if not data_rows:
         st.info("Nessuna fattura presente.")
-        return
+        st.stop()
 
     df = pd.DataFrame(data_rows)
 
@@ -6198,7 +6198,7 @@ def page_invoice_transmission():
 
     if not invoices:
         st.info("Nessuna fattura presente.")
-        return
+        st.stop()
 
     data_rows = []
     for inv in invoices:
@@ -6511,7 +6511,7 @@ def page_finance_dashboard():
 
     if df_inv.empty and df_exp.empty:
         st.info("Nessun dato di entrate o uscite nel sistema.")
-        return
+        st.stop()
 
     # =========================
     # Conto Economico gestionale (annuale)
@@ -7024,7 +7024,7 @@ def page_finance_dashboard():
 
     if not categories or not accounts:
         st.info("Per registrare una spesa serve almeno una categoria e un conto.")
-        return
+        st.stop()
 
     df_cat = pd.DataFrame([c.__dict__ for c in categories])
     df_cat["label"] = df_cat["category_id"].astype(str) + " - " + df_cat["nome"]
@@ -7114,7 +7114,7 @@ def page_finance_dashboard():
 
     if not expenses:
         st.info("Nessuna spesa registrata.")
-        return
+        st.stop()
 
     df_exp = pd.DataFrame([e.__dict__ for e in expenses])
     st.dataframe(df_exp)
