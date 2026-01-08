@@ -8162,70 +8162,70 @@ def page_cashflow_forecast():
         st.info("Nessun dato di saldo disponibile.")
 
 PAGES = {
-    "Presentazione": page_presentation,
-    "Overview": page_overview,
-    "Clienti": page_clients,
-    "CRM & Vendite": page_crm_sales,
-    "Treno vendite": page_sales_train,
-    "Lead da campagne": page_lead_capture,
-    "Finanza / Fatture": page_finance_invoices,
-    "Finanza / Pagamenti": page_finance_payments,
-    "Incassi / Scadenze": page_payments,
-    "Cashflow proiettato": page_cashflow_forecast,
-    "Fatture → AE": page_invoice_transmission,
-    "Fisco & INPS": page_tax_inps,
-    "Gestionale vs Fisco": page_management_vs_tax,  # <--- aggiunta qui
-    "Spese": page_expenses,
-    "Finanza / Dashboard": page_finance_dashboard,
-    "Bilancio gestionale": page_bilancio_gestionale,
-    "Nota integrativa gestionale": page_nota_integrativa,
-    "Operations / Commesse": page_operations,
-    "People & Reparti": page_people_departments,
-    "Capacità People": page_capacity_people,
+    "🏠 Home": {
+        "Presentazione": page_presentation,
+        "Overview": page_overview,
+    },
+    "📊 Gestionale Operativo": {
+        "Clienti": page_clients,
+        "CRM & Vendite": page_crm_sales,
+        "Treno vendite": page_sales_train,
+        "Lead da campagne": page_lead_capture,
+        "Operations / Commesse": page_operations,
+    },
+    "💰 Finanza & Pagamenti": {
+        "Finanza / Fatture": page_finance_invoices,
+        "Finanza / Pagamenti": page_finance_payments,
+        "Incassi / Scadenze": page_payments,
+        "Spese": page_expenses,
+        "Finanza / Dashboard": page_finance_dashboard,
+    },
+    "📋 Checklist Mensile": {
+        "Bilancio gestionale": page_bilancio_gestionale,
+        "Gestionale vs Fisco": page_management_vs_tax,
+        "Cashflow proiettato": page_cashflow_forecast,
+        "Nota integrativa gestionale": page_nota_integrativa,
+    },
+    "🏛️ Preparazione Fiscale": {
+        "Fisco & INPS": page_tax_inps,
+        "Fatture → AE": page_invoice_transmission,
+    },
+    "👥 People & Organizzazione": {
+        "People & Reparti": page_people_departments,
+        "Capacità People": page_capacity_people,
+    },
 }
+
+# =========================
+# BREADCRUMB HELPER
+# =========================
+
+def render_breadcrumb(section: str, page: str):
+    """Renderizza breadcrumb di navigazione con stile"""
+    breadcrumb_html = f"""
+    <style>
+        .breadcrumb {{
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 20px;
+        }}
+        .breadcrumb-separator {{
+            margin: 0 8px;
+            color: #999;
+        }}
+    </style>
+    <div class="breadcrumb">
+        <strong>{section}</strong>
+        <span class="breadcrumb-separator">›</span>
+        <strong>{page}</strong>
+    </div>
+    """
+    st.markdown(breadcrumb_html, unsafe_allow_html=True)
+
 
 # =========================
 # LOGIN & MAIN
 # =========================
-
-def check_login_sidebar():
-    if "logged_in" not in st.session_state:
-        st.session_state.logged_in = False
-        st.session_state.username = ""
-        st.session_state.role = "user"
-
-    with st.sidebar:
-        if not st.session_state.logged_in:
-            st.markdown("### 🔐 Login")
-
-            with st.form("login_form"):
-                username = st.text_input("Username")
-                password = st.text_input("Password", type="password")
-                submit = st.form_submit_button("Login")
-
-            if submit:
-                if username == "Marian Dutu" and password == "mariand":
-                    st.session_state.logged_in = True
-                    st.session_state.username = username
-                    st.session_state.role = "admin"
-                    st.rerun()
-                elif username == "Demo User" and password == "demodemo":
-                    st.session_state.logged_in = True
-                    st.session_state.username = username
-                    st.session_state.role = "user"
-                    st.rerun()
-                else:
-                    st.error("Credenziali non valide.")
-        else:
-            if st.button("Logout", key="logout_button"):
-                st.session_state.logged_in = False
-                st.session_state.username = ""
-                st.session_state.role = "user"
-                st.rerun()
-
-    if not st.session_state.logged_in:
-        st.stop()
-
 
 def main():
     # 👉 chiamata subito all'inizio
@@ -8234,16 +8234,22 @@ def main():
     # ---------- Inizializzazione stato ----------
     if "authenticated" not in st.session_state:
         st.session_state["authenticated"] = False
-        st.session_state["role"] = "anon"  # visitatore non loggato
+        st.session_state["role"] = "anon"
         st.session_state["username"] = ""
+    
+    if "current_section" not in st.session_state:
+        st.session_state["current_section"] = "🏠 Home"
+    
+    if "current_page" not in st.session_state:
+        st.session_state["current_page"] = "Presentazione"
 
     # ---------- SIDEBAR ----------
     st.sidebar.title(APP_NAME)
     st.sidebar.caption("Versione SQLite")
 
-    # Blocco login admin (semplice)
+    # Blocco login admin
     if not st.session_state["authenticated"]:
-        st.sidebar.subheader("Area riservata")
+        st.sidebar.subheader("🔐 Area riservata")
         username_input = st.sidebar.text_input("Username")
         password_input = st.sidebar.text_input("Password", type="password")
         if st.sidebar.button("Login"):
@@ -8251,29 +8257,52 @@ def main():
                 st.session_state["authenticated"] = True
                 st.session_state["role"] = "admin"
                 st.session_state["username"] = username_input
+                st.rerun()
             else:
                 st.sidebar.error("Credenziali non valide")
     else:
-        st.sidebar.write("✅ Accesso admin")
+        st.sidebar.write(f"✅ {st.session_state['username']}")
         if st.sidebar.button("Logout"):
             st.session_state["authenticated"] = False
             st.session_state["role"] = "anon"
             st.session_state["username"] = ""
+            st.rerun()
 
-    # Menu pagine in base al ruolo
+    st.sidebar.markdown("---")
+
+    # Menu gerarchico per flussi di lavoro
     role = st.session_state["role"]
+    
     if role == "anon":
-        pages = ["Presentazione"]
+        available_sections = ["🏠 Home"]
     else:
-        pages = list(PAGES.keys())
+        available_sections = list(PAGES.keys())
 
-    page = st.sidebar.radio("Pagina", pages)
+    # Seleziona sezione
+    section = st.sidebar.radio("📂 Sezione", available_sections)
+    st.session_state["current_section"] = section
 
+    # Seleziona pagina dentro la sezione
+    if section in PAGES:
+        pages_in_section = PAGES[section]
+        page_names = list(pages_in_section.keys())
+        
+        selected_page = st.sidebar.selectbox(
+            "📄 Pagina",
+            page_names,
+        )
+        st.session_state["current_page"] = selected_page
+        
+        # Breadcrumb navigazione
+        render_breadcrumb(section, selected_page)
+        
+        # Esegui la pagina selezionata
+        page_func = pages_in_section[selected_page]
+        page_func()
+    
     if LOGO_PATH.exists():
         st.sidebar.markdown("---")
         st.sidebar.image(str(LOGO_PATH), width="stretch")
-
-    PAGES[page]()
 
 
 if __name__ == "__main__":
