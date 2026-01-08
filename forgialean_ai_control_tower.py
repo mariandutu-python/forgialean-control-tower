@@ -3669,7 +3669,7 @@ def page_finance_invoices():
 
     uploaded_file = st.file_uploader("Carica file PDF fattura", type=["pdf"])
 
-    parsed_data = {
+    parsed_data: dict[str, Any] = {
         "num_fattura": "",
         "data_fattura": date.today(),
         "data_scadenza": date.today(),
@@ -3695,7 +3695,9 @@ def page_finance_invoices():
             if m_date:
                 for fmt in ("%d/%m/%Y", "%d-%m-%Y"):
                     try:
-                        parsed_data["data_fattura"] = datetime.strptime(m_date.group(1), fmt).date()
+                        data_fatt = datetime.strptime(m_date.group(1), fmt).date()
+                        parsed_data["data_fattura"] = data_fatt
+                        parsed_data["data_scadenza"] = data_fatt
                         break
                     except ValueError:
                         continue
@@ -3703,13 +3705,17 @@ def page_finance_invoices():
             # Imponibile e totale (euristica)
             numbers = re.findall(r"(\d{1,3}(?:[\.\,]\d{3})*(?:[\.\,]\d{2}))", full_text)
             if len(numbers) >= 2:
-                def to_float(s):
+                def to_float(s: str) -> float:
                     s = s.replace(".", "").replace(",", ".")
                     return float(s)
+
                 parsed_data["imponibile"] = to_float(numbers[-2])
                 totale_pdf = to_float(numbers[-1])
                 if parsed_data["imponibile"] > 0:
-                    parsed_data["iva_perc"] = round((totale_pdf / parsed_data["imponibile"] - 1) * 100, 2)
+                    parsed_data["iva_perc"] = round(
+                        (totale_pdf / parsed_data["imponibile"] - 1) * 100,
+                        2,
+                    )
 
             st.success("PDF letto, controlla e conferma i dati sotto.")
 
@@ -3747,21 +3753,30 @@ def page_finance_invoices():
                 client_label_pdf = st.selectbox("Cliente", df_clients["label"].tolist())
                 commessa_label_pdf = st.selectbox("Commessa (opzionale)", commesse_labels_pdf)
                 fase_label_pdf = st.selectbox("Fase (opzionale)", fasi_labels_pdf)
-                num_fattura_pdf = st.text_input("Numero fattura", parsed_data["num_fattura"])
-                data_fattura_pdf = st.date_input("Data fattura", value=parsed_data["data_fattura"])
-                data_scadenza_pdf = st.date_input("Data scadenza", value=parsed_data["data_fattura"])
+                num_fattura_pdf = st.text_input(
+                    "Numero fattura",
+                    parsed_data.get("num_fattura", ""),
+                )
+                data_fattura_pdf = st.date_input(
+                    "Data fattura",
+                    value=parsed_data.get("data_fattura", date.today()),
+                )
+                data_scadenza_pdf = st.date_input(
+                    "Data scadenza",
+                    value=parsed_data.get("data_scadenza", date.today()),
+                )
             with col2:
                 imponibile_pdf = st.number_input(
                     "Imponibile (€)",
                     min_value=0.0,
                     step=100.0,
-                    value=float(parsed_data["imponibile"]),
+                    value=float(parsed_data.get("imponibile", 0.0)),
                 )
                 iva_perc_pdf = st.number_input(
                     "Aliquota IVA (%)",
                     min_value=0.0,
                     step=1.0,
-                    value=float(parsed_data["iva_perc"]),
+                    value=float(parsed_data.get("iva_perc", 22.0)),
                 )
                 stato_pagamento_pdf = st.selectbox(
                     "Stato pagamento",
@@ -3778,11 +3793,11 @@ def page_finance_invoices():
             else:
                 client_id_sel_pdf = int(client_label_pdf.split(" - ")[0])
 
-                commessa_id_sel_pdf = None
+                commessa_id_sel_pdf: int | None = None
                 if commessa_label_pdf != "(nessuna)":
                     commessa_id_sel_pdf = int(commessa_label_pdf.split(" - ")[0])
 
-                fase_id_sel_pdf = None
+                fase_id_sel_pdf: int | None = None
                 if fase_label_pdf != "(nessuna)":
                     fase_id_sel_pdf = int(fase_label_pdf.split(" - ")[0])
 
@@ -3810,7 +3825,6 @@ def page_finance_invoices():
                 st.rerun()
 
     st.markdown("---")
-
     # =========================
     # 3) ELENCO FATTURE + KPI
     # =========================
