@@ -7020,7 +7020,13 @@ def page_finance_dashboard():
         else:
             uscite_anno = pd.DataFrame(columns=["anno", "Uscite"])
 
-        df_year = pd.merge(entrate_anno, uscite_anno, on="anno", how="outer").fillna(0.0)
+        with pd.option_context("future.no_silent_downcasting", True):
+            df_year = (
+                pd.merge(entrate_anno, uscite_anno, on="anno", how="outer")
+                .fillna(0.0)
+                .infer_objects(copy=False)
+            )
+
         if df_year.empty:
             st.info("Nessun dato aggregato per anno disponibile.")
         else:
