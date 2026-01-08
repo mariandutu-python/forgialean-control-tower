@@ -3845,7 +3845,7 @@ def page_finance_invoices():
 
     if not invoices:
         st.info("Nessuna fattura registrata.")
-        st.stop()
+        return
 
     df_inv = pd.DataFrame([i.__dict__ for i in invoices])
     df_inv["data_fattura"] = pd.to_datetime(df_inv["data_fattura"], errors="coerce")
@@ -4736,7 +4736,7 @@ if uploaded_file is not None and clients:
 
     if not invoices:
         st.info("Nessuna fattura registrata.")
-        return
+        st.stop()
 
     df_inv = pd.DataFrame([i.__dict__ for i in invoices])
     df_inv["data_fattura"] = pd.to_datetime(df_inv["data_fattura"], errors="coerce")
