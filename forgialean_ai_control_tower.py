@@ -508,14 +508,16 @@ def build_income_statement_monthly(anno_sel: int) -> pd.DataFrame:
 
     mesi_df = pd.DataFrame({"mese": list(range(1, 13))})
 
-    df_ce_mese = (
-        mesi_df
-        .merge(ricavi_mese, on="mese", how="left")
-        .merge(costi_spese_mese, on="mese", how="left")
-        .merge(costi_inps_mese, on="mese", how="left")
-        .merge(costi_tasse_mese, on="mese", how="left")
-        .fillna(0.0)
-    )
+    with pd.option_context("future.no_silent_downcasting", True):
+        df_ce_mese = (
+            mesi_df
+            .merge(ricavi_mese, on="mese", how="left")
+            .merge(costi_spese_mese, on="mese", how="left")
+            .merge(costi_inps_mese, on="mese", how="left")
+            .merge(costi_tasse_mese, on="mese", how="left")
+            .fillna(0.0)
+            .infer_objects(copy=False)
+        )
 
     df_ce_mese["Costi_totali"] = (
         df_ce_mese["Costi_spese"] + df_ce_mese["Costi_inps"] + df_ce_mese["Costi_tasse"]
