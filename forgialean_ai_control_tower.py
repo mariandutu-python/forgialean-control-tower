@@ -6483,6 +6483,156 @@ def page_tax_inps():
             st.success("Piano scadenze imposta e INPS generato/aggiornato.")
             st.rerun()
 
+        # ===== REGISTRA PAGAMENTI FISCO/INPS =====
+        st.markdown("---")
+        st.markdown("### 💳 Registra pagamenti Fisco/INPS")
+
+        with get_session() as session:
+            # Carica scadenze non ancora completamente pagate
+            tax_deadlines = session.exec(
+                select(TaxDeadline).where(TaxDeadline.year == anno)
+            ).all()
+            inps_contributions = session.exec(
+                select(InpsContribution).where(InpsContribution.year == anno)
+            ).all()
+
+        # Filtra solo scadenze con saldo residuo
+        deadlines_open = []
+        for d in (tax_deadlines or []):
+            residuo = (d.estimated_amount or 0.0) - (d.amount_paid or 0.0)
+            if residuo > 0:
+                deadlines_open.append({
+                    "id": d.id,
+                    "type": "tax",
+                    "descrizione": d.type,
+                    "scadenza": d.due_date,
+                    "importo_dovuto": d.estimated_amount or 0.0,
+                    "importo_pagato": d.amount_paid or 0.0,
+                    "residuo": residuo,
+                })
+
+        for c in (inps_contributions or []):
+            residuo = (c.amount_due or 0.0) - (c.amount_paid or 0.0)
+            if residuo > 0:
+                deadlines_open.append({
+                    "id": c.id,
+                    "type": "inps",
+                    "descrizione": c.description,
+                    "scadenza": c.due_date,
+                    "importo_dovuto": c.amount_due or 0.0,
+                    "importo_pagato": c.amount_paid or 0.0,
+                    "residuo": residuo,
+                })
+
+        if not deadlines_open:
+            st.info("✅ Nessuna scadenza aperta per questo anno.")
+        else:
+            st.write(f"**Scadenze con saldo residuo ({len(deadlines_open)})**")
+            
+            # Selectbox per scegliere quale scadenza pagare
+            opzioni = [
+                f"{d['descrizione']} - Residuo: {d['residuo']:,.2f} € (Scadenza: {d['scadenza']})"
+                for d in deadlines_open
+            ]
+            scadenza_sel_idx = st.selectbox("Seleziona scadenza da pagare", range(len(opzioni)), format_func=lambda i: opzioni[i])
+            scadenza_sel = deadlines_open[scadenza_sel_idx]
+
+            col_pag1, col_pag2 = st.columns(2)
+            with col_pag1:
+                importo_pagato_new = st.number_input(
+                    f"Importo da pagare (residuo: {scadenza_sel['residuo']:,.2f} €)",
+                    value=scadenza_sel['residuo'],
+                    min_value=0.0,
+                    step=0.01,
+                )
+            with col_pag2:
+                data_pagamento = st.date_input(
+                    "Data pagamento",
+                    value=date.today(),
+                )
+
+            if st.button("✅ Registra pagamento"):
+                if importo_pagato_new <= 0:
+                    st.warning("L'importo deve essere maggiore di zero.")
+                else:
+                    with get_session() as session:
+                        if scadenza_sel["type"] == "tax":
+                            # Aggiorna TaxDeadline
+                            d = session.exec(
+                                select(TaxDeadline).where(TaxDeadline.id == scadenza_sel["id"])
+                            ).first()
+                            if d:
+                                d.amount_paid = (d.amount_paid or 0.0) + importo_pagato_new
+                                d.payment_date = data_pagamento
+                                # Se pagato completamente, segna come "paid"
+                                if d.amount_paid >= (d.estimated_amount or 0.0):
+                                    d.status = "paid"
+                                else:
+                                    d.status = "partial"
+                                session.add(d)
+                        else:
+                            # Aggiorna InpsContribution
+                            c = session.exec(
+                                select(InpsContribution).where(InpsContribution.id == scadenza_sel["id"])
+                            ).first()
+                            if c:
+                                c.amount_paid = (c.amount_paid or 0.0) + importo_pagato_new
+                                c.payment_date = data_pagamento
+                                # Se pagato completamente, segna come "paid"
+                                if c.amount_paid >= (c.amount_due or 0.0):
+                                    c.status = "paid"
+                                else:
+                                    c.status = "partial"
+                                session.add(c)
+                        
+                        session.commit()
+                    
+                    st.success(f"✅ Pagamento di {importo_pagato_new:,.2f} € registrato per {scadenza_sel['descrizione']}.")
+                    st.rerun()
+
+        # ===== RIEPILOGO SCADENZE =====
+        st.markdown("---")
+        st.markdown("### 📋 Riepilogo scadenze Fisco/INPS")
+
+        with get_session() as session:
+            all_tax = session.exec(select(TaxDeadline).where(TaxDeadline.year == anno)).all()
+            all_inps = session.exec(select(InpsContribution).where(InpsContribution.year == anno)).all()
+
+        df_tax = pd.DataFrame([
+            {
+                "Tipo": "Imposta",
+                "Descrizione": d.type,
+                "Scadenza": d.due_date,
+                "Dovuto": d.estimated_amount or 0.0,
+                "Pagato": d.amount_paid or 0.0,
+                "Residuo": (d.estimated_amount or 0.0) - (d.amount_paid or 0.0),
+                "Stato": d.status or "planned",
+            }
+            for d in (all_tax or [])
+        ])
+
+        df_inps = pd.DataFrame([
+            {
+                "Tipo": "INPS",
+                "Descrizione": c.description,
+                "Scadenza": c.due_date,
+                "Dovuto": c.amount_due or 0.0,
+                "Pagato": c.amount_paid or 0.0,
+                "Residuo": (c.amount_due or 0.0) - (c.amount_paid or 0.0),
+                "Stato": c.status or "planned",
+            }
+            for c in (all_inps or [])
+        ])
+
+        if not df_tax.empty or not df_inps.empty:
+            df_riepilogo = pd.concat([df_tax, df_inps], ignore_index=True)
+            st.dataframe(df_riepilogo.style.format({
+                "Dovuto": "{:,.2f}",
+                "Pagato": "{:,.2f}",
+                "Residuo": "{:,.2f}",
+            }))
+        else:
+            st.info("Nessuna scadenza registrata per questo anno.")
 def page_management_vs_tax():
     st.title("Gestionale vs Fisco")
 
