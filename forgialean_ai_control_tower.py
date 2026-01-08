@@ -6898,12 +6898,17 @@ def page_finance_dashboard():
             uscite_commessa = pd.DataFrame(columns=["commessa_id", "Commessa", "Uscite_commessa"])
 
         if not entrate_commessa.empty or not uscite_commessa.empty:
-            df_comm = pd.merge(
-                entrate_commessa,
-                uscite_commessa,
-                on=["commessa_id", "Commessa"],
-                how="outer",
-            ).fillna(0.0)
+            with pd.option_context("future.no_silent_downcasting", True):
+                df_comm = (
+                    pd.merge(
+                        entrate_commessa,
+                        uscite_commessa,
+                        on=["commessa_id", "Commessa"],
+                        how="outer",
+                    )
+                    .fillna(0.0)
+                    .infer_objects(copy=False)
+                )
 
             df_comm["Margine_commessa"] = df_comm["Entrate_commessa"] - df_comm["Uscite_commessa"]
             df_comm = df_comm.sort_values("Margine_commessa", ascending=False)
@@ -6931,7 +6936,6 @@ def page_finance_dashboard():
             st.info("Nessuna entrata o uscita collegata a commesse nel periodo selezionato.")
     else:
         st.info("Nessuna entrata o uscita disponibile per calcolare il margine per commessa.")
-
     # ---------- Uscite per conto finanziario ----------
     st.markdown("---")
     st.subheader("🏦 Uscite per conto finanziario (periodo)")
