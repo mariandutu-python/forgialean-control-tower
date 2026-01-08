@@ -1484,6 +1484,18 @@ def page_overview():
     
     utile_netto = margine_lordo - imposte_dovute - inps_dovuti
     
+    # ===== FLUSSO CASSA MESE CORRENTE =====
+    mese_oggi = date.today().month
+    anno_oggi = date.today().year
+    
+    df_cf_mese = build_cashflow_monthly(anno_oggi)
+    
+    net_cf_oggi = 0.0
+    if not df_cf_mese.empty:
+        cf_mese_oggi = df_cf_mese[df_cf_mese["Mese"] == mese_oggi]
+        if not cf_mese_oggi.empty:
+            net_cf_oggi = cf_mese_oggi.iloc[0].get("Net_cash_flow", 0.0)
+    
     # Mostra metriche in griglia
     col1, col2, col3, col4 = st.columns(4)
     with col1:
@@ -1509,7 +1521,7 @@ def page_overview():
     with col7:
         st.metric("⚠️ Imposte residue", f"€ {imposte_residue:,.0f}".replace(",", "."))
     with col8:
-        st.metric("Clienti / Opportunità / Fatture", f"{len(clients)} / {len(opps)} / {len(invoices)}")
+        st.metric("💵 Flusso cassa mese", f"€ {net_cf_oggi:,.0f}".replace(",", "."))
     
     col9, col10, col11 = st.columns(3)
     with col9:
@@ -1525,11 +1537,13 @@ def page_overview():
     
     alerts_critici = []
     
-    if margine_perc < 20:
+    if margine_perc < 20 and ricavi_anno > 0:
         alerts_critici.append(f"🔴 Margine lordo basso: {margine_perc:.1f}% (target: >20%)")
     
+    if net_cf_oggi < 0:
+        alerts_critici.append(f"🔴 Flusso cassa negativo questo mese: € {net_cf_oggi:,.0f}".replace(",", "."))
+    
     if imposte_residue > 0:
-        giorni_da_saldo = 0
         for d in (tax_deadlines or []):
             if d.due_date and (d.estimated_amount or 0.0) - (d.amount_paid or 0.0) > 0:
                 giorni_residui = (d.due_date - date.today()).days
@@ -1561,7 +1575,133 @@ def page_overview():
     
     st.markdown("---")
 
-    # Mostra metriche base (clienti, opportunità, ecc.)
+    # ===== GRAFICI TREND =====
+    st.subheader("📈 Trend ricavi, costi e margine")
+    
+    col_trend1, col_trend2 = st.columns(2)
+    with col_trend1:
+        periodo_trend = st.selectbox(
+            "Visualizza per",
+            ["Mensile (ultimi 12 mesi)", "Semestrale (ultimi 2 anni)", "Annuale (ultimi 5 anni)"],
+            key="periodo_trend"
+        )
+    with col_trend2:
+        anno_trend_start = st.number_input(
+            "Da anno",
+            min_value=2020,
+            max_value=anno_kpi,
+            value=max(2020, anno_kpi - 1),
+            step=1,
+        )
+    
+    # Costruisci DataFrame per il trend
+    if invoices_db or expenses_db:
+        df_inv_trend = pd.DataFrame([i.__dict__ for i in invoices_db]) if invoices_db else pd.DataFrame()
+        df_exp_trend = pd.DataFrame([e.__dict__ for e in expenses_db]) if expenses_db else pd.DataFrame()
+        
+        # Entrate
+        if not df_inv_trend.empty:
+            df_inv_trend["data_rif"] = pd.to_datetime(
+                df_inv_trend["data_incasso"].fillna(df_inv_trend["data_fattura"]),
+                errors="coerce",
+            )
+            df_inv_trend = df_inv_trend.dropna(subset=["data_rif"])
+            
+            if "Mensile" in periodo_trend:
+                df_inv_trend["periodo"] = df_inv_trend["data_rif"].dt.to_period("M").astype(str)
+                entrate_trend = (
+                    df_inv_trend.groupby("periodo")["importo_totale"]
+                    .sum()
+                    .rename("Ricavi")
+                    .reset_index()
+                )
+            elif "Semestrale" in periodo_trend:
+                df_inv_trend["periodo"] = df_inv_trend["data_rif"].dt.to_period("Q").astype(str)
+                entrate_trend = (
+                    df_inv_trend.groupby("periodo")["importo_totale"]
+                    .sum()
+                    .rename("Ricavi")
+                    .reset_index()
+                )
+            else:
+                df_inv_trend["anno"] = df_inv_trend["data_rif"].dt.year
+                df_inv_trend["periodo"] = df_inv_trend["anno"].astype(str)
+                entrate_trend = (
+                    df_inv_trend.groupby("periodo")["importo_totale"]
+                    .sum()
+                    .rename("Ricavi")
+                    .reset_index()
+                )
+        else:
+            entrate_trend = pd.DataFrame(columns=["periodo", "Ricavi"])
+        
+        # Uscite
+        if not df_exp_trend.empty:
+            df_exp_trend["data_rif"] = pd.to_datetime(
+                df_exp_trend["data_pagamento"].fillna(df_exp_trend["data"]),
+                errors="coerce",
+            )
+            df_exp_trend = df_exp_trend.dropna(subset=["data_rif"])
+            
+            if "Mensile" in periodo_trend:
+                df_exp_trend["periodo"] = df_exp_trend["data_rif"].dt.to_period("M").astype(str)
+                uscite_trend = (
+                    df_exp_trend.groupby("periodo")["importo_totale"]
+                    .sum()
+                    .rename("Costi")
+                    .reset_index()
+                )
+            elif "Semestrale" in periodo_trend:
+                df_exp_trend["periodo"] = df_exp_trend["data_rif"].dt.to_period("Q").astype(str)
+                uscite_trend = (
+                    df_exp_trend.groupby("periodo")["importo_totale"]
+                    .sum()
+                    .rename("Costi")
+                    .reset_index()
+                )
+            else:
+                df_exp_trend["anno"] = df_exp_trend["data_rif"].dt.year
+                df_exp_trend["periodo"] = df_exp_trend["anno"].astype(str)
+                uscite_trend = (
+                    df_exp_trend.groupby("periodo")["importo_totale"]
+                    .sum()
+                    .rename("Costi")
+                    .reset_index()
+                )
+        else:
+            uscite_trend = pd.DataFrame(columns=["periodo", "Costi"])
+        
+        # Merge
+        df_trend = pd.merge(entrate_trend, uscite_trend, on="periodo", how="outer").fillna(0.0)
+        df_trend["Margine"] = df_trend["Ricavi"] - df_trend["Costi"]
+        
+        if not df_trend.empty:
+            fig_trend = px.line(
+                df_trend,
+                x="periodo",
+                y=["Ricavi", "Costi", "Margine"],
+                markers=True,
+                title=f"Trend ricavi, costi e margine ({periodo_trend})",
+                labels={"value": "€", "periodo": "Periodo"},
+            )
+            fig_trend.update_layout(hovermode="x unified")
+            st.plotly_chart(fig_trend, width="stretch")
+            
+            with st.expander("📋 Dettagli trend"):
+                st.dataframe(df_trend.style.format({
+                    "Ricavi": "{:,.2f}",
+                    "Costi": "{:,.2f}",
+                    "Margine": "{:,.2f}",
+                }))
+        else:
+            st.info("Nessun dato disponibile per il trend selezionato.")
+    else:
+        st.info("Nessun dato di entrate o uscite per visualizzare il trend.")
+
+    st.markdown("---")
+
+    # ===== METRICHE BASE =====
+    st.subheader("📊 Metriche Base")
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         st.metric("Clienti", len(clients))
@@ -1575,7 +1715,6 @@ def page_overview():
     st.markdown("---")
     st.subheader("📈 KPI reparto (se presenti)")
 
-    # ✅ USA LA FUNZIONE CACHED
     kpi_dept = get_all_kpi_department_timeseries()
 
     if kpi_dept:
@@ -1588,9 +1727,8 @@ def page_overview():
     else:
         st.info("Nessun KPI reparto ancora registrato.")
 
-    # ---- EXPORT COMPLETO ----
     st.markdown("---")
-    st.subheader("📥 Export completo")
+    st.subheader("📥 Export")
 
     export_all_to_excel(
         {
