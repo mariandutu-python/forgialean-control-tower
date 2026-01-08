@@ -6493,15 +6493,6 @@ def page_management_vs_tax():
             st.write(f"Imposte registrate (TaxDeadline): {res['imposte_registrate']:,.2f} €")
             st.write(f"INPS registrati (InpsContribution): {res['inps_registrati']:,.2f} €")
 
-        st.write(f"Base imponibile stimata: {base_imponibile:.2f} €")
-        st.write(f"Imposta stimata (IRPEF/Imposta sostitutiva): {imposta:.2f} €")
-        st.write(f"Contributi INPS Gestione Separata stimati: {inps:.2f} €")
-        st.write(f"**Netto stimato dopo imposte e contributi:** {netto:.2f} €")
-    else:
-        st.info("Nessuna fattura emessa nell'anno corrente.")
-
-    st.markdown("---")
-
     # =========================
     # SCADENZE FISCALI & INPS (TaxDeadline)
     # =========================
