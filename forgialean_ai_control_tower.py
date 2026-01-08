@@ -4797,7 +4797,7 @@ if uploaded_file is not None and clients:
 
     if df_inv.empty:
         st.info("Nessuna fattura trovata con i filtri selezionati.")
-        return
+        st.stop()
 
     # -------------------------
     # VISTA TABELLA PULITA
