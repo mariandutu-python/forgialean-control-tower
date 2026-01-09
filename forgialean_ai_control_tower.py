@@ -8264,7 +8264,24 @@ def main():
 
     # ========== SE NON LOGGATO ==========
     if not st.session_state["authenticated"]:
-        # Mostra SOLO la pagina Presentazione (senza sidebar)
+        # Mostra LOGIN nella sidebar
+        st.sidebar.title(APP_NAME)
+        st.sidebar.caption("Versione SQLite")
+        st.sidebar.subheader("🔐 Area riservata")
+        
+        username_input = st.sidebar.text_input("Username")
+        password_input = st.sidebar.text_input("Password", type="password")
+        
+        if st.sidebar.button("Login"):
+            if username_input == "Marian Dutu" and password_input == "mariand":
+                st.session_state["authenticated"] = True
+                st.session_state["role"] = "admin"
+                st.session_state["username"] = username_input
+                st.rerun()
+            else:
+                st.sidebar.error("Credenziali non valide")
+        
+        # Mostra SOLO la pagina Presentazione
         page_presentation()
         st.stop()  # 🔴 STOP qui - non mostra nulla altro
 
