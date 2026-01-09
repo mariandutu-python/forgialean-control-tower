@@ -8264,22 +8264,30 @@ def main():
 
     # ========== SE NON LOGGATO ==========
     if not st.session_state["authenticated"]:
-        # Mostra LOGIN nella sidebar
+        # Sidebar minimalista: solo logo + expander login
         st.sidebar.title(APP_NAME)
         st.sidebar.caption("Versione SQLite")
-        st.sidebar.subheader("🔐 Area riservata")
         
-        username_input = st.sidebar.text_input("Username")
-        password_input = st.sidebar.text_input("Password", type="password")
+        # Mostra logo subito
+        if LOGO_PATH.exists():
+            st.sidebar.image(str(LOGO_PATH), width="stretch")
         
-        if st.sidebar.button("Login"):
-            if username_input == "Marian Dutu" and password_input == "mariand":
-                st.session_state["authenticated"] = True
-                st.session_state["role"] = "admin"
-                st.session_state["username"] = username_input
-                st.rerun()
-            else:
-                st.sidebar.error("Credenziali non valide")
+        st.sidebar.markdown("---")
+        
+        # Login in expander (chiuso di default)
+        with st.sidebar.expander("🔐 Area riservata", expanded=False):
+            st.subheader("Login")
+            username_input = st.text_input("Username", key="login_username")
+            password_input = st.text_input("Password", type="password", key="login_password")
+            
+            if st.button("Login", key="login_button"):
+                if username_input == "Marian Dutu" and password_input == "mariand":
+                    st.session_state["authenticated"] = True
+                    st.session_state["role"] = "admin"
+                    st.session_state["username"] = username_input
+                    st.rerun()
+                else:
+                    st.error("Credenziali non valide")
         
         # Mostra SOLO la pagina Presentazione
         page_presentation()
@@ -8330,9 +8338,9 @@ def main():
         page_func = pages_in_section[selected_page]
         page_func()
     
-    # Logo in fondo
+    # Logo in fondo (per loggati)
+    st.sidebar.markdown("---")
     if LOGO_PATH.exists():
-        st.sidebar.markdown("---")
         st.sidebar.image(str(LOGO_PATH), width="stretch")
 
 
