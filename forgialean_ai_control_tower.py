@@ -66,6 +66,139 @@ import requests
 import smtplib
 from email.mime.text import MIMEText
 
+# =================== GOOGLE ANALYTICS 4 ===================
+
+GA_MEASUREMENT_ID = "G-XXXXXXXXXX"  # 🔴 SOSTITUISCI CON IL TUO MEASUREMENT ID (quando avrai GA4)
+
+def inject_ga():
+    """Inietta il codice GA4 nella pagina"""
+    ga_code = f"""
+    <script async src="https://www.googletagmanager.com/gtag/js?id={GA_MEASUREMENT_ID}"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){{dataLayer.push(arguments);}}
+      gtag('js', new Date());
+      gtag('config', '{GA_MEASUREMENT_ID}');
+    </script>
+    """
+    st.markdown(ga_code, unsafe_allow_html=True)
+
+def track_event(event_name: str, event_data: dict = None):
+    """Traccia un evento su Google Analytics"""
+    if event_data is None:
+        event_data = {}
+    
+    ga_event = f"""
+    <script>
+      gtag('event', '{event_name}', {str(event_data).replace("'", '"')});
+    </script>
+    """
+    st.markdown(ga_event, unsafe_allow_html=True)
+
+
+# =================== GAMIFICATION - FLAME POINTS SYSTEM ===================
+
+def assign_flame_points(opp_id: int, action: str, points: int = 0):
+    """
+    Assegna punti fiamma in base all'azione completata.
+    
+    Actions:
+    - form_oee_submitted: 10 punti (MQL)
+    - form_call_submitted: 20 punti (SQL)
+    - demo_scheduled: 30 punti
+    - contract_sent: 40 punti
+    - contract_signed: 100 punti (VINTO!)
+    """
+    
+    action_points = {
+        "form_oee_submitted": 10,
+        "form_call_submitted": 20,
+        "demo_scheduled": 30,
+        "contract_sent": 40,
+        "contract_signed": 100,
+    }
+    
+    flame_to_add = action_points.get(action, points)
+    
+    with get_session() as session:
+        opp = session.get(Opportunity, opp_id)
+        if opp:
+            # Aggiorna fiamme
+            opp.flame_points = (opp.flame_points or 0) + flame_to_add
+            
+            # Aggiorna stato azione
+            if action == "form_oee_submitted":
+                opp.form_oee_completed = True
+                opp.date_form_oee = date.today()
+            elif action == "form_call_submitted":
+                opp.form_call_completed = True
+                opp.date_form_call = date.today()
+            elif action == "demo_scheduled":
+                opp.demo_scheduled = True
+                opp.date_demo = date.today()
+            elif action == "contract_sent":
+                opp.contract_sent = True
+                opp.date_contract_sent = date.today()
+            elif action == "contract_signed":
+                opp.contract_signed = True
+                opp.date_contract_signed = date.today()
+            
+            session.add(opp)
+            session.commit()
+    
+    return flame_to_add
+
+
+def get_flame_leaderboard(limit: int = 10):
+    """Ritorna top N aziende per flame points"""
+    with get_session() as session:
+        opps = session.exec(
+            select(Opportunity)
+            .order_by(Opportunity.flame_points.desc())
+            .limit(limit)
+        ).all()
+        
+        leaderboard = []
+        for opp in opps:
+            client = session.get(Client, opp.client_id)
+            leaderboard.append({
+                "Cliente": client.ragione_sociale if client else "N/A",
+                "Opportunità": opp.nome_opportunita,
+                "🔥 Fiamme": opp.flame_points or 0,
+                "Fase": opp.fase_pipeline,
+                "Probabilità": f"{opp.probabilita:.0f}%",
+            })
+        
+        return leaderboard
+
+
+def render_flame_badge(flame_points: int):
+    """Renderizza badge fiamma in HTML"""
+    if flame_points >= 100:
+        emoji = "🔥🔥🔥"
+        color = "#FF4500"  # OrangeRed
+        label = "FUOCO PURO!"
+    elif flame_points >= 60:
+        emoji = "🔥🔥"
+        color = "#FF6347"  # Tomato
+        label = "Molto caldo"
+    elif flame_points >= 30:
+        emoji = "🔥"
+        color = "#FFA500"  # Orange
+        label = "Caldo"
+    else:
+        emoji = "❄️"
+        color = "#87CEEB"  # SkyBlue
+        label = "Freddo"
+    
+    html = f"""
+    <div style="background-color: {color}; padding: 15px; border-radius: 8px; 
+                text-align: center; color: white; font-weight: bold; font-size: 16px;">
+        {emoji}<br>{flame_points} fiamme<br><small>{label}</small>
+    </div>
+    """
+    return html
+
 # === LETTURA SECRETS ===
 TELEGRAM_BOT_TOKEN = st.secrets["tracking"]["TELEGRAM_BOT_TOKEN"]
 TELEGRAM_CHAT_ID = st.secrets["tracking"]["TELEGRAM_CHAT_ID"]
