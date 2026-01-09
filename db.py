@@ -61,12 +61,26 @@ class Opportunity(SQLModel, table=True):
     tipo_prossima_azione: Optional[str] = None
     note_prossima_azione: Optional[str] = None
     stato_opportunita: Optional[str] = "aperta"
-    note: Optional[str] = None          # <--- AGGIUNTO
+    note: Optional[str] = None
 
     utm_source: Optional[str] = None
     utm_medium: Optional[str] = None
     utm_campaign: Optional[str] = None
     utm_content: Optional[str] = None
+    
+    # 🔥 NUOVI CAMPI PER GAMIFICATION - FLAME POINTS
+    flame_points: int = Field(default=0)
+    form_oee_completed: bool = Field(default=False)
+    form_call_completed: bool = Field(default=False)
+    demo_scheduled: bool = Field(default=False)
+    contract_sent: bool = Field(default=False)
+    contract_signed: bool = Field(default=False)
+    date_form_oee: Optional[date] = Field(default=None)
+    date_form_call: Optional[date] = Field(default=None)
+    date_demo: Optional[date] = Field(default=None)
+    date_contract_sent: Optional[date] = Field(default=None)
+    date_contract_signed: Optional[date] = Field(default=None)
+    telefono_contatto: Optional[str] = Field(default=None)
 
 class Invoice(SQLModel, table=True):
     invoice_id: Optional[int] = Field(default=None, primary_key=True)
