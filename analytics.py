@@ -13,7 +13,8 @@ GA4_CLIENT_ID_FALLBACK = tracking_conf.get("GA4_CLIENT_ID_FALLBACK", "forgialean
 def get_ga_client_id() -> str:
     """Client ID anonimo per GA4, persistente nella sessione Streamlit."""
     if "ga_client_id" not in st.session_state:
-        st.session_state["ga_client_id"] = str(uuid.uuid4())
+        # Per i test, usa un client_id fisso
+        st.session_state["ga_client_id"] = "test-marian-forgialean"
     return st.session_state["ga_client_id"]
 
 
