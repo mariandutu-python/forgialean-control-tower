@@ -1,4 +1,5 @@
 import json
+import time
 import uuid
 import requests
 import streamlit as st
@@ -30,7 +31,7 @@ def track_event(event_name: str, params: dict | None = None, debug: bool = False
 
     - event_name: nome evento GA4 (es. 'page_view_dashboard').
     - params: dizionario di parametri evento.
-    - debug: se True usa l'endpoint di debug e stampa la risposta.
+    - debug: se True stampa i dettagli (non cambia endpoint).
     """
     if not GA4_MEASUREMENT_ID or not GA4_API_SECRET:
         print("GA4: measurement_id o api_secret mancanti, evento NON inviato.")
@@ -41,31 +42,36 @@ def track_event(event_name: str, params: dict | None = None, debug: bool = False
     except Exception:
         client_id = GA4_CLIENT_ID_FALLBACK
 
-    # Se chiedi debug, forza anche debug_mode param per DebugView
     params = params.copy() if params else {}
     if debug:
         params.setdefault("debug_mode", 1)
 
-    url = _build_url(debug=debug)
+    # Usa sempre l'endpoint normale (non debug)
+    url = _build_url(debug=False)
 
+    # Aggiungi parametri obbligatori per GA4
     payload = {
         "client_id": client_id,
         "non_personalized_ads": True,
+        "timestamp_micros": str(int(time.time() * 1_000_000)),
         "events": [
             {
                 "name": event_name,
-                "params": params,
+                "params": {
+                    **params,
+                    "page_location": "https://forgialean.streamlit.app/",
+                    "page_title": "ForgiaLean Control Tower",
+                }
             }
         ],
     }
 
-    # 🔴 LOGGA IL PAYLOAD COMPLETO
-    print(f"GA4 Payload: {json.dumps(payload, indent=2)}")
+    if debug:
+        print(f"GA4 Payload: {json.dumps(payload, indent=2)}")
 
     try:
         resp = requests.post(url, json=payload, timeout=3)
         if debug:
-            print("GA4 DEBUG status:", resp.status_code, resp.text)
+            print(f"GA4 Response status: {resp.status_code}")
     except Exception as e:
-        # Non blocca la UI, ma logga l'errore
         print("GA4 error:", e)
