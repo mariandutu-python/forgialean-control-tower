@@ -8526,11 +8526,14 @@ def main():
             .replace("/", "_")
         )
 
-        track_event(event_name, {
-            "section": section,
-            "page": selected_page,
-            "debug_mode": 1,
-        })
+track_event(
+    event_name,
+    {
+        "section": section,
+        "page": selected_page,
+    },
+    debug=True,  # <— usa il flag debug della nuova funzione
+)
 
         page_func()
     
