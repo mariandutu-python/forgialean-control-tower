@@ -1129,9 +1129,32 @@ def page_presentation():
                         opp.fase_pipeline = "Lead qualificato (SQL)"
                         opp.probabilita = 50.0
                         opp.owner = "Marian Dutu"
-                        # se in modello hai data_prossima_azione, puoi usare disponibilita per decidere la data
+                        
+                        # Calcola data prossima azione in base a disponibilità
+                        if disponibilita == "Oggi entro le 18":
+                            data_call = date.today()
+                        elif disponibilita == "Domani mattina":
+                            data_call = date.today() + timedelta(days=1)
+                        elif disponibilita == "Domani pomeriggio":
+                            data_call = date.today() + timedelta(days=1)
+                        elif disponibilita == "Questa settimana":
+                            data_call = date.today() + timedelta(days=3)
+                        else:
+                            data_call = date.today() + timedelta(days=1)
+                        
+                        # Salva in prossima_azione
                         if hasattr(opp, "data_prossima_azione"):
-                            opp.data_prossima_azione = date.today()
+                            opp.data_prossima_azione = data_call
+                        
+                        # Salva il telefono
+                        if hasattr(opp, "telefono_contatto"):
+                            opp.telefono_contatto = telefono
+                        
+                        if hasattr(opp, "tipo_prossima_azione"):
+                            opp.tipo_prossima_azione = f"CALL OEE - {disponibilita}"
+                        
+                        if hasattr(opp, "note_prossima_azione"):
+                            opp.note_prossima_azione = f"Nome: {nome}\nDisponibilità: {disponibilita}\n{note}"
 
                         extra = (
                             f"\n\n--- Step call OEE ---\n"
@@ -1148,6 +1171,16 @@ def page_presentation():
                         session.add(opp)
                         session.commit()
 
+                # 🔥 ASSEGNA FIAMME PER FORM CALL
+                flame_points = assign_flame_points(opp.opportunity_id, "form_call_submitted")
+                
+                # 📊 TRACCIA SU GOOGLE ANALYTICS
+                track_event("form_call_submitted", {
+                    "name": nome,
+                    "phone": telefono,
+                    "flame_points": flame_points,
+                })
+
                 st.session_state.call_data = {
                     "nome": nome,
                     "telefono": telefono,
@@ -1156,7 +1189,7 @@ def page_presentation():
                     "note": note,
                 }
 
-                st.success("✅ Perfetto! Ti contatterò secondo la tua disponibilità!")
+                st.success(f"✅ Perfetto! Ti contatterò secondo la tua disponibilità! 🔥 +{flame_points} fiamme")
                 st.balloons()
                 st.markdown(
                     "### 📋 Prossimi passi:\n"
@@ -1166,8 +1199,6 @@ def page_presentation():
                 )
                 st.stop()
         st.stop()
-        
-
     # HERO: chi sei e che beneficio dai
     st.title("🏭 Turni lunghi, OEE basso e margini sotto pressione?")
 
@@ -1209,7 +1240,7 @@ ForgiaLean unisce **Black Belt Lean Six Sigma**, **Operations Management** e **D
 - Circa **28.000 €/anno** di capacità recuperata, scarti dal 9% al 2%.
 """)
 
-    # GRAFICI PRIMA / DOPO (esempio fittizio)
+    # GRAFICI PRIMA / DOPO
     st.subheader("Come cambia la situazione: prima e dopo il progetto")
 
     col_g1, col_g2 = st.columns(2)
@@ -1256,7 +1287,7 @@ ForgiaLean unisce **Black Belt Lean Six Sigma**, **Operations Management** e **D
         fig_fermi.update_layout(showlegend=False)
         st.plotly_chart(fig_fermi, width="stretch")
 
-    # DIFFERENZIAZIONE: perché voi
+    # DIFFERENZIAZIONE
     st.subheader("Perché scegliere ForgiaLean rispetto ad altre soluzioni")
 
     st.markdown("""
@@ -1289,10 +1320,10 @@ Durante il progetto:
 - Ti aiuto a **tradurre il progetto operativo** in termini di obiettivi, deliverable e risultati attesi, così da semplificare il lavoro con il tuo consulente di finanza agevolata o con il commercialista.
 - Mettiamo in evidenza i **benefici misurabili** (OEE, capacità recuperata, margini) che possono rafforzare la richiesta di contributo.
 
-In questo modo hai sia un **miglioramento operativo concreto**, sia la possibilità di **ridurre l’esborso netto** se l’azienda decide di attivarsi sui bandi disponibili.
+In questo modo hai sia un **miglioramento operativo concreto**, sia la possibilità di **ridurre l'esborso netto** se l'azienda decide di attivarsi sui bandi disponibili.
 """)
 
-    # TESTIMONIANZE / SOCIAL PROOF
+    # TESTIMONIANZE
     st.subheader("Cosa dicono le aziende che hanno lavorato con noi")
 
     col_t1, col_t2 = st.columns(2)
@@ -1319,7 +1350,7 @@ tra direzione, produzione e miglioramento continuo.
 """)
 
     # =====================
-    # FORM: RICHIEDI REPORT OEE (visibile a tutti)
+    # FORM: RICHIEDI REPORT OEE
     # =====================
     st.markdown("---")
     st.subheader("Richiedi il tuo mini‑report OEE ForgiaLean")
@@ -1411,9 +1442,21 @@ tra direzione, produzione e miglioramento continuo.
                         data_apertura=date.today(),
                         stato_opportunita="aperta",
                         data_chiusura_prevista=None,
+                        flame_points=0,  # 🔥 Inizializza a 0
                     )
                     session.add(new_opp)
                     session.commit()
+                    session.refresh(new_opp)
+
+                # 🔥 ASSEGNA FIAMME PER FORM OEE
+                flame_points = assign_flame_points(new_opp.opportunity_id, "form_oee_submitted")
+                
+                # 📊 TRACCIA SU GOOGLE ANALYTICS
+                track_event("form_oee_submitted", {
+                    "company_name": azienda,
+                    "email": email,
+                    "flame_points": flame_points,
+                })
 
                 # 4) Calcolo OEE e perdita per il mini‑report
                 oee_perc, perdita_euro_turno, fascia = calcola_oee_e_perdita(
@@ -1450,7 +1493,7 @@ segui le istruzioni e completa il **passo successivo** lasciando i dati richiest
                 st.text(str(e))
 
     # =====================
-    # CALCOLATORE OEE & PERDITA € - SOLO ADMIN (uso interno)
+    # CALCOLATORE OEE & PERDITA € - SOLO ADMIN
     # =====================
     role = st.session_state.get("role", "user")
     if role != "admin":
