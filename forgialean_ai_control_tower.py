@@ -8529,6 +8529,7 @@ def main():
         track_event(event_name, {
             "section": section,
             "page": selected_page,
+            "debug_mode": 1,
         })
 
         page_func()
