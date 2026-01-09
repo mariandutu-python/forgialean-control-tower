@@ -66,35 +66,7 @@ import requests
 import smtplib
 from email.mime.text import MIMEText
 
-# =================== GOOGLE ANALYTICS 4 ===================
-
-GA_MEASUREMENT_ID = "G-XXXXXXXXXX"  # 🔴 SOSTITUISCI CON IL TUO MEASUREMENT ID (quando avrai GA4)
-
-def inject_ga():
-    """Inietta il codice GA4 nella pagina"""
-    ga_code = f"""
-    <script async src="https://www.googletagmanager.com/gtag/js?id={GA_MEASUREMENT_ID}"></script>
-    <script>
-      window.dataLayer = window.dataLayer || [];
-      function gtag(){{dataLayer.push(arguments);}}
-      gtag('js', new Date());
-      gtag('config', '{GA_MEASUREMENT_ID}');
-    </script>
-    """
-    st.markdown(ga_code, unsafe_allow_html=True)
-
-def track_event(event_name: str, event_data: dict = None):
-    """Traccia un evento su Google Analytics"""
-    if event_data is None:
-        event_data = {}
-    
-    ga_event = f"""
-    <script>
-      gtag('event', '{event_name}', {str(event_data).replace("'", '"')});
-    </script>
-    """
-    st.markdown(ga_event, unsafe_allow_html=True)
-
+from analytics import track_event
 
 # =================== GAMIFICATION - FLAME POINTS SYSTEM ===================
 
@@ -8544,8 +8516,21 @@ def main():
         )
         st.session_state["current_page"] = selected_page
         
-        # Esegui la pagina selezionata
+        # Esegui la pagina selezionata con tracciamento GA4
         page_func = pages_in_section[selected_page]
+
+        event_name = (
+            "page_view_"
+            + selected_page.lower()
+            .replace(" ", "_")
+            .replace("/", "_")
+        )
+
+        track_event(event_name, {
+            "section": section,
+            "page": selected_page,
+        })
+
         page_func()
     
     # Logo in fondo (per loggati)
