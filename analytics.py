@@ -58,6 +58,9 @@ def track_event(event_name: str, params: dict | None = None, debug: bool = False
         ],
     }
 
+    # 🔴 LOGGA IL PAYLOAD COMPLETO
+    print(f"GA4 Payload: {json.dumps(payload, indent=2)}")
+
     try:
         resp = requests.post(url, json=payload, timeout=3)
         if debug:
