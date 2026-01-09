@@ -1750,6 +1750,40 @@ def page_overview():
         st.success("✅ Nessun alert critico. Situazione sotto controllo.")
     
     st.markdown("---")
+    st.markdown("---")
+
+    # ===== LEADERBOARD FIAMME 🔥 =====
+    st.subheader("🔥 Leaderboard Fiamme - Top Lead in Progress")
+    
+    leaderboard = get_flame_leaderboard(limit=15)
+    
+    if leaderboard:
+        df_leaderboard = pd.DataFrame(leaderboard)
+        st.dataframe(df_leaderboard, hide_index=True, use_container_width=True)
+        
+        fig_flame = px.bar(
+            df_leaderboard.sort_values("🔥 Fiamme", ascending=True),
+            y="Cliente",
+            x="🔥 Fiamme",
+            color="🔥 Fiamme",
+            color_continuous_scale="Reds",
+            title="🔥 Top 15 Lead per Flame Points",
+            labels={"🔥 Fiamme": "Punti Fiamma", "Cliente": "Azienda"},
+            orientation="h",
+        )
+        st.plotly_chart(fig_flame, use_container_width=True)
+        
+        col_s1, col_s2, col_s3 = st.columns(3)
+        with col_s1:
+            st.metric("🔥 Fiamme totali", f"{df_leaderboard['🔥 Fiamme'].sum():,.0f}")
+        with col_s2:
+            st.metric("🔥 Media per lead", f"{df_leaderboard['🔥 Fiamme'].mean():.0f}")
+        with col_s3:
+            st.metric("🔥 Lead top", f"{df_leaderboard['🔥 Fiamme'].max():,.0f}")
+    else:
+        st.info("Nessun lead con fiamme ancora.")
+    
+    st.markdown("---")
 
     # ===== GRAFICI TREND =====
     st.subheader("📈 Trend ricavi, costi e margine")
