@@ -8261,47 +8261,38 @@ def main():
         st.session_state["authenticated"] = False
         st.session_state["role"] = "anon"
         st.session_state["username"] = ""
+
+    # ========== SE NON LOGGATO ==========
+    if not st.session_state["authenticated"]:
+        # Mostra SOLO la pagina Presentazione (senza sidebar)
+        page_presentation()
+        st.stop()  # 🔴 STOP qui - non mostra nulla altro
+
+    # ========== SE LOGGATO - MOSTRA MENU COMPLETO ==========
     
+    # Inizializza stato per menu
     if "current_section" not in st.session_state:
         st.session_state["current_section"] = "🏠 Home"
     
     if "current_page" not in st.session_state:
         st.session_state["current_page"] = "Presentazione"
 
-    # ---------- SIDEBAR ----------
+    # ---------- SIDEBAR (solo per loggati) ----------
     st.sidebar.title(APP_NAME)
     st.sidebar.caption("Versione SQLite")
 
-    # Blocco login admin
-    if not st.session_state["authenticated"]:
-        st.sidebar.subheader("🔐 Area riservata")
-        username_input = st.sidebar.text_input("Username")
-        password_input = st.sidebar.text_input("Password", type="password")
-        if st.sidebar.button("Login"):
-            if username_input == "Marian Dutu" and password_input == "mariand":
-                st.session_state["authenticated"] = True
-                st.session_state["role"] = "admin"
-                st.session_state["username"] = username_input
-                st.rerun()
-            else:
-                st.sidebar.error("Credenziali non valide")
-    else:
-        st.sidebar.write(f"✅ {st.session_state['username']}")
-        if st.sidebar.button("Logout"):
-            st.session_state["authenticated"] = False
-            st.session_state["role"] = "anon"
-            st.session_state["username"] = ""
-            st.rerun()
+    # Blocco logout
+    st.sidebar.write(f"✅ {st.session_state['username']}")
+    if st.sidebar.button("🚪 Logout"):
+        st.session_state["authenticated"] = False
+        st.session_state["role"] = "anon"
+        st.session_state["username"] = ""
+        st.rerun()
 
     st.sidebar.markdown("---")
 
-    # Menu gerarchico per flussi di lavoro
-    role = st.session_state["role"]
-    
-    if role == "anon":
-        available_sections = ["🏠 Home"]
-    else:
-        available_sections = list(PAGES.keys())
+    # Menu gerarchico per flussi di lavoro (solo per loggati)
+    available_sections = list(PAGES.keys())
 
     # Seleziona sezione
     section = st.sidebar.radio("📂 Sezione", available_sections)
@@ -8318,13 +8309,11 @@ def main():
         )
         st.session_state["current_page"] = selected_page
         
-        # Breadcrumb navigazione
-        # render_breadcrumb(section, selected_page)
-        
         # Esegui la pagina selezionata
         page_func = pages_in_section[selected_page]
         page_func()
     
+    # Logo in fondo
     if LOGO_PATH.exists():
         st.sidebar.markdown("---")
         st.sidebar.image(str(LOGO_PATH), width="stretch")
