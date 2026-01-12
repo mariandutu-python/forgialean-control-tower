@@ -8446,19 +8446,41 @@ def render_breadcrumb(section: str, page: str):
     st.markdown(breadcrumb_html, unsafe_allow_html=True)
 
 
-# =========================
-# LOGIN & MAIN
-# =========================
-
 def main():
     # 👉 chiamata subito all'inizio
     capture_utm_params()
+
+    # ---------- Leggi querystring per deep-link (CRM detail) ----------
+    params = st.query_params
+    step = params.get("step", None)
+    if isinstance(step, list):
+        step = step[0] if step else None
+
+    opp_id = params.get("opp_id", None)
+    if isinstance(opp_id, list):
+        opp_id = opp_id[0] if opp_id else None
+    if opp_id:
+        try:
+            opp_id = int(opp_id)
+        except ValueError:
+            opp_id = None
 
     # ---------- Inizializzazione stato ----------
     if "authenticated" not in st.session_state:
         st.session_state["authenticated"] = False
         st.session_state["role"] = "anon"
         st.session_state["username"] = ""
+
+    # ========== GESTIONE DEEP LINK CRM DETAIL ==========
+    if step == "crm_detail" and opp_id:
+        # login tecnico per mostrare il dettaglio CRM
+        st.session_state["authenticated"] = True
+        st.session_state["role"] = "admin"
+        st.session_state["username"] = "DeepLink"
+
+        # chiama direttamente la pagina CRM con gestione opp_id
+        page_crm_sales()
+        st.stop()
 
     # ========== SE NON LOGGATO ==========
     if not st.session_state["authenticated"]:
@@ -8557,7 +8579,6 @@ def main():
     st.sidebar.markdown("---")
     if LOGO_PATH.exists():
         st.sidebar.image(str(LOGO_PATH), width="stretch")
-
 
 if __name__ == "__main__":
     main()
