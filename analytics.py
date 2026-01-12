@@ -12,46 +12,53 @@ GA4_CLIENT_ID_FALLBACK = tracking_conf.get("GA4_CLIENT_ID_FALLBACK", "forgialean
 
 
 def get_ga_client_id() -> str:
-    """Client ID anonimo per GA4, persistente nella sessione Streamlit."""
+    """Client ID randomico per GA4."""
     if "ga_client_id" not in st.session_state:
-        # Per i test, usa un client_id fisso
-        st.session_state["ga_client_id"] = "test-marian-forgialean"
+        st.session_state["ga_client_id"] = str(uuid.uuid4())
     return st.session_state["ga_client_id"]
 
 
+def get_ga_session_id() -> str:
+    """Session ID persistente."""
+    if "ga_session_id" not in st.session_state:
+        st.session_state["ga_session_id"] = str(int(time.time() * 1000))
+    return st.session_state["ga_session_id"]
+
+
 def _build_url(debug: bool = False) -> str:
-    """Costruisce l'URL Measurement Protocol (normale o debug)."""
+    """Costruisce l'URL Measurement Protocol."""
     base = "https://www.google-analytics.com/"
     base += "debug/mp/collect" if debug else "mp/collect"
     return f"{base}?measurement_id={GA4_MEASUREMENT_ID}&api_secret={GA4_API_SECRET}"
 
 
 def track_event(event_name: str, params: dict | None = None, debug: bool = False):
-    """Invia un evento custom a GA4 via Measurement Protocol.
-
-    - event_name: nome evento GA4 (es. 'page_view_dashboard').
-    - params: dizionario di parametri evento.
-    - debug: se True stampa i dettagli (non cambia endpoint).
-    """
+    """Invia un evento custom a GA4 via Measurement Protocol."""
     if not GA4_MEASUREMENT_ID or not GA4_API_SECRET:
         print("GA4: measurement_id o api_secret mancanti, evento NON inviato.")
         return
 
     try:
         client_id = get_ga_client_id()
+        session_id = get_ga_session_id()
     except Exception:
         client_id = GA4_CLIENT_ID_FALLBACK
+        session_id = str(int(time.time() * 1000))
 
     params = params.copy() if params else {}
+    
+    # Aggiungi session_id e user_id ai parametri
+    params.setdefault("session_id", session_id)
+    params.setdefault("user_id", client_id)
+    
     if debug:
         params.setdefault("debug_mode", 1)
 
-    # Usa sempre l'endpoint normale (non debug)
     url = _build_url(debug=False)
 
-    # Aggiungi parametri obbligatori per GA4
     payload = {
         "client_id": client_id,
+        "user_id": client_id,
         "non_personalized_ads": True,
         "timestamp_micros": str(int(time.time() * 1_000_000)),
         "events": [
@@ -61,6 +68,7 @@ def track_event(event_name: str, params: dict | None = None, debug: bool = False
                     **params,
                     "page_location": "https://forgialean.streamlit.app/",
                     "page_title": "ForgiaLean Control Tower",
+                    "session_id": session_id,
                 }
             }
         ],
