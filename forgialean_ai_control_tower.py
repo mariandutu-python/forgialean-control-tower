@@ -5273,29 +5273,40 @@ def page_payments():
     df_inv = pd.DataFrame([i.__dict__ for i in invoices])
     df_inv["data_fattura"] = pd.to_datetime(df_inv["data_fattura"], errors="coerce")
 
-    # -------------------------
-    # MERGE COMMESSE / FASI
-    # -------------------------
-    with get_session() as session:
-        commesse_all = session.exec(select(ProjectCommessa)).all()
-        fasi_all = session.exec(select(TaskFase)).all()
+# -------------------------
+# MERGE COMMESSE / FASI
+# -------------------------
+with get_session() as session:
+    commesse_all = session.exec(select(ProjectCommessa)).all()
+    fasi_all = session.exec(select(TaskFase)).all()
 
-    df_comm_all = pd.DataFrame([c.__dict__ for c in commesse_all]) if commesse_all else pd.DataFrame()
-    df_fasi_all = pd.DataFrame([f.__dict__ for f in fasi_all]) if fasi_all else pd.DataFrame()
+df_comm_all = pd.DataFrame([c.__dict__ for c in commesse_all]) if commesse_all else pd.DataFrame()
+df_fasi_all = pd.DataFrame([f.__dict__ for f in fasi_all]) if fasi_all else pd.DataFrame()
 
-    if not df_comm_all.empty and "commessa_id" in df_inv.columns:
-        df_inv = df_inv.merge(
-            df_comm_all[["commessa_id", "cod_commessa"]],
-            how="left",
-            on="commessa_id",
-        )
+# Normalizza tipi ID come stringa (se esistono)
+if "commessa_id" in df_inv.columns:
+    df_inv["commessa_id"] = df_inv["commessa_id"].astype("string")
+if not df_comm_all.empty and "commessa_id" in df_comm_all.columns:
+    df_comm_all["commessa_id"] = df_comm_all["commessa_id"].astype("string")
 
-    if not df_fasi_all.empty and "fase_id" in df_inv.columns:
-        df_inv = df_inv.merge(
-            df_fasi_all[["fase_id", "nome_fase"]],
-            how="left",
-            on="fase_id",
-        )
+if not df_comm_all.empty and "commessa_id" in df_inv.columns:
+    df_inv = df_inv.merge(
+        df_comm_all[["commessa_id", "cod_commessa"]],
+        how="left",
+        on="commessa_id",
+    )
+
+if "fase_id" in df_inv.columns:
+    df_inv["fase_id"] = df_inv["fase_id"].astype("string")
+if not df_fasi_all.empty and "fase_id" in df_fasi_all.columns:
+    df_fasi_all["fase_id"] = df_fasi_all["fase_id"].astype("string")
+
+if not df_fasi_all.empty and "fase_id" in df_inv.columns:
+    df_inv = df_inv.merge(
+        df_fasi_all[["fase_id", "nome_fase"]],
+        how="left",
+        on="fase_id",
+    )
 
     # -------------------------
     # FILTRO PER COMMESSA
