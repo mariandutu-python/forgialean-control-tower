@@ -2839,326 +2839,297 @@ def page_crm_sales():
             "Nessuna colonna 'data_prossima_azione' disponibile per la sintesi attività."
         )
 
-# =========================
-# AGENDA VENDITORE
-# =========================
-st.markdown("---")
-st.subheader("📞 Agenda venditore")
+    # =========================
+    # AGENDA VENDITORE
+    # =========================
+    st.markdown("---")
+    st.subheader("📞 Agenda venditore")
 
-if "data_prossima_azione" in df_opps.columns:
-    oggi = date.today()
-    df_agenda = df_opps.copy()
-    df_agenda = df_agenda.dropna(subset=["data_prossima_azione"])
-    df_agenda = df_agenda[df_agenda["data_prossima_azione"] >= oggi]
-    df_agenda = df_agenda.sort_values("data_prossima_azione")
+    if "data_prossima_azione" in df_opps.columns:
+        oggi = date.today()
+        df_agenda = df_opps.copy()
+        df_agenda = df_agenda.dropna(subset=["data_prossima_azione"])
+        df_agenda = df_agenda[df_agenda["data_prossima_azione"] >= oggi]
+        df_agenda = df_agenda.sort_values("data_prossima_azione")
 
-    col_f1, col_f2, col_f3 = st.columns(3)
-    with col_f1:
-        owner_opt = ["Tutti"] + sorted(
-            df_agenda["owner"].dropna().astype(str).unique().tolist()
-        )
-        f_owner_ag = st.selectbox("Filtro owner agenda", owner_opt)
+        col_f1, col_f2, col_f3 = st.columns(3)
+        with col_f1:
+            owner_opt = ["Tutti"] + sorted(
+                df_agenda["owner"].dropna().astype(str).unique().tolist()
+            )
+            f_owner_ag = st.selectbox("Filtro owner agenda", owner_opt)
 
-    with col_f2:
-        tipo_opt = ["Tutti"] + sorted(
-            df_agenda["tipo_prossima_azione"]
-            .dropna()
-            .astype(str)
-            .unique()
-            .tolist()
-        )
-        f_tipo_ag = st.selectbox("Filtro tipo azione", tipo_opt)
-
-    with col_f3:
-        if "utm_campaign" in df_agenda.columns:
-            camp_opt_ag = ["Tutte"] + sorted(
-                df_agenda["utm_campaign"]
-                .fillna("(no campaign)")
+        with col_f2:
+            tipo_opt = ["Tutti"] + sorted(
+                df_agenda["tipo_prossima_azione"]
+                .dropna()
                 .astype(str)
                 .unique()
                 .tolist()
             )
-        else:
-            camp_opt_ag = ["Tutte"]
-        f_camp_ag = st.selectbox("Filtro campagna (UTM)", camp_opt_ag)
+            f_tipo_ag = st.selectbox("Filtro tipo azione", tipo_opt)
 
-    # applica filtri all'agenda
-    df_agenda_f = df_agenda.copy()
-    if f_owner_ag != "Tutti":
-        df_agenda_f = df_agenda_f[df_agenda_f["owner"] == f_owner_ag]
-    if f_tipo_ag != "Tutti":
-        df_agenda_f = df_agenda_f[
-            df_agenda_f["tipo_prossima_azione"] == f_tipo_ag
-        ]
-    if f_camp_ag != "Tutte" and "utm_campaign" in df_agenda_f.columns:
-        if f_camp_ag == "(no campaign)":
-            df_agenda_f = df_agenda_f[
-                df_agenda_f["utm_campaign"].isna()
-                | (df_agenda_f["utm_campaign"] == "")
-            ]
-        else:
-            df_agenda_f = df_agenda_f[df_agenda_f["utm_campaign"] == f_camp_ag]
-
-    cols_agenda = [
-        "opportunity_id",
-        "data_prossima_azione",
-        "Cliente",
-        "nome_opportunita",
-        "tipo_prossima_azione",
-        "note_prossima_azione",
-        "fase_pipeline",
-        "probabilita",
-        "owner",
-    ]
-    cols_agenda = [c for c in cols_agenda if c in df_agenda_f.columns]
-    df_agenda_f = df_agenda_f[cols_agenda]
-    st.dataframe(df_agenda_f, hide_index=True, width="stretch")
-
-    # agenda SOLO di oggi per Telegram (applicando gli stessi filtri)
-    df_agenda_oggi = df_agenda_f[
-        df_agenda_f["data_prossima_azione"] == oggi
-    ].copy()
-
-    # helper per costruire la stringa da mandare su Telegram
-    def build_agenda_oggi_message(df: pd.DataFrame) -> str:
-        if df.empty:
-            return ""
-        lines = ["🟢 Agenda venditore di oggi:\n"]
-        for _, r in df.iterrows():
-            data_str = r["data_prossima_azione"].strftime("%d/%m/%Y") if pd.notnull(
-                r["data_prossima_azione"]
-            ) else ""
-            lines.append(
-                f"📌 {data_str} – {r.get('owner','')} – {r.get('Cliente','')}\n"
-                f"   {r.get('nome_opportunita','')} "
-                f"({r.get('tipo_prossima_azione','')})\n"
-                f"   Note: {r.get('note_prossima_azione','')}\n"
-            )
-        return "\n".join(lines)
-
-    if st.button("🔔 Invia agenda di oggi su Telegram"):
-        if df_agenda_oggi.empty:
-            st.warning("Oggi non ci sono azioni in agenda da inviare.")
-        else:
-            # se hai già una funzione send_agenda_oggi_telegram, puoi farla accettare il testo
-            # oppure mandare direttamente qui il messaggio via bot Telegram
-            msg = build_agenda_oggi_message(df_agenda_oggi)
-            send_agenda_oggi_telegram(msg)  # <-- adatta la tua funzione a prendere `msg`
-            st.success("Agenda di oggi inviata su Telegram.")
-
-    st.subheader("📅 Calendario prossime azioni")
-
-    base_url = "https://forgialean.streamlit.app"
-
-    events = []
-    for _, row in df_agenda_f.iterrows():
-        if pd.notnull(row["data_prossima_azione"]):
-            opp_id_event = row["opportunity_id"]
-            event_url = f"{base_url}?step=crm_detail&opp_id={opp_id_event}"
-
-            events.append(
-                {
-                    "title": f"{row['Cliente']} – {row['nome_opportunita']} "
-                    f"({row.get('tipo_prossima_azione', '')})",
-                    "start": row["data_prossima_azione"].strftime("%Y-%m-%d"),
-                    "url": event_url,
-                }
-            )
-
-    options = {
-        "initialView": "dayGridMonth",
-        "headerToolbar": {
-            "left": "prev,next today",
-            "center": "title",
-            "right": "dayGridMonth,timeGridWeek,listWeek",
-        },
-    }
-
-    calendar(events=events, options=options, key="crm_calendar")
-else:
-    st.info(
-        "Per usare l’agenda venditore aggiungi i campi 'data_prossima_azione', "
-        "'tipo_prossima_azione' e 'note_prossima_azione' al modello Opportunity."
-    )
-    st.stop()
-
-# =========================
-# SEZIONE EDIT / DELETE (SOLO ADMIN)
-# =========================
-if role != "admin":
-    st.stop()
-
-st.markdown("---")
-st.subheader("✏️ Modifica / elimina opportunità (solo admin)")
-
-if not opps:
-    st.info("Nessuna opportunità da modificare/eliminare.")
-    st.stop()
-
-df_opp_all = pd.DataFrame([o.__dict__ for o in opps])
-opp_ids = df_opp_all["opportunity_id"].tolist()
-opp_id_sel = st.selectbox("ID opportunità", opp_ids, key="crm_opp_sel")
-
-with get_session() as session:
-    opp_obj = session.get(Opportunity, opp_id_sel)
-
-if not opp_obj:
-    st.warning("Opportunità non trovata.")
-    st.stop()
-
-if not df_clients_all.empty:
-    df_clients_all["label"] = (
-        df_clients_all["client_id"].astype(str)
-        + " - "
-        + df_clients_all["ragione_sociale"]
-    )
-    try:
-        current_client_label = df_clients_all[
-            df_clients_all["client_id"] == opp_obj.client_id
-        ]["label"].iloc[0]
-    except IndexError:
-        current_client_label = df_clients_all["label"].iloc[0]
-else:
-    current_client_label = ""
-
-with st.form(f"edit_opp_{opp_id_sel}"):
-    col1, col2 = st.columns(2)
-    with col1:
-        client_label_e = (
-            st.selectbox(
-                "Cliente",
-                df_clients_all["label"].tolist()
-                if not df_clients_all.empty
-                else [],
-                index=df_clients_all["label"].tolist().index(
-                    current_client_label
+        with col_f3:
+            if "utm_campaign" in df_agenda.columns:
+                camp_opt_ag = ["Tutte"] + sorted(
+                    df_agenda["utm_campaign"]
+                    .fillna("(no campaign)")
+                    .astype(str)
+                    .unique()
+                    .tolist()
                 )
-                if current_client_label
-                else 0,
-            )
-            if not df_clients_all.empty
-            else ("",)
-        )
-        nome_opportunita_e = st.text_input(
-            "Nome opportunità", opp_obj.nome_opportunita or ""
-        )
-        fase_pipeline_e = st.selectbox(
-            "Fase pipeline",
-            [
-                "Lead pre-qualificato (MQL)",
-                "Lead qualificato (SQL)",
-                "Lead",
-                "Offerta",
-                "Negoziazione",
-                "Vinta",
-                "Persa",
-            ],
-            index=[
-                "Lead pre-qualificato (MQL)",
-                "Lead qualificato (SQL)",
-                "Lead",
-                "Offerta",
-                "Negoziazione",
-                "Vinta",
-                "Persa",
-            ].index(opp_obj.fase_pipeline or "Lead"),
-        )
-        owner_e = st.text_input("Owner", opp_obj.owner or "")
-    with col2:
-        valore_stimato_e = st.number_input(
-            "Valore stimato (€)",
-            min_value=0.0,
-            step=100.0,
-            value=float(opp_obj.valore_stimato or 0.0),
-        )
-        probabilita_e = st.number_input(
-            "Probabilità (%)",
-            min_value=0.0,
-            max_value=100.0,
-            step=5.0,
-            value=float(opp_obj.probabilita or 0.0),
-        )
-        data_apertura_e = st.date_input(
-            "Data apertura",
-            value=opp_obj.data_apertura or date.today(),
-        )
-        data_chiusura_prevista_e = st.date_input(
-            "Data chiusura prevista",
-            value=opp_obj.data_chiusura_prevista or date.today(),
-        )
+            else:
+                camp_opt_ag = ["Tutte"]
+            f_camp_ag = st.selectbox("Filtro campagna (UTM)", camp_opt_ag)
 
-    col_a1_e, col_a2_e = st.columns(2)
-    with col_a1_e:
-        data_prossima_azione_e = st.date_input(
-            "📅 Data prossima azione",
-            value=opp_obj.data_prossima_azione or date.today(),
-        )
-    with col_a2_e:
-        tipo_prossima_azione_e = st.selectbox(
-            "📌 Tipo prossima azione",
-            ["", "Telefonata", "Email", "Visita", "Preventivo", "Follow‑up"],
-            index=(
-                [
-                    "",
-                    "Telefonata",
-                    "Email",
-                    "Visita",
-                    "Preventivo",
-                    "Follow‑up",
-                ].index(opp_obj.tipo_prossima_azione)
-                if opp_obj.tipo_prossima_azione
-                in [
-                    "Telefonata",
-                    "Email",
-                    "Visita",
-                    "Preventivo",
-                    "Follow‑up",
+        df_agenda_f = df_agenda.copy()
+        if f_owner_ag != "Tutti":
+            df_agenda_f = df_agenda_f[df_agenda_f["owner"] == f_owner_ag]
+        if f_tipo_ag != "Tutti":
+            df_agenda_f = df_agenda_f[
+                df_agenda_f["tipo_prossima_azione"] == f_tipo_ag
+            ]
+        if f_camp_ag != "Tutte" and "utm_campaign" in df_agenda_f.columns:
+            if f_camp_ag == "(no campaign)":
+                df_agenda_f = df_agenda_f[
+                    df_agenda_f["utm_campaign"].isna()
+                    | (df_agenda_f["utm_campaign"] == "")
                 ]
-                else 0
-            ),
+            else:
+                df_agenda_f = df_agenda_f[df_agenda_f["utm_campaign"] == f_camp_ag]
+
+        cols_agenda = [
+            "opportunity_id",
+            "data_prossima_azione",
+            "Cliente",
+            "nome_opportunita",
+            "tipo_prossima_azione",
+            "note_prossima_azione",
+            "fase_pipeline",
+            "probabilita",
+            "owner",
+        ]
+        cols_agenda = [c for c in cols_agenda if c in df_agenda_f.columns]
+        df_agenda_f = df_agenda_f[cols_agenda]
+        st.dataframe(df_agenda_f, hide_index=True, width="stretch")
+
+        if st.button("🔔 Invia agenda di oggi su Telegram"):
+            send_agenda_oggi_telegram()
+            st.success("Agenda di oggi inviata su Telegram (se ci sono azioni).")
+
+        st.subheader("📅 Calendario prossime azioni")
+
+        base_url = "https://forgialean.streamlit.app"
+
+        events = []
+        for _, row in df_agenda_f.iterrows():
+            if pd.notnull(row["data_prossima_azione"]):
+                opp_id_event = row["opportunity_id"]
+                event_url = f"{base_url}?step=crm_detail&opp_id={opp_id_event}"
+
+                events.append(
+                    {
+                        "title": f"{row['Cliente']} – {row['nome_opportunita']} "
+                        f"({row.get('tipo_prossima_azione', '')})",
+                        "start": row["data_prossima_azione"].strftime("%Y-%m-%d"),
+                        "url": event_url,
+                    }
+                )
+
+        options = {
+            "initialView": "dayGridMonth",
+            "headerToolbar": {
+                "left": "prev,next today",
+                "center": "title",
+                "right": "dayGridMonth,timeGridWeek,listWeek",
+            },
+        }
+
+        calendar(events=events, options=options, key="crm_calendar")
+    else:
+        st.info(
+            "Per usare l’agenda venditore aggiungi i campi 'data_prossima_azione', "
+            "'tipo_prossima_azione' e 'note_prossima_azione' al modello Opportunity."
+        )
+        st.stop()
+
+    # =========================
+    # SEZIONE EDIT / DELETE (SOLO ADMIN)
+    # =========================
+    if role != "admin":
+        st.stop()
+
+    st.markdown("---")
+    st.subheader("✏️ Modifica / elimina opportunità (solo admin)")
+
+    if not opps:
+        st.info("Nessuna opportunità da modificare/eliminare.")
+        st.stop()
+
+    df_opp_all = pd.DataFrame([o.__dict__ for o in opps])
+    opp_ids = df_opp_all["opportunity_id"].tolist()
+    opp_id_sel = st.selectbox("ID opportunità", opp_ids, key="crm_opp_sel")
+
+    with get_session() as session:
+        opp_obj = session.get(Opportunity, opp_id_sel)
+
+    if not opp_obj:
+        st.warning("Opportunità non trovata.")
+        st.stop()
+
+    if not df_clients_all.empty:
+        df_clients_all["label"] = (
+            df_clients_all["client_id"].astype(str)
+            + " - "
+            + df_clients_all["ragione_sociale"]
+        )
+        try:
+            current_client_label = df_clients_all[
+                df_clients_all["client_id"] == opp_obj.client_id
+            ]["label"].iloc[0]
+        except IndexError:
+            current_client_label = df_clients_all["label"].iloc[0]
+    else:
+        current_client_label = ""
+
+    with st.form(f"edit_opp_{opp_id_sel}"):
+        col1, col2 = st.columns(2)
+        with col1:
+            client_label_e = (
+                st.selectbox(
+                    "Cliente",
+                    df_clients_all["label"].tolist()
+                    if not df_clients_all.empty
+                    else [],
+                    index=df_clients_all["label"].tolist().index(
+                        current_client_label
+                    )
+                    if current_client_label
+                    else 0,
+                )
+                if not df_clients_all.empty
+                else ("",)
+            )
+            nome_opportunita_e = st.text_input(
+                "Nome opportunità", opp_obj.nome_opportunita or ""
+            )
+            fase_pipeline_e = st.selectbox(
+                "Fase pipeline",
+                [
+                    "Lead pre-qualificato (MQL)",
+                    "Lead qualificato (SQL)",
+                    "Lead",
+                    "Offerta",
+                    "Negoziazione",
+                    "Vinta",
+                    "Persa",
+                ],
+                index=[
+                    "Lead pre-qualificato (MQL)",
+                    "Lead qualificato (SQL)",
+                    "Lead",
+                    "Offerta",
+                    "Negoziazione",
+                    "Vinta",
+                    "Persa",
+                ].index(opp_obj.fase_pipeline or "Lead"),
+            )
+            owner_e = st.text_input("Owner", opp_obj.owner or "")
+        with col2:
+            valore_stimato_e = st.number_input(
+                "Valore stimato (€)",
+                min_value=0.0,
+                step=100.0,
+                value=float(opp_obj.valore_stimato or 0.0),
+            )
+            probabilita_e = st.number_input(
+                "Probabilità (%)",
+                min_value=0.0,
+                max_value=100.0,
+                step=5.0,
+                value=float(opp_obj.probabilita or 0.0),
+            )
+            data_apertura_e = st.date_input(
+                "Data apertura",
+                value=opp_obj.data_apertura or date.today(),
+            )
+            data_chiusura_prevista_e = st.date_input(
+                "Data chiusura prevista",
+                value=opp_obj.data_chiusura_prevista or date.today(),
+            )
+
+        col_a1_e, col_a2_e = st.columns(2)
+        with col_a1_e:
+            data_prossima_azione_e = st.date_input(
+                "📅 Data prossima azione",
+                value=opp_obj.data_prossima_azione or date.today(),
+            )
+        with col_a2_e:
+            tipo_prossima_azione_e = st.selectbox(
+                "📌 Tipo prossima azione",
+                ["", "Telefonata", "Email", "Visita", "Preventivo", "Follow‑up"],
+                index=(
+                    [
+                        "",
+                        "Telefonata",
+                        "Email",
+                        "Visita",
+                        "Preventivo",
+                        "Follow‑up",
+                    ].index(opp_obj.tipo_prossima_azione)
+                    if opp_obj.tipo_prossima_azione
+                    in [
+                        "Telefonata",
+                        "Email",
+                        "Visita",
+                        "Preventivo",
+                        "Follow‑up",
+                    ]
+                    else 0
+                ),
+            )
+
+        note_prossima_azione_e = st.text_area(
+            "📝 Note prossima azione",
+            value=opp_obj.note_prossima_azione or "",
         )
 
-    note_prossima_azione_e = st.text_area(
-        "📝 Note prossima azione",
-        value=opp_obj.note_prossima_azione or "",
-    )
+        colb1, colb2 = st.columns(2)
+        with colb1:
+            update_opp = st.form_submit_button("💾 Aggiorna opportunità")
+        with colb2:
+            delete_opp = st.form_submit_button("🗑 Elimina opportunità")
 
-    colb1, colb2 = st.columns(2)
-    with colb1:
-        update_opp = st.form_submit_button("💾 Aggiorna opportunità")
-    with colb2:
-        delete_opp = st.form_submit_button("🗑 Elimina opportunità")
+    if update_opp:
+        with get_session() as session:
+            obj = session.get(Opportunity, opp_id_sel)
+            if obj:
+                if not df_clients_all.empty:
+                    client_id_e = int(client_label_e.split(" - ")[0])
+                    obj.client_id = client_id_e
+                obj.nome_opportunita = nome_opportunita_e.strip()
+                obj.fase_pipeline = fase_pipeline_e
+                obj.owner = owner_e.strip() or None
+                obj.valore_stimato = valore_stimato_e
+                obj.probabilita = probabilita_e
+                obj.data_apertura = data_apertura_e
+                obj.data_chiusura_prevista = data_chiusura_prevista_e
+                obj.data_prossima_azione = data_prossima_azione_e
+                obj.tipo_prossima_azione = tipo_prossima_azione_e or None
+                obj.note_prossima_azione = note_prossima_azione_e or None
+                session.add(obj)
+                session.commit()
+        st.success("Opportunità aggiornata.")
+        st.rerun()
 
-if update_opp:
-    with get_session() as session:
-        obj = session.get(Opportunity, opp_id_sel)
-        if obj:
-            if not df_clients_all.empty:
-                client_id_e = int(client_label_e.split(" - ")[0])
-                obj.client_id = client_id_e
-            obj.nome_opportunita = nome_opportunita_e.strip()
-            obj.fase_pipeline = fase_pipeline_e
-            obj.owner = owner_e.strip() or None
-            obj.valore_stimato = valore_stimato_e
-            obj.probabilita = probabilita_e
-            obj.data_apertura = data_apertura_e
-            obj.data_chiusura_prevista = data_chiusura_prevista_e
-            obj.data_prossima_azione = data_prossima_azione_e
-            obj.tipo_prossima_azione = tipo_prossima_azione_e or None
-            obj.note_prossima_azione = note_prossima_azione_e or None
-            session.add(obj)
-            session.commit()
-    st.success("Opportunità aggiornata.")
-    st.rerun()
-
-if delete_opp:
-    with get_session() as session:
-        obj = session.get(Opportunity, opp_id_sel)
-        if obj:
-            session.delete(obj)
-            session.commit()
-    st.success("Opportunità eliminata.")
-    st.rerun()
+    if delete_opp:
+        with get_session() as session:
+            obj = session.get(Opportunity, opp_id_sel)
+            if obj:
+                session.delete(obj)
+                session.commit()
+        st.success("Opportunità eliminata.")
+        st.rerun()
 
     # =========================
     # CREA COMMESSA DA OPPORTUNITÀ VINTA
