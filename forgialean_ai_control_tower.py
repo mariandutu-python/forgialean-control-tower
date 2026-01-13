@@ -3036,6 +3036,9 @@ def page_crm_sales():
                 ].index(opp_obj.fase_pipeline or "Lead"),
             )
             owner_e = st.text_input("Owner", opp_obj.owner or "")
+            telefono_contatto_e = st.text_input(
+                                          "📱 Telefono contatto", opp_obj.telefono_contatto or ""
+                                )
         with col2:
             valore_stimato_e = st.number_input(
                 "Valore stimato (€)",
@@ -3118,6 +3121,7 @@ def page_crm_sales():
                 obj.data_prossima_azione = data_prossima_azione_e
                 obj.tipo_prossima_azione = tipo_prossima_azione_e or None
                 obj.note_prossima_azione = note_prossima_azione_e or None
+                obj.telefono_contatto = telefono_contatto_e.strip() or None
                 session.add(obj)
                 session.commit()
         st.success("Opportunità aggiornata.")
