@@ -1080,12 +1080,13 @@ def page_presentation():
             if not nome.strip() or not telefono.strip() or not email.strip():
                 st.warning("Compila nome, telefono ed email per poter essere ricontattato.")
             else:
-                opp = None  # <--- assicurati di inizializzarlo fuori dal with
+                opp_id = None
                 with get_session() as session:
                     client = session.exec(
                         select(Client).where(Client.email == email)
                     ).first()
 
+                    opp = None
                     if client:
                         opp = session.exec(
                             select(Opportunity)
@@ -1094,29 +1095,67 @@ def page_presentation():
                             .order_by(Opportunity.data_apertura.desc())
                         ).first()
 
-                        if opp:
-                            # ... tutto il codice di aggiornamento opp ...
-                            session.add(opp)
-                            session.commit()
+                    if opp:
+                        opp.fase_pipeline = "Lead qualificato (SQL)"
+                        opp.probabilita = 50.0
+                        opp.owner = "Marian Dutu"
 
-                # solo se ho trovato un’opportunity assegno le fiamme e traccio
-                if opp:
-                    flame_points = assign_flame_points(
-                        opp.opportunity_id, "form_call_submitted"
+                        # data prossima azione in base alla disponibilità
+                        if disponibilita == "Oggi entro le 18":
+                            data_call = date.today()
+                        elif disponibilita in ["Domani mattina", "Domani pomeriggio"]:
+                            data_call = date.today() + timedelta(days=1)
+                        elif disponibilita == "Questa settimana":
+                            data_call = date.today() + timedelta(days=3)
+                        else:
+                            data_call = date.today() + timedelta(days=1)
+
+                        if hasattr(opp, "data_prossima_azione"):
+                            opp.data_prossima_azione = data_call
+                        if hasattr(opp, "telefono_contatto"):
+                            opp.telefono_contatto = telefono
+                        if hasattr(opp, "tipo_prossima_azione"):
+                            opp.tipo_prossima_azione = f"CALL OEE - {disponibilita}"
+                        if hasattr(opp, "note_prossima_azione"):
+                            opp.note_prossima_azione = (
+                                f"Nome: {nome}\nDisponibilità: {disponibilita}\n{note}"
+                            )
+
+                        extra = (
+                            "\n\n--- Step call OEE ---\n"
+                            f"Nome: {nome}\n"
+                            f"Telefono: {telefono}\n"
+                            f"Disponibilità: {disponibilita}\n"
+                        )
+                        if note.strip():
+                            extra += f"Note: {note.strip()}\n"
+
+                        if hasattr(opp, "note"):
+                            opp.note = (opp.note or "") + extra
+
+                        session.add(opp)
+                        session.commit()
+                        opp_id = opp.opportunity_id  # salvo l’ID prima che la sessione si chiuda
+
+                if opp_id is not None:
+                    flame_points = assign_flame_points(opp_id, "form_call_submitted")
+                    track_event(
+                        "form_call_submitted",
+                        {"name": nome, "phone": telefono, "flame_points": flame_points},
                     )
-
-                    track_event("form_call_submitted", {
-                        "name": nome,
-                        "phone": telefono,
-                        "flame_points": flame_points,
-                    })
-
                     st.success(
                         f"✅ Perfetto! Ti contatterò secondo la tua disponibilità! 🔥 +{flame_points} fiamme"
                     )
                 else:
-                    # fallback: niente opp trovata → niente fiamme, ma nessun errore
                     st.success("✅ Perfetto! Ti contatterò secondo la tua disponibilità!")
+
+                st.session_state.call_data = {
+                    "nome": nome,
+                    "telefono": telefono,
+                    "email": email,
+                    "disponibilita": disponibilita,
+                    "note": note,
+                }
 
                 st.balloons()
                 st.markdown(
@@ -1126,9 +1165,10 @@ def page_presentation():
                     "3. **Dashboard attiva**"
                 )
                 st.stop()
+        st.stop()
 
     # =====================
-    # HERO + MINI‑REPORT IN ALTO
+    # HERO + COPY
     # =====================
     st.title("🏭 Turni lunghi, OEE basso e margini sotto pressione?")
 
@@ -1144,24 +1184,27 @@ e vedi che produzione e margini non tornano, probabilmente ti ritrovi in almeno 
 """
     )
 
+    # =====================
+    # FORM MINI‑REPORT (visibile subito)
+    # =====================
     st.markdown("### 📊 Mini‑report OEE gratuito in 3 minuti")
 
     st.markdown(
         """
-Compilando subito il form qui sotto riceverai via email un **mini‑report OEE** con:
-- Una stima del tuo **OEE reale** sulla linea o macchina principale.
+Compilando il form qui sotto riceverai via email un **mini‑report OEE** con:
+- Una stima del tuo **OEE reale** sulla tua linea o macchina principale.
 - Una quantificazione in **€/giorno** della capacità che stai perdendo **per una macchina/linea**.
-- Una stima dell'impatto se hai **più linee simili** (es. 3 linee ≈ 3× perdita €/giorno).
+- Una stima dell'impatto se hai **più macchine/linee simili** (es. 3 linee = circa 3× perdita €/giorno).
 - **3 leve di miglioramento immediate** su cui iniziare a lavorare.
+
+Fai il primo passo: prenota il tuo **Audit 30 minuti + piano personalizzato**.
 """
     )
 
     st.markdown("---")
+    st.subheader("Richiedi il tuo mini‑report OEE ForgiaLean")
 
-    # FORM MINI‑REPORT IN HERO
-    st.subheader("Richiedi ora il tuo mini‑report OEE ForgiaLean")
-
-    with st.form("lead_oee_form_top"):
+    with st.form("lead_oee_form"):
         nome = st.text_input("Nome e cognome")
         azienda = st.text_input("Azienda")
         email = st.text_input("Email aziendale")
@@ -1212,6 +1255,7 @@ Compilando subito il form qui sotto riceverai via email un **mini‑report OEE**
             )
             send_telegram_message(msg)
 
+            new_opp_id = None
             try:
                 with get_session() as session:
                     client = session.exec(
@@ -1245,19 +1289,25 @@ Compilando subito il form qui sotto riceverai via email un **mini‑report OEE**
                         data_apertura=date.today(),
                         stato_opportunita="aperta",
                         data_chiusura_prevista=None,
-                        flame_points=0,
                     )
                     session.add(new_opp)
                     session.commit()
                     session.refresh(new_opp)
+                    new_opp_id = new_opp.opportunity_id
 
-                flame_points = assign_flame_points(new_opp.opportunity_id, "form_oee_submitted")
-
-                track_event("form_oee_submitted", {
-                    "company_name": azienda,
-                    "email": email,
-                    "flame_points": flame_points,
-                })
+                # flame points e GA fuori dalla sessione usando solo l’ID
+                if new_opp_id is not None:
+                    flame_points = assign_flame_points(new_opp_id, "form_oee_submitted")
+                    track_event(
+                        "form_oee_submitted",
+                        {
+                            "company_name": azienda,
+                            "email": email,
+                            "flame_points": flame_points,
+                        },
+                    )
+                else:
+                    flame_points = 0
 
                 oee_perc, perdita_euro_turno, fascia = calcola_oee_e_perdita(
                     ore_turno=8.0,
@@ -1275,10 +1325,10 @@ Compilando subito il form qui sotto riceverai via email un **mini‑report OEE**
                 invia_minireport_oee(email, subject, body)
 
                 st.success(
-                    "**GRAZIE!** Richiesta ricevuta. Riceverai entro **2 ore lavorative** una mail da "
+                    "**GRAZIE!!!** Richiesta ricevuta. Riceverai entro **2 ore lavorative** una mail da "
                     "**info@forgialean.it** con il tuo mini‑report OEE: stima degli sprechi €/giorno "
                     "per una macchina/linea e 3 leve operative su cui intervenire.\n\n"
-                    "_Se non la vedi, controlla anche la **cartella spam/indesiderata**._"
+                    "_Se non la vedi in posta in arrivo, controlla anche la **cartella spam/indesiderata**._"
                 )
 
                 st.markdown(
@@ -1286,7 +1336,7 @@ Compilando subito il form qui sotto riceverai via email un **mini‑report OEE**
 Turni lunghi, impianti sotto il loro potenziale e margini che si assottigliano **non sono sostenibili a lungo**.
 
 Quando riceverai la mail da **info@forgialean.it**, se vuoi davvero intervenire su questi problemi,
-segui le istruzioni e completa il **passo successivo** per essere contattato.
+segui le istruzioni e completa il **passo successivo** lasciando i dati richiesti per essere contattato.
 È pensato per chi vuole trasformare il check OEE in un miglioramento concreto, non solo in un numero da guardare.
 """
                 )
@@ -1358,7 +1408,7 @@ ForgiaLean unisce **Black Belt Lean Six Sigma**, **Operations Management** e **D
         )
         fig_oee.update_traces(texttemplate="%{y}%", textposition="outside")
         fig_oee.update_layout(showlegend=False)
-        st.plotly_chart(fig_oee, use_container_width=True)
+        st.plotly_chart(fig_oee, width="stretch")  # use_container_width → width
 
     with col_g2:
         fig_fermi = px.bar(
@@ -1372,7 +1422,7 @@ ForgiaLean unisce **Black Belt Lean Six Sigma**, **Operations Management** e **D
         )
         fig_fermi.update_traces(texttemplate="%{y:.1f} h", textposition="outside")
         fig_fermi.update_layout(showlegend=False)
-        st.plotly_chart(fig_fermi, use_container_width=True)
+        st.plotly_chart(fig_fermi, width="stretch")  # use_container_width → width
 
     # =====================
     # DIFFERENZIAZIONE
@@ -1399,10 +1449,10 @@ Oltre al recupero di capacità e margini, in molti casi gli investimenti su impi
 
 Durante il progetto:
 - Ti segnalo i principali **bandi e incentivi** potenzialmente rilevanti per il tuo caso (nazionali e/o regionali).
-- Ti aiuto a **tradurre il progetto operativo** in obiettivi, deliverable e risultati attesi, così da semplificare il lavoro con il tuo consulente di finanza agevolata o con il commercialista.
+- Ti aiuto a **tradurre il progetto operativo** in termini di obiettivi, deliverable e risultati attesi, così da semplificare il lavoro con il tuo consulente di finanza agevolata o con il commercialista.
 - Mettiamo in evidenza i **benefici misurabili** (OEE, capacità recuperata, margini) che possono rafforzare la richiesta di contributo.
 
-In questo modo hai sia un **miglioramento operativo concreto**, sia la possibilità di **ridurre l'esborso netto** se l'azienda decide di attivarsi sui bandi disponibili.
+In questo modo hai sia un **miglioramento operativo concreto**, sia la possibilità di **ridurre l’esborso netto** se l’azienda decide di attivarsi sui bandi disponibili.
 """
     )
 
@@ -1441,7 +1491,7 @@ tra direzione, produzione e miglioramento continuo.
     )
 
     # =====================
-    # BLOCCO FINALE PER NON‑ADMIN
+    # AREA ADMIN: CALCOLATORE INTERNO
     # =====================
     role = st.session_state.get("role", "user")
     if role != "admin":
@@ -1449,15 +1499,12 @@ tra direzione, produzione e miglioramento continuo.
             """
 Se hai linee o impianti che lavorano sotto l'80% di OEE, **continuare così è la scelta più costosa**.
 
-Compila il form in alto per il **mini‑report OEE gratuito**: sarà la base per valutare
+Compila il form qui sopra per il mini‑report OEE gratuito: sarà la base per valutare
 se un progetto ForgiaLean può portarti **+16% OEE e più margine**, senza perdere altro tempo in riunioni sterili.
 """
         )
         st.stop()
 
-    # =====================
-    # AREA ADMIN: CALCOLATORE INTERNO
-    # =====================
     st.markdown("---")
     st.subheader("Calcolatore rapido OEE e perdita economica (uso interno)")
 
