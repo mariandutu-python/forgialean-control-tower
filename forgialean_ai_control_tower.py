@@ -2652,7 +2652,6 @@ st.subheader("📂 Opportunità filtrate")
 
 if df_f.empty:
     st.info("Nessuna opportunità trovata con i filtri selezionati.")
-    st.stop()
 else:
     st.markdown("**Vista tabellare pipeline**")
 
