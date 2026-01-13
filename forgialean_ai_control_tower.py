@@ -2644,6 +2644,10 @@ def page_crm_sales():
     if f_owner != "Tutti":
         df_f = df_f[df_f["owner"] == f_owner]
 
+# Guard: se df_f non esiste, crea un dataframe vuoto
+if "df_f" not in locals():
+    df_f = pd.DataFrame()
+
 st.subheader("📂 Opportunità filtrate")
 
 if df_f.empty:
