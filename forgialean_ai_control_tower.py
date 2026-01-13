@@ -1599,6 +1599,7 @@ se un progetto ForgiaLean può portarti **+16% OEE e più margine**, senza perde
                         "Per più macchine/linee simili moltiplica questa stima per il numero di asset."
                     )
 
+
 # =========================
 # PAGINA: OVERVIEW
 # =========================
@@ -2992,139 +2993,135 @@ def page_crm_sales():
     else:
         current_client_label = ""
 
-with st.form(f"edit_opp_{opp_id_sel}"):
-    col1, col2 = st.columns(2)
-    with col1:
-        client_label_e = (
-            st.selectbox(
-                "Cliente",
-                df_clients_all["label"].tolist()
-                if not df_clients_all.empty
-                else [],
-                index=df_clients_all["label"].tolist().index(
-                    current_client_label
+    with st.form(f"edit_opp_{opp_id_sel}"):
+        col1, col2 = st.columns(2)
+        with col1:
+            client_label_e = (
+                st.selectbox(
+                    "Cliente",
+                    df_clients_all["label"].tolist()
+                    if not df_clients_all.empty
+                    else [],
+                    index=df_clients_all["label"].tolist().index(
+                        current_client_label
+                    )
+                    if current_client_label
+                    else 0,
                 )
-                if current_client_label
-                else 0,
+                if not df_clients_all.empty
+                else ("",)
             )
-            if not df_clients_all.empty
-            else ("",)
-        )
-        nome_opportunita_e = st.text_input(
-            "Nome opportunità", opp_obj.nome_opportunita or ""
-        )
-        fase_pipeline_e = st.selectbox(
-            "Fase pipeline",
-            [
-                "Lead pre-qualificato (MQL)",
-                "Lead qualificato (SQL)",
-                "Lead",
-                "Offerta",
-                "Negoziazione",
-                "Vinta",
-                "Persa",
-            ],
-            index=[
-                "Lead pre-qualificato (MQL)",
-                "Lead qualificato (SQL)",
-                "Lead",
-                "Offerta",
-                "Negoziazione",
-                "Vinta",
-                "Persa",
-            ].index(opp_obj.fase_pipeline or "Lead"),
-        )
-        owner_e = st.text_input("Owner", opp_obj.owner or "")
-        telefono_contatto_e = st.text_input(
-            "📱 Telefono contatto", opp_obj.telefono_contatto or ""
-        )  # <-- AGGIUNTO
-    with col2:
-        valore_stimato_e = st.number_input(
-            "Valore stimato (€)",
-            min_value=0.0,
-            step=100.0,
-            value=float(opp_obj.valore_stimato or 0.0),
-        )
-        probabilita_e = st.number_input(
-            "Probabilità (%)",
-            min_value=0.0,
-            max_value=100.0,
-            step=5.0,
-            value=float(opp_obj.probabilita or 0.0),
-        )
-        data_apertura_e = st.date_input(
-            "Data apertura",
-            value=opp_obj.data_apertura or date.today(),
-        )
-        data_chiusura_prevista_e = st.date_input(
-            "Data chiusura prevista",
-            value=opp_obj.data_chiusura_prevista or date.today(),
-        )
-
-    col_a1_e, col_a2_e = st.columns(2)
-    with col_a1_e:
-        data_prossima_azione_e = st.date_input(
-            "📅 Data prossima azione",
-            value=opp_obj.data_prossima_azione or date.today(),
-        )
-    with col_a2_e:
-        tipo_prossima_azione_e = st.selectbox(
-            "📌 Tipo prossima azione",
-            ["", "Telefonata", "Email", "Visita", "Preventivo", "Follow‑up"],
-            index=(
+            nome_opportunita_e = st.text_input(
+                "Nome opportunità", opp_obj.nome_opportunita or ""
+            )
+            fase_pipeline_e = st.selectbox(
+                "Fase pipeline",
                 [
-                    "",
-                    "Telefonata",
-                    "Email",
-                    "Visita",
-                    "Preventivo",
-                    "Follow‑up",
-                ].index(opp_obj.tipo_prossima_azione)
-                if opp_obj.tipo_prossima_azione
-                in [
-                    "Telefonata",
-                    "Email",
-                    "Visita",
-                    "Preventivo",
-                    "Follow‑up",
-                ]
-                else 0
-            ),
+                    "Lead pre-qualificato (MQL)",
+                    "Lead qualificato (SQL)",
+                    "Lead",
+                    "Offerta",
+                    "Negoziazione",
+                    "Vinta",
+                    "Persa",
+                ],
+                index=[
+                    "Lead pre-qualificato (MQL)",
+                    "Lead qualificato (SQL)",
+                    "Lead",
+                    "Offerta",
+                    "Negoziazione",
+                    "Vinta",
+                    "Persa",
+                ].index(opp_obj.fase_pipeline or "Lead"),
+            )
+            owner_e = st.text_input("Owner", opp_obj.owner or "")
+        with col2:
+            valore_stimato_e = st.number_input(
+                "Valore stimato (€)",
+                min_value=0.0,
+                step=100.0,
+                value=float(opp_obj.valore_stimato or 0.0),
+            )
+            probabilita_e = st.number_input(
+                "Probabilità (%)",
+                min_value=0.0,
+                max_value=100.0,
+                step=5.0,
+                value=float(opp_obj.probabilita or 0.0),
+            )
+            data_apertura_e = st.date_input(
+                "Data apertura",
+                value=opp_obj.data_apertura or date.today(),
+            )
+            data_chiusura_prevista_e = st.date_input(
+                "Data chiusura prevista",
+                value=opp_obj.data_chiusura_prevista or date.today(),
+            )
+
+        col_a1_e, col_a2_e = st.columns(2)
+        with col_a1_e:
+            data_prossima_azione_e = st.date_input(
+                "📅 Data prossima azione",
+                value=opp_obj.data_prossima_azione or date.today(),
+            )
+        with col_a2_e:
+            tipo_prossima_azione_e = st.selectbox(
+                "📌 Tipo prossima azione",
+                ["", "Telefonata", "Email", "Visita", "Preventivo", "Follow‑up"],
+                index=(
+                    [
+                        "",
+                        "Telefonata",
+                        "Email",
+                        "Visita",
+                        "Preventivo",
+                        "Follow‑up",
+                    ].index(opp_obj.tipo_prossima_azione)
+                    if opp_obj.tipo_prossima_azione
+                    in [
+                        "Telefonata",
+                        "Email",
+                        "Visita",
+                        "Preventivo",
+                        "Follow‑up",
+                    ]
+                    else 0
+                ),
+            )
+
+        note_prossima_azione_e = st.text_area(
+            "📝 Note prossima azione",
+            value=opp_obj.note_prossima_azione or "",
         )
 
-    note_prossima_azione_e = st.text_area(
-        "📝 Note prossima azione",
-        value=opp_obj.note_prossima_azione or "",
-    )
+        colb1, colb2 = st.columns(2)
+        with colb1:
+            update_opp = st.form_submit_button("💾 Aggiorna opportunità")
+        with colb2:
+            delete_opp = st.form_submit_button("🗑 Elimina opportunità")
 
-    colb1, colb2 = st.columns(2)
-    with colb1:
-        update_opp = st.form_submit_button("💾 Aggiorna opportunità")
-    with colb2:
-        delete_opp = st.form_submit_button("🗑 Elimina opportunità")
-
-if update_opp:
-    with get_session() as session:
-        obj = session.get(Opportunity, opp_id_sel)
-        if obj:
-            if not df_clients_all.empty:
-                client_id_e = int(client_label_e.split(" - ")[0])
-                obj.client_id = client_id_e
-            obj.nome_opportunita = nome_opportunita_e.strip()
-            obj.fase_pipeline = fase_pipeline_e
-            obj.owner = owner_e.strip() or None
-            obj.valore_stimato = valore_stimato_e
-            obj.probabilita = probabilita_e
-            obj.data_apertura = data_apertura_e
-            obj.data_chiusura_prevista = data_chiusura_prevista_e
-            obj.data_prossima_azione = data_prossima_azione_e
-            obj.tipo_prossima_azione = tipo_prossima_azione_e or None
-            obj.note_prossima_azione = note_prossima_azione_e or None
-            obj.telefono_contatto = telefono_contatto_e.strip() or None  # <-- AGGIUNTO
-            session.add(obj)
-            session.commit()
-    st.success("Opportunità aggiornata.")
-    st.rerun()
+    if update_opp:
+        with get_session() as session:
+            obj = session.get(Opportunity, opp_id_sel)
+            if obj:
+                if not df_clients_all.empty:
+                    client_id_e = int(client_label_e.split(" - ")[0])
+                    obj.client_id = client_id_e
+                obj.nome_opportunita = nome_opportunita_e.strip()
+                obj.fase_pipeline = fase_pipeline_e
+                obj.owner = owner_e.strip() or None
+                obj.valore_stimato = valore_stimato_e
+                obj.probabilita = probabilita_e
+                obj.data_apertura = data_apertura_e
+                obj.data_chiusura_prevista = data_chiusura_prevista_e
+                obj.data_prossima_azione = data_prossima_azione_e
+                obj.tipo_prossima_azione = tipo_prossima_azione_e or None
+                obj.note_prossima_azione = note_prossima_azione_e or None
+                session.add(obj)
+                session.commit()
+        st.success("Opportunità aggiornata.")
+        st.rerun()
 
     if delete_opp:
         with get_session() as session:
