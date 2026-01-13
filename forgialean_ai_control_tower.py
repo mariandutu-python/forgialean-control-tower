@@ -2688,6 +2688,7 @@ def page_crm_sales():
                 st.write(f"Probabilità: {row['probabilita']} %")
                 st.write(f"Data apertura: {row['data_apertura']}")
                 st.write(f"Data chiusura prevista: {row['data_chiusura_prevista']}")
+                st.write(f"📱 Telefono contatto: {row.get('telefono_contatto', '-')}") 
                 st.write(
                     f"Data prossima azione: {row.get('data_prossima_azione', '')}"
                 )
