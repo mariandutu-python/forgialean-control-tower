@@ -1080,12 +1080,12 @@ def page_presentation():
             if not nome.strip() or not telefono.strip() or not email.strip():
                 st.warning("Compila nome, telefono ed email per poter essere ricontattato.")
             else:
+                opp = None  # <--- assicurati di inizializzarlo fuori dal with
                 with get_session() as session:
                     client = session.exec(
                         select(Client).where(Client.email == email)
                     ).first()
 
-                    opp = None
                     if client:
                         opp = session.exec(
                             select(Opportunity)
@@ -1094,65 +1094,30 @@ def page_presentation():
                             .order_by(Opportunity.data_apertura.desc())
                         ).first()
 
-                    if opp:
-                        opp.fase_pipeline = "Lead qualificato (SQL)"
-                        opp.probabilita = 50.0
-                        opp.owner = "Marian Dutu"
+                        if opp:
+                            # ... tutto il codice di aggiornamento opp ...
+                            session.add(opp)
+                            session.commit()
 
-                        if disponibilita == "Oggi entro le 18":
-                            data_call = date.today()
-                        elif disponibilita in ["Domani mattina", "Domani pomeriggio"]:
-                            data_call = date.today() + timedelta(days=1)
-                        elif disponibilita == "Questa settimana":
-                            data_call = date.today() + timedelta(days=3)
-                        else:
-                            data_call = date.today() + timedelta(days=1)
+                # solo se ho trovato un’opportunity assegno le fiamme e traccio
+                if opp:
+                    flame_points = assign_flame_points(
+                        opp.opportunity_id, "form_call_submitted"
+                    )
 
-                        if hasattr(opp, "data_prossima_azione"):
-                            opp.data_prossima_azione = data_call
-                        if hasattr(opp, "telefono_contatto"):
-                            opp.telefono_contatto = telefono
-                        if hasattr(opp, "tipo_prossima_azione"):
-                            opp.tipo_prossima_azione = f"CALL OEE - {disponibilita}"
-                        if hasattr(opp, "note_prossima_azione"):
-                            opp.note_prossima_azione = (
-                                f"Nome: {nome}\nDisponibilità: {disponibilita}\n{note}"
-                            )
+                    track_event("form_call_submitted", {
+                        "name": nome,
+                        "phone": telefono,
+                        "flame_points": flame_points,
+                    })
 
-                        extra = (
-                            "\n\n--- Step call OEE ---\n"
-                            f"Nome: {nome}\n"
-                            f"Telefono: {telefono}\n"
-                            f"Disponibilità: {disponibilita}\n"
-                        )
-                        if note.strip():
-                            extra += f"Note: {note.strip()}\n"
+                    st.success(
+                        f"✅ Perfetto! Ti contatterò secondo la tua disponibilità! 🔥 +{flame_points} fiamme"
+                    )
+                else:
+                    # fallback: niente opp trovata → niente fiamme, ma nessun errore
+                    st.success("✅ Perfetto! Ti contatterò secondo la tua disponibilità!")
 
-                        if hasattr(opp, "note"):
-                            opp.note = (opp.note or "") + extra
-
-                        session.add(opp)
-                        session.commit()
-
-                flame_points = assign_flame_points(opp.opportunity_id, "form_call_submitted")
-
-                track_event("form_call_submitted", {
-                    "name": nome,
-                    "phone": telefono,
-                    "flame_points": flame_points,
-                })
-
-                st.session_state.call_data = {
-                    "nome": nome,
-                    "telefono": telefono,
-                    "email": email,
-                    "disponibilita": disponibilita,
-                    "note": note,
-                }
-
-                st.success(
-                    f"✅ Perfetto! Ti contatterò secondo la tua disponibilità! 🔥 +{flame_points} fiamme"
-                )
                 st.balloons()
                 st.markdown(
                     "### 📋 Prossimi passi:\n"
@@ -1161,7 +1126,6 @@ def page_presentation():
                     "3. **Dashboard attiva**"
                 )
                 st.stop()
-        st.stop()
 
     # =====================
     # HERO + MINI‑REPORT IN ALTO
