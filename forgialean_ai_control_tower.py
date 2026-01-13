@@ -2644,146 +2644,147 @@ def page_crm_sales():
     if f_owner != "Tutti":
         df_f = df_f[df_f["owner"] == f_owner]
 
-    st.subheader("📂 Opportunità filtrate")
+st.subheader("📂 Opportunità filtrate")
 
-    if df_f.empty:
-        st.info("Nessuna opportunità trovata con i filtri selezionati.")
-    else:
-        st.markdown("**Vista tabellare pipeline**")
+if df_f.empty:
+    st.info("Nessuna opportunità trovata con i filtri selezionati.")
+    st.stop()
+else:
+    st.markdown("**Vista tabellare pipeline**")
 
-        cols_list = [
-            "opportunity_id",
-            "Cliente",
-            "nome_opportunita",
-            "fase_pipeline",
-            "stato_opportunita",
-            "owner",
-            "valore_stimato",
-            "data_chiusura_prevista",
-            "data_prossima_azione",
-        ]
-        cols_list = [c for c in cols_list if c in df_f.columns]
+    cols_list = [
+        "opportunity_id",
+        "Cliente",
+        "nome_opportunita",
+        "fase_pipeline",
+        "stato_opportunita",
+        "owner",
+        "valore_stimato",
+        "data_chiusura_prevista",
+        "data_prossima_azione",
+    ]
+    cols_list = [c for c in cols_list if c in df_f.columns]
 
-        df_list = df_f[cols_list].copy()
-        st.dataframe(df_list, hide_index=True, width="stretch")
+    df_list = df_f[cols_list].copy()
+    st.dataframe(df_list, hide_index=True, width="stretch")
 
-st.markdown("---")
-st.markdown("**Dettaglio opportunità**")
+    st.markdown("---")
+    st.markdown("**Dettaglio opportunità**")
 
-for _, row in df_f.iterrows():
-    expanded_default = bool(
-        selected_opp is not None and row["opportunity_id"] == opp_id
-    )
-
-    header = (
-        f"{row['opportunity_id']} – {row['Cliente']} – "
-        f"{row['nome_opportunita']} ({row['stato_opportunita']})"
-    )
-
-    with st.expander(header, expanded=expanded_default):
-        st.write(f"Fase pipeline: {row['fase_pipeline']}")
-        st.write(f"Owner: {row.get('owner', '')}")
-        st.write(f"Valore stimato: {row['valore_stimato']} €")
-        st.write(f"Probabilità: {row['probabilita']} %")
-        st.write(f"Data apertura: {row['data_apertura']}")
-        st.write(f"Data chiusura prevista: {row['data_chiusura_prevista']}")
-        st.write(f"📱 Telefono contatto: {row.get('telefono_contatto', '-')}")  # <-- AGGIUNTO
-        st.write(
-            f"Data prossima azione: {row.get('data_prossima_azione', '')}"
-        )
-        st.write(
-            f"Tipo prossima azione: {row.get('tipo_prossima_azione', '')}"
-        )
-        st.write(
-            f"Note prossima azione: {row.get('note_prossima_azione', '')}"
+    for _, row in df_f.iterrows():
+        expanded_default = bool(
+            selected_opp is not None and row["opportunity_id"] == opp_id
         )
 
-        st.markdown("**Dati campagna (UTM)**")
-        st.write(f"utm_source: {row.get('utm_source', '')}")
-        st.write(f"utm_medium: {row.get('utm_medium', '')}")
-        st.write(f"utm_campaign: {row.get('utm_campaign', '')}")
-        st.write(f"utm_content: {row.get('utm_content', '')}")
+        header = (
+            f"{row['opportunity_id']} – {row['Cliente']} – "
+            f"{row['nome_opportunita']} ({row['stato_opportunita']})"
+        )
 
-        st.markdown("---")
-        st.markdown("**Pianifica prossima azione**")
-
-        col_na1, col_na2 = st.columns(2)
-        with col_na1:
-            nuova_data = st.date_input(
-                "Nuova data",
-                value=row.get("data_prossima_azione") or date.today(),
-                key=f"nuova_data_{row['opportunity_id']}",
+        with st.expander(header, expanded=expanded_default):
+            st.write(f"Fase pipeline: {row['fase_pipeline']}")
+            st.write(f"Owner: {row.get('owner', '')}")
+            st.write(f"Valore stimato: {row['valore_stimato']} €")
+            st.write(f"Probabilità: {row['probabilita']} %")
+            st.write(f"Data apertura: {row['data_apertura']}")
+            st.write(f"Data chiusura prevista: {row['data_chiusura_prevista']}")
+            st.write(f"📱 Telefono contatto: {row.get('telefono_contatto', '-')}")
+            st.write(
+                f"Data prossima azione: {row.get('data_prossima_azione', '')}"
             )
-        with col_na2:
-            nuovo_tipo = st.selectbox(
-                "Nuovo tipo azione",
-                ["", "Telefonata", "Email", "Visita", "Preventivo", "Follow‑up"],
-                index=(
-                    [
-                        "",
-                        "Telefonata",
-                        "Email",
-                        "Visita",
-                        "Preventivo",
-                        "Follow‑up",
-                    ].index(row.get("tipo_prossima_azione"))
-                    if row.get("tipo_prossima_azione")
-                    in [
-                        "Telefonata",
-                        "Email",
-                        "Visita",
-                        "Preventivo",
-                        "Follow‑up",
-                    ]
-                    else 0
-                ),
-                key=f"nuovo_tipo_{row['opportunity_id']}",
+            st.write(
+                f"Tipo prossima azione: {row.get('tipo_prossima_azione', '')}"
+            )
+            st.write(
+                f"Note prossima azione: {row.get('note_prossima_azione', '')}"
             )
 
-        nuove_note = st.text_area(
-            "Note prossima azione",
-            value=row.get("note_prossima_azione", "") or "",
-            key=f"nuove_note_{row['opportunity_id']}",
-        )
+            st.markdown("**Dati campagna (UTM)**")
+            st.write(f"utm_source: {row.get('utm_source', '')}")
+            st.write(f"utm_medium: {row.get('utm_medium', '')}")
+            st.write(f"utm_campaign: {row.get('utm_campaign', '')}")
+            st.write(f"utm_content: {row.get('utm_content', '')}")
 
-        col_b1, col_b2 = st.columns(2)
-        with col_b1:
-            if st.button(
-                "✅ Segna azione come fatta (svuota)",
-                key=f"done_{row['opportunity_id']}",
-            ):
-                with get_session() as session:
-                    opp_db = session.get(
-                        Opportunity, row["opportunity_id"]
-                    )
-                    if opp_db:
-                        opp_db.data_prossima_azione = None
-                        opp_db.tipo_prossima_azione = None
-                        opp_db.note_prossima_azione = None
-                        session.add(opp_db)
-                        session.commit()
-                st.success(
-                    "Azione segnata come completata e rimossa dall'agenda."
+            st.markdown("---")
+            st.markdown("**Pianifica prossima azione**")
+
+            col_na1, col_na2 = st.columns(2)
+            with col_na1:
+                nuova_data = st.date_input(
+                    "Nuova data",
+                    value=row.get("data_prossima_azione") or date.today(),
+                    key=f"nuova_data_{row['opportunity_id']}",
                 )
-                st.rerun()
+            with col_na2:
+                nuovo_tipo = st.selectbox(
+                    "Nuovo tipo azione",
+                    ["", "Telefonata", "Email", "Visita", "Preventivo", "Follow‑up"],
+                    index=(
+                        [
+                            "",
+                            "Telefonata",
+                            "Email",
+                            "Visita",
+                            "Preventivo",
+                            "Follow‑up",
+                        ].index(row.get("tipo_prossima_azione"))
+                        if row.get("tipo_prossima_azione")
+                        in [
+                            "Telefonata",
+                            "Email",
+                            "Visita",
+                            "Preventivo",
+                            "Follow‑up",
+                        ]
+                        else 0
+                    ),
+                    key=f"nuovo_tipo_{row['opportunity_id']}",
+                )
 
-        with col_b2:
-            if st.button(
-                "📅 Salva nuova prossima azione",
-                key=f"next_{row['opportunity_id']}",
-            ):
-                with get_session() as session:
-                    opp_db = session.get(
-                        Opportunity, row["opportunity_id"]
+            nuove_note = st.text_area(
+                "Note prossima azione",
+                value=row.get("note_prossima_azione", "") or "",
+                key=f"nuove_note_{row['opportunity_id']}",
+            )
+
+            col_b1, col_b2 = st.columns(2)
+            with col_b1:
+                if st.button(
+                    "✅ Segna azione come fatta (svuota)",
+                    key=f"done_{row['opportunity_id']}",
+                ):
+                    with get_session() as session:
+                        opp_db = session.get(
+                            Opportunity, row["opportunity_id"]
+                        )
+                        if opp_db:
+                            opp_db.data_prossima_azione = None
+                            opp_db.tipo_prossima_azione = None
+                            opp_db.note_prossima_azione = None
+                            session.add(opp_db)
+                            session.commit()
+                    st.success(
+                        "Azione segnata come completata e rimossa dall'agenda."
                     )
-                    if opp_db:
-                        opp_db.data_prossima_azione = nuova_data
-                        opp_db.tipo_prossima_azione = nuovo_tipo or None
-                        opp_db.note_prossima_azione = nuove_note or None
-                        session.add(opp_db)
-                        session.commit()
-                st.success("Nuova prossima azione salvata.")
-                st.rerun()
+                    st.rerun()
+
+            with col_b2:
+                if st.button(
+                    "📅 Salva nuova prossima azione",
+                    key=f"next_{row['opportunity_id']}",
+                ):
+                    with get_session() as session:
+                        opp_db = session.get(
+                            Opportunity, row["opportunity_id"]
+                        )
+                        if opp_db:
+                            opp_db.data_prossima_azione = nuova_data
+                            opp_db.tipo_prossima_azione = nuovo_tipo or None
+                            opp_db.note_prossima_azione = nuove_note or None
+                            session.add(opp_db)
+                            session.commit()
+                    st.success("Nuova prossima azione salvata.")
+                    st.rerun()
 
     # =========================
     # SINTESI ATTIVITÀ COMMERCIALI
