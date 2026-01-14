@@ -346,23 +346,41 @@ def init_db():
 def migrate_db():
     """Esegue migrazioni DB se necessario (compatibile con Streamlit Cloud)"""
     with engine.connect() as conn:
-        # Controlla se la colonna telefono_contatto esiste già
+        # Controlla colonne esistenti
         result = conn.exec_driver_sql(
             "PRAGMA table_info(opportunity);"
         ).fetchall()
         
         column_names = [row[1] for row in result]  # row[1] è il nome colonna
         
-        if "telefono_contatto" not in column_names:
-            # Aggiungi la colonna
-            conn.exec_driver_sql(
-                "ALTER TABLE opportunity ADD COLUMN telefono_contatto TEXT;"
-            )
-            conn.commit()
-            print("✅ Colonna telefono_contatto aggiunta con successo")
-        else:
-            print("ℹ️ Colonna telefono_contatto già presente")
-
+        # Lista di colonne da aggiungere se mancano
+        migrations = [
+            ("telefono_contatto", "TEXT"),
+            ("flame_points", "INTEGER DEFAULT 0"),
+            ("form_oee_completed", "BOOLEAN DEFAULT 0"),
+            ("form_call_completed", "BOOLEAN DEFAULT 0"),
+            ("demo_scheduled", "BOOLEAN DEFAULT 0"),
+            ("contract_sent", "BOOLEAN DEFAULT 0"),
+            ("contract_signed", "BOOLEAN DEFAULT 0"),
+            ("date_form_oee", "DATE"),
+            ("date_form_call", "DATE"),
+            ("date_demo", "DATE"),
+            ("date_contract_sent", "DATE"),
+            ("date_contract_signed", "DATE"),
+        ]
+        
+        for col_name, col_type in migrations:
+            if col_name not in column_names:
+                try:
+                    conn.exec_driver_sql(
+                        f"ALTER TABLE opportunity ADD COLUMN {col_name} {col_type};"
+                    )
+                    conn.commit()
+                    print(f"✅ Colonna {col_name} aggiunta con successo")
+                except Exception as e:
+                    print(f"⚠️ Errore aggiunta colonna {col_name}: {e}")
+            else:
+                print(f"ℹ️ Colonna {col_name} già presente")
 
 def get_session() -> Session:
     """Restituisce una nuova sessione SQLModel"""
