@@ -18,6 +18,7 @@ from enum import Enum
 
 from db import (
     init_db,
+    migrate_db,
     get_session,
     Client,
     Opportunity,
