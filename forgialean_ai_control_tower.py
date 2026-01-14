@@ -3182,60 +3182,56 @@ def page_crm_sales():
     )
     sel_opp_id = int(sel_opp_label.split(" - ")[0])
 
+    # Carica dati e SALVA SUBITO GLI ID
+    opp_nome = None
+    client_id_comm = None
+    
     with get_session() as session:
         opp_sel = session.get(Opportunity, sel_opp_id)
-        client_sel = session.get(Client, opp_sel.client_id) if opp_sel else None
+        if opp_sel:
+            opp_nome = opp_sel.nome_opportunita
+            client_id_comm = opp_sel.client_id
 
     default_cod = f"COM-{sel_opp_id}"
-    default_desc = opp_sel.nome_opportunita if opp_sel else ""
+    default_desc = opp_nome or ""
 
     with st.form("create_commessa_from_opp"):
         colc1, colc2 = st.columns(2)
         with colc1:
             cod_commessa = st.text_input("Codice commessa", default_cod)
-            descr_commessa = st.text_input(
-                "Descrizione commessa", default_desc
-            )
+            descr_commessa = st.text_input("Descrizione commessa", default_desc)
         with colc2:
-            data_ini_prev = st.date_input(
-                "Data inizio prevista", value=date.today()
-            )
-            data_fine_prev = st.date_input(
-                "Data fine prevista", value=date.today()
-            )
+            data_ini_prev = st.date_input("Data inizio prevista", value=date.today())
+            data_fine_prev = st.date_input("Data fine prevista", value=date.today())
         crea_commessa = st.form_submit_button("Crea commessa")
 
-if crea_commessa and opp_sel and client_sel:
-    opp_id_created = None
-    comm_id = None
-    
-    with get_session() as session:
-        opp_db = session.get(Opportunity, opp_sel.opportunity_id)
-        client_db = session.get(Client, client_sel.client_id)
+    if crea_commessa and client_id_comm:
+        with get_session() as session:
+            new_comm = ProjectCommessa(
+                client_id=client_id_comm,
+                cod_commessa=cod_commessa.strip() or default_cod,
+                descrizione_cliente=descr_commessa.strip() or default_desc,
+                data_inizio=data_ini_prev,
+                data_fine_prevista=data_fine_prev,
+                stato_commessa="aperta",
+                ore_previste=0.0,
+                ore_consumate=0.0,
+                costo_previsto=0.0,
+                costo_consuntivo=0.0,
+            )
 
-        new_comm = ProjectCommessa(
-            client_id=client_db.client_id,
-            cod_commessa=cod_commessa.strip() or default_cod,
-            descrizione=descr_commessa.strip() or default_desc,
-            data_inizio_prevista=data_ini_prev,
-            data_fine_prevista=data_fine_prev,
-        )
+            if hasattr(ProjectCommessa, "opportunity_id"):
+                new_comm.opportunity_id = sel_opp_id
 
-        if hasattr(ProjectCommessa, "opportunity_id"):
-            new_comm.opportunity_id = opp_db.opportunity_id
+            session.add(new_comm)
+            session.commit()
+            session.refresh(new_comm)
+            
+            comm_id = new_comm.commessa_id
 
-        session.add(new_comm)
-        session.commit()
-        session.refresh(new_comm)
-        
-        # SALVA GLI ID PRIMA DI USCIRE DALLA SESSIONE
-        opp_id_created = opp_db.opportunity_id
-        comm_id = new_comm.commessa_id
+        st.success(f"Commessa creata da opportunità {sel_opp_id} con ID {comm_id}.")
+        st.rerun()
 
-    st.success(
-        f"Commessa creata da opportunità {opp_id_created} con ID {comm_id}."
-    )
-    st.rerun()
 
 class StepOutcome(str, Enum):
     OK = "ok"
