@@ -3205,32 +3205,37 @@ def page_crm_sales():
             )
         crea_commessa = st.form_submit_button("Crea commessa")
 
-    if crea_commessa and opp_sel and client_sel:
-        with get_session() as session:
-            opp_db = session.get(Opportunity, opp_sel.opportunity_id)
-            client_db = session.get(Client, client_sel.client_id)
+if crea_commessa and opp_sel and client_sel:
+    opp_id_created = None
+    comm_id = None
+    
+    with get_session() as session:
+        opp_db = session.get(Opportunity, opp_sel.opportunity_id)
+        client_db = session.get(Client, client_sel.client_id)
 
-            new_comm = ProjectCommessa(
-                client_id=client_db.client_id,
-                cod_commessa=cod_commessa.strip() or default_cod,
-                descrizione=descr_commessa.strip() or default_desc,
-                data_inizio_prevista=data_ini_prev,
-                data_fine_prevista=data_fine_prev,
-            )
+        new_comm = ProjectCommessa(
+            client_id=client_db.client_id,
+            cod_commessa=cod_commessa.strip() or default_cod,
+            descrizione=descr_commessa.strip() or default_desc,
+            data_inizio_prevista=data_ini_prev,
+            data_fine_prevista=data_fine_prev,
+        )
 
-            if hasattr(ProjectCommessa, "opportunity_id"):
-                new_comm.opportunity_id = opp_db.opportunity_id
+        if hasattr(ProjectCommessa, "opportunity_id"):
+            new_comm.opportunity_id = opp_db.opportunity_id
 
-            session.add(new_comm)
-            session.commit()
-            session.refresh(new_comm)
-
+        session.add(new_comm)
+        session.commit()
+        session.refresh(new_comm)
+        
+        # SALVA GLI ID PRIMA DI USCIRE DALLA SESSIONE
         opp_id_created = opp_db.opportunity_id
         comm_id = new_comm.commessa_id
-        st.success(
-            f"Commessa creata da opportunità {opp_id_created} con ID {comm_id}."
-        )
-        st.rerun()
+
+    st.success(
+        f"Commessa creata da opportunità {opp_id_created} con ID {comm_id}."
+    )
+    st.rerun()
 
 class StepOutcome(str, Enum):
     OK = "ok"
@@ -5360,13 +5365,13 @@ if (
         on="fase_id",
     )
 
-    # -------------------------
-    # FILTRO PER COMMESSA
-    # -------------------------
-    commessa_filter = "tutte"
-    if "cod_commessa" in df_inv.columns:
-        commesse_opts = ["tutte"] + sorted(df_inv["cod_commessa"].dropna().unique().tolist())
-        commessa_filter = st.selectbox("Commessa", commesse_opts, index=0)
+# -------------------------
+# FILTRO PER COMMESSA
+# -------------------------
+commessa_filter = "tutte"
+if "cod_commessa" in df_inv.columns:
+    commesse_opts = ["tutte"] + sorted(df_inv["cod_commessa"].dropna().unique().tolist())
+    commessa_filter = st.selectbox("Commessa", commesse_opts, index=0)
 
     # -------------------------
     # APPLICA FILTRI
