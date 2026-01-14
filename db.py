@@ -50,16 +50,20 @@ class Client(SQLModel, table=True):
 class Opportunity(SQLModel, table=True):
     opportunity_id: Optional[int] = Field(default=None, primary_key=True)
     client_id: int = Field(foreign_key="client.client_id")
+
     nome_opportunita: str
     fase_pipeline: Optional[str] = None  # Lead, Offerta, Negoziazione, Vinta, Persa
     owner: Optional[str] = None
+
     valore_stimato: Optional[float] = 0.0
     probabilita: Optional[float] = 0.0
     data_apertura: Optional[date] = None
     data_chiusura_prevista: Optional[date] = None
+
     data_prossima_azione: Optional[date] = None
     tipo_prossima_azione: Optional[str] = None
     note_prossima_azione: Optional[str] = None
+
     stato_opportunita: Optional[str] = "aperta"
     note: Optional[str] = None
 
@@ -67,8 +71,8 @@ class Opportunity(SQLModel, table=True):
     utm_medium: Optional[str] = None
     utm_campaign: Optional[str] = None
     utm_content: Optional[str] = None
-    
-    # 🔥 NUOVI CAMPI PER GAMIFICATION - FLAME POINTS
+
+    # gamification
     flame_points: int = Field(default=0)
     form_oee_completed: bool = Field(default=False)
     form_call_completed: bool = Field(default=False)
@@ -80,6 +84,8 @@ class Opportunity(SQLModel, table=True):
     date_demo: Optional[date] = Field(default=None)
     date_contract_sent: Optional[date] = Field(default=None)
     date_contract_signed: Optional[date] = Field(default=None)
+
+    # telefono specifico dell’opportunità (es. form OEE / call)
     telefono_contatto: Optional[str] = Field(default=None)
 
 class Invoice(SQLModel, table=True):
@@ -319,8 +325,31 @@ class CashflowEvent(SQLModel, table=True):
 # =========================
 
 def init_db():
-    # Crea le tabelle solo se non esistono (come nel comportamento originale)
+    """Crea le tabelle solo se non esistono"""
     SQLModel.metadata.create_all(engine)
 
+
+def migrate_db():
+    """Esegue migrazioni DB se necessario (compatibile con Streamlit Cloud)"""
+    with engine.connect() as conn:
+        # Controlla se la colonna telefono_contatto esiste già
+        result = conn.exec_driver_sql(
+            "PRAGMA table_info(opportunity);"
+        ).fetchall()
+        
+        column_names = [row[1] for row in result]  # row[1] è il nome colonna
+        
+        if "telefono_contatto" not in column_names:
+            # Aggiungi la colonna
+            conn.exec_driver_sql(
+                "ALTER TABLE opportunity ADD COLUMN telefono_contatto TEXT;"
+            )
+            conn.commit()
+            print("✅ Colonna telefono_contatto aggiunta con successo")
+        else:
+            print("ℹ️ Colonna telefono_contatto già presente")
+
+
 def get_session() -> Session:
+    """Restituisce una nuova sessione SQLModel"""
     return Session(engine)
