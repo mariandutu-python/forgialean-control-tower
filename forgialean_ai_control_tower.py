@@ -182,6 +182,7 @@ SMTP_PASSWORD = st.secrets["email"]["SMTP_PASSWORD"]
 FROM_ADDRESS = st.secrets["email"]["FROM_ADDRESS"]
 
 init_db()
+migrate_db()
 
 LOGO_PATH = Path("forgialean_logo.png")
 
