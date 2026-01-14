@@ -325,7 +325,21 @@ class CashflowEvent(SQLModel, table=True):
 # =========================
 
 def init_db():
-    """Crea le tabelle solo se non esistono"""
+    """Crea le tabelle e ripristina backup se disponibile"""
+    from pathlib import Path
+    import shutil
+    
+    BACKUP_LATEST = Path("db_backups/forgialean_latest.db")
+    DB_PATH = Path(SQLITE_FILE_NAME)
+    
+    # Se esiste backup e DB è vuoto/mancante, ripristina
+    if BACKUP_LATEST.exists() and (not DB_PATH.exists() or DB_PATH.stat().st_size < 1000):
+        print("🔄 Ripristino backup database...")
+        DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(BACKUP_LATEST, DB_PATH)
+        print(f"✅ Database ripristinato da {BACKUP_LATEST}")
+    
+    # Crea tabelle se non esistono
     SQLModel.metadata.create_all(engine)
 
 

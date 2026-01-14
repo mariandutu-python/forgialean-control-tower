@@ -1,0 +1,32 @@
+name: Database Backup
+
+on:
+  schedule:
+    - cron: '0 2 * * *'  # Ogni notte alle 2:00 AM UTC
+  workflow_dispatch:  # Permette esecuzione manuale
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Run backup script
+        run: python backup_db.py
+      
+      - name: Commit backup
+        run: |
+          git config user.name "GitHub Actions Bot"
+          git config user.email "actions@github.com"
+          git add db_backups/
+          git diff --quiet && git diff --staged --quiet || git commit -m "automated DB backup $(date +'%Y-%m-%d %H:%M')"
+          git push
