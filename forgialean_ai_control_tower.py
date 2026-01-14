@@ -4801,7 +4801,6 @@ def page_payments():
     df_inv["label"] = df_inv["invoice_id"].astype(str) + " - " + df_inv["num_fattura"].astype(str)
 
     if not df_clients.empty:
-        df_clients = df_clients.rename(columns={"client_id": "client_id"})
         df_inv = df_inv.merge(
             df_clients[["client_id", "ragione_sociale"]],
             how="left",
@@ -4824,7 +4823,7 @@ def page_payments():
     def aggiorna_stato_fattura(session, invoice_id, payment_date):
         inv_obj = session.get(Invoice, invoice_id)
         if not inv_obj:
-            st.stop()
+            return
 
         pays_all = session.exec(
             select(Payment).where(Payment.invoice_id == invoice_id)
@@ -4836,7 +4835,6 @@ def page_payments():
 
         if totale_incassato >= (inv_obj.importo_totale or 0):
             inv_obj.stato_pagamento = "incassata"
-            # data incasso = data ultimo incasso registrato
             if pays_all:
                 last_pay_date = max(p.payment_date for p in pays_all if p.payment_date)
                 inv_obj.data_incasso = last_pay_date or payment_date
@@ -4846,7 +4844,6 @@ def page_payments():
             if totale_incassato > 0:
                 inv_obj.stato_pagamento = "parzialmente_incassata"
             else:
-                # nessun incasso
                 if scadenza < today:
                     inv_obj.stato_pagamento = "scaduta"
                 else:
@@ -4856,7 +4853,7 @@ def page_payments():
         session.add(inv_obj)
 
     # =========================
-    # NUOVO INCASSO (con precompilazione dalla fattura)
+    # NUOVO INCASSO
     # =========================
     st.subheader("➕ Registra nuovo incasso")
 
@@ -4899,20 +4896,17 @@ def page_payments():
                     note=note.strip() or None,
                 )
                 session.add(new_pay)
-
-                # aggiorno stato fattura in base a tutti gli incassi
                 aggiorna_stato_fattura(session, invoice_id_sel, payment_date)
-
                 session.commit()
             st.success("Incasso registrato e stato fattura aggiornato.")
             st.rerun()
+
     # =========================
     # KPI INCASSI / SCADENZE
     # =========================
     st.markdown("---")
     st.subheader("📊 KPI incassi e scadenze")
 
-    # Ricalcolo df_inv aggiornato dal DB per sicurezza
     with get_session() as session:
         invoices_kpi = session.exec(select(Invoice)).all()
     df_kpi = pd.DataFrame([i.__dict__ for i in invoices_kpi]) if invoices_kpi else pd.DataFrame()
@@ -4965,15 +4959,11 @@ def page_payments():
         df_aging["data_fattura"] = pd.to_datetime(df_aging["data_fattura"], errors="coerce")
 
         oggi = pd.to_datetime(date.today())
-
-        # Considero solo fatture non completamente incassate
         df_aging_open = df_aging[~df_aging["stato_pagamento"].isin(["incassata"])].copy()
 
-        # Calcolo giorni di ritardo (solo se scadute)
         df_aging_open["days_overdue"] = (oggi - df_aging_open["data_scadenza"]).dt.days
         df_aging_open["days_overdue"] = df_aging_open["days_overdue"].fillna(0)
 
-        # Bucket aging
         def aging_bucket(row):
             d = row["days_overdue"]
             if d <= 0:
@@ -4989,7 +4979,6 @@ def page_payments():
 
         df_aging_open["aging_bucket"] = df_aging_open.apply(aging_bucket, axis=1)
 
-        # Totale per bucket
         aging_summary = (
             df_aging_open.groupby("aging_bucket")["importo_totale"]
             .sum()
@@ -5012,7 +5001,6 @@ def page_payments():
         st.dataframe(aging_summary)
 
         st.markdown("**Dettaglio fatture aperte**")
-        # Se hai il merge con clienti come sopra, puoi riutilizzare df_clients; altrimenti lascio così
         st.dataframe(
             df_aging_open[
                 [
