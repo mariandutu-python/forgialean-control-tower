@@ -4812,10 +4812,11 @@ def page_payments():
             + df_inv["num_fattura"].astype(str)
             + " - "
             + df_inv["ragione_sociale"].fillna("")
+            + " - "
+            + df_inv["importo_totale"].fillna(0).astype(float).map(lambda x: f"€ {x:,.2f}")
+            + " - "
+            + df_inv["stato_pagamento"].fillna("emessa")
         )
-
-    df_inv["label"] = df_inv["label"] + " - " + df_inv["importo_totale"].fillna(0).astype(float).map(lambda x: f"€ {x:,.2f}")
-    df_inv["label"] = df_inv["label"] + " - " + df_inv["stato_pagamento"].fillna("emessa")
 
     # =========================
     # Helper per aggiornare lo stato fattura
