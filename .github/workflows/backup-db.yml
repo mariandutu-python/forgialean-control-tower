@@ -3,10 +3,10 @@ name: Database Backup
 on:
   schedule:
     - cron: '0 2 * * *'  # Ogni notte alle 2:00 AM UTC
-  workflow_dispatch:  # Permette esecuzione manuale
+  workflow_dispatch:      # Permette esecuzione manuale
 
 permissions:
-  contents: write  # <--- fondamentale per permettere il push
+  contents: write         # Permette al GITHUB_TOKEN di fare push
 
 jobs:
   backup:
@@ -31,6 +31,7 @@ jobs:
         run: |
           git config user.name "GitHub Actions Bot"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          git pull --rebase origin main
           git add db_backups/
           git diff --quiet && git diff --staged --quiet || git commit -m "automated DB backup $(date +'%Y-%m-%d %H:%M')"
-          git push
+          git push origin main
