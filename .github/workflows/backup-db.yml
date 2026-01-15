@@ -35,4 +35,4 @@ jobs:
           git reset --hard origin/main
           git add db_backups/
           git diff --quiet && git diff --staged --quiet || git commit -m "automated DB backup $(date +'%Y-%m-%d %H:%M')"
-          git push origin main
+          git push origin main --force-with-lease
