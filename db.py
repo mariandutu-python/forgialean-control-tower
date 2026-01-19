@@ -400,6 +400,73 @@ class CashflowEvent(SQLModel, table=True):
 
 
 # =========================
+# ESTENSIONI CRM TIPO KEAP (NO ABBONAMENTI)
+# =========================
+
+class Company(SQLModel, table=True):
+    """Aziende (account) a cui possono essere collegati i Client (contatti)."""
+    company_id: Optional[int] = Field(default=None, primary_key=True)
+    nome: str
+    piva: Optional[str] = None
+    cod_fiscale: Optional[str] = None
+    settore: Optional[str] = None
+    paese: Optional[str] = None
+    indirizzo: Optional[str] = None
+    cap: Optional[str] = None
+    comune: Optional[str] = None
+    provincia: Optional[str] = None
+    telefono: Optional[str] = None
+    sito_web: Optional[str] = None
+    note: Optional[str] = None
+
+
+class Tag(SQLModel, table=True):
+    """Tag per segmentare contatti e guidare automazioni (stile Keap)."""
+    tag_id: Optional[int] = Field(default=None, primary_key=True)
+    nome: str
+    categoria: Optional[str] = None  # es. "Lead Source", "Interesse", "Stato Funnel"
+    descrizione: Optional[str] = None
+    colore: Optional[str] = None
+
+
+class ContactTag(SQLModel, table=True):
+    """Associazione Many-to-Many contatto <-> tag."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    contact_id: int = Field(foreign_key="client.client_id")
+    tag_id: int = Field(foreign_key="tag.tag_id")
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class Campaign(SQLModel, table=True):
+    """Campagne di marketing/automazione collegate ai contatti tramite tag."""
+    campaign_id: Optional[int] = Field(default=None, primary_key=True)
+    nome: str
+    tipo: Optional[str] = None  # nurture, promo, webinar, onboarding, ecc.
+    stato: Optional[str] = None  # attiva, bozza, sospesa, archiviata
+    data_inizio: Optional[date] = None
+    data_fine: Optional[date] = None
+    note: Optional[str] = None
+
+    # metriche base
+    iscritti: int = 0
+    email_inviate: int = 0
+    aperture: int = 0
+    click: int = 0
+    conversioni: int = 0
+
+
+class CampaignEvent(SQLModel, table=True):
+    """Eventi logici di una campagna (semplificato, utile per future automazioni)."""
+    event_id: Optional[int] = Field(default=None, primary_key=True)
+    campaign_id: int = Field(foreign_key="campaign.campaign_id")
+
+    tipo: str  # es. "email_send", "tag_applied", "wait", "webhook"
+    nome: Optional[str] = None
+    ordine: int = 0
+    configurazione_json: Optional[str] = None  # parametri/condizioni dell'evento
+
+
+# =========================
 # INIT & SESSION
 # =========================
 
