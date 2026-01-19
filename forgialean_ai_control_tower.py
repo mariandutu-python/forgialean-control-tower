@@ -3464,7 +3464,7 @@ def page_crm_sales():
         if st.button("🔔 Invia agenda di oggi su Telegram"):
             try:
                 msg = build_agenda_oggi_message(df_agenda_show)
-                send_agenda_oggi_telegram(msg)  # <<< adegua la firma se diversa
+                send_agenda_oggi_telegram()  # <<< adegua la firma se diversa
                 st.success("Agenda di oggi inviata su Telegram (se ci sono azioni).")
             except Exception as e:
                 st.error(f"Errore invio agenda su Telegram: {e}")
