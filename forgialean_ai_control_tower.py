@@ -2240,6 +2240,13 @@ def page_crm_sales():
         with get_session() as session:
             opp = session.get(Opportunity, opp_id)
             client = session.get(Client, opp.client_id) if opp else None
+            tasks_opp = []
+            if opp:
+                tasks_opp = session.exec(
+                    select(CrmTask)
+                    .where(CrmTask.opportunity_id == opp.opportunity_id)
+                    .order_by(CrmTask.data_scadenza.desc())
+                ).all()
 
         if opp:
             st.subheader(f"📌 {opp.nome_opportunita}")
@@ -2285,7 +2292,7 @@ def page_crm_sales():
 
             if submitted_task:
                 if not titolo_task.strip():
-                    st.warning("Il titolo attività è obbligatorio.")
+                    st.warning("La **titolo** attività è obbligatoria.")
                 else:
                     with get_session() as session:
                         new_task = CrmTask(
@@ -2301,6 +2308,22 @@ def page_crm_sales():
                         session.commit()
                     st.success("Attività creata con successo.")
                     st.rerun()
+
+            # --- LISTA ATTIVITÀ COLLEGATE ---
+            st.markdown("### 📚 Attività collegate")
+
+            if not tasks_opp:
+                st.info("Nessuna attività presente su questa opportunità.")
+            else:
+                for t in tasks_opp:
+                    stato_label = "✅ FATTO" if t.stato == "fatto" else "🟡 DA FARE"
+                    riga = f"- {t.data_scadenza}"
+                    if t.ora_scadenza:
+                        riga += f" ({t.ora_scadenza})"
+                    riga += f" - {t.titolo} [{t.tipo or 'attività'}] — {stato_label}"
+                    st.write(riga)
+                    if t.note:
+                        st.caption(t.note)
 
             if st.button("← Torna alla lista CRM"):
                 st.query_params.clear()
