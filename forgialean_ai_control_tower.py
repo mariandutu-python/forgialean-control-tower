@@ -42,6 +42,7 @@ from db import (
     Expense,
     CashflowBudget, 
     CashflowEvent,
+    CrmTask,
 )
 
 from cache_functions import (
@@ -2364,6 +2365,44 @@ def page_crm_sales():
                 )
         else:
             st.info("Nessun dato UTM disponibile sui lead.")
+    # =========================
+    # ATTIVITÀ DI OGGI (TASK CRM)
+    # =========================
+    st.markdown("---")
+    st.subheader("✅ Attività di oggi")
+
+    oggi = date.today()
+
+    with get_session() as session:
+        tasks_oggi = session.exec(
+            select(CrmTask)
+            .where(CrmTask.data_scadenza <= oggi)
+            .where(CrmTask.stato == "da_fare")
+            .order_by(CrmTask.data_scadenza)
+        ).all()
+
+        if not tasks_oggi:
+            st.info("Nessuna attività da fare oggi.")
+        else:
+            for t in tasks_oggi:
+                opp = session.get(Opportunity, t.opportunity_id)
+                client = session.get(Client, opp.client_id) if opp else None
+
+                label = f"{t.data_scadenza} - {t.titolo}"
+                if t.tipo:
+                    label += f" ({t.tipo})"
+                if client:
+                    label += f" | Cliente: {client.ragione_sociale}"
+                if opp:
+                    label += f" | Opp: {opp.nome_opportunita}"
+
+                done = st.checkbox(label, key=f"task_{t.task_id}")
+                if done:
+                    t.stato = "fatto"
+                    t.updated_at = datetime.utcnow()
+                    session.add(t)
+                    session.commit()
+                    st.rerun()
 
     # =========================
     # VISTA / FILTRI OPPORTUNITÀ
