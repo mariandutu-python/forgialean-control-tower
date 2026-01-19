@@ -38,7 +38,7 @@ class Client(SQLModel, table=True):
     data_creazione: Optional[date] = None
     stato_cliente: Optional[str] = None  # attivo, prospect, perso
 
-    # ▼ NUOVI CAMPI PER FATTURAZIONE ELETTRONICA ▼
+    # ▼ FATTURAZIONE ELETTRONICA ▼
     indirizzo: Optional[str] = None       # Via e numero civico
     cap: Optional[str] = None
     comune: Optional[str] = None
@@ -88,6 +88,29 @@ class Opportunity(SQLModel, table=True):
     # telefono specifico dell’opportunità (es. form OEE / call)
     telefono_contatto: Optional[str] = Field(default=None)
 
+    # relationship con task CRM
+    tasks: list["CrmTask"] = Relationship(back_populates="opportunity")
+
+
+class CrmTask(SQLModel, table=True):
+    """Task operativi collegati alle opportunità CRM."""
+    task_id: Optional[int] = Field(default=None, primary_key=True)
+    opportunity_id: int = Field(foreign_key="opportunity.opportunity_id")
+
+    titolo: str
+    tipo: Optional[str] = None  # es. "chiamata", "email", "demo"
+    data_scadenza: date
+    ora_scadenza: Optional[str] = None  # opzionale, formato "HH:MM"
+
+    stato: str = "da_fare"  # "da_fare", "fatto", "posticipato"
+    note: Optional[str] = None
+
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+    opportunity: Optional[Opportunity] = Relationship(back_populates="tasks")
+
+
 class Invoice(SQLModel, table=True):
     invoice_id: Optional[int] = Field(default=None, primary_key=True)
     client_id: int = Field(foreign_key="client.client_id")
@@ -115,6 +138,7 @@ class Invoice(SQLModel, table=True):
     def amount_open(self) -> float:
         return (self.importo_totale or 0.0) - self.amount_paid
 
+
 class Payment(SQLModel, table=True):
     payment_id: Optional[int] = Field(default=None, primary_key=True)
     invoice_id: int = Field(foreign_key="invoice.invoice_id")
@@ -124,6 +148,7 @@ class Payment(SQLModel, table=True):
     note: Optional[str] = None
 
     invoice: Optional[Invoice] = Relationship(back_populates="payments")
+
 
 class ProjectCommessa(SQLModel, table=True):
     commessa_id: Optional[int] = Field(default=None, primary_key=True)
@@ -206,6 +231,7 @@ class LoginEvent(SQLModel, table=True):
         sa_column=Column(DateTime(timezone=True))
     )
 
+
 class TaxConfig(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     year: int
@@ -246,6 +272,7 @@ class InvoiceTransmission(SQLModel, table=True):
     sdi_status: str      # uploaded / sent / delivered / rejected
     sdi_message: Optional[str] = None
     sdi_protocol: Optional[str] = None
+
 
 class Vendor(SQLModel, table=True):
     """Fornitori (contabilità passiva)"""
@@ -302,8 +329,9 @@ class Expense(SQLModel, table=True):
     data_pagamento: Optional[date] = None
     note: Optional[str] = None
 
+
 class CashflowBudget(SQLModel, table=True):
-    id: int | None = Field(default=None, primary_key=True)
+    id: Optional[int] = Field(default=None, primary_key=True)
     anno: int = Field(index=True)
     mese: int = Field(index=True)  # 1-12
     categoria: str = Field(index=True)  # es. "Entrate clienti", "Costi fissi", "Fisco/INPS"
@@ -311,14 +339,15 @@ class CashflowBudget(SQLModel, table=True):
 
 
 class CashflowEvent(SQLModel, table=True):
-    id: int | None = Field(default=None, primary_key=True)
+    id: Optional[int] = Field(default=None, primary_key=True)
     data: date = Field(index=True)
     tipo: str = Field(index=True)  # "entrata" / "uscita"
     categoria: str = Field(index=True)
-    descrizione: str | None = None
+    descrizione: Optional[str] = None
     importo: float  # + entrata, - uscita
-    client_id: int | None = Field(default=None, foreign_key="client.client_id")
-    commessa_id: int | None = Field(default=None, foreign_key="projectcommessa.commessa_id")
+    client_id: Optional[int] = Field(default=None, foreign_key="client.client_id")
+    commessa_id: Optional[int] = Field(default=None, foreign_key="projectcommessa.commessa_id")
+
 
 # =========================
 # INIT & SESSION
@@ -328,17 +357,17 @@ def init_db():
     """Crea le tabelle e ripristina backup se disponibile"""
     from pathlib import Path
     import shutil
-    
+
     BACKUP_LATEST = Path("db_backups/forgialean_latest.db")
     DB_PATH = Path(SQLITE_FILE_NAME)
-    
+
     # Se esiste backup e DB è vuoto/mancante, ripristina
     if BACKUP_LATEST.exists() and (not DB_PATH.exists() or DB_PATH.stat().st_size < 1000):
         print("🔄 Ripristino backup database...")
         DB_PATH.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(BACKUP_LATEST, DB_PATH)
         print(f"✅ Database ripristinato da {BACKUP_LATEST}")
-    
+
     # Crea tabelle se non esistono
     SQLModel.metadata.create_all(engine)
 
@@ -346,14 +375,14 @@ def init_db():
 def migrate_db():
     """Esegue migrazioni DB se necessario (compatibile con Streamlit Cloud)"""
     with engine.connect() as conn:
-        # Controlla colonne esistenti
+        # Controlla colonne esistenti su opportunity
         result = conn.exec_driver_sql(
             "PRAGMA table_info(opportunity);"
         ).fetchall()
-        
+
         column_names = [row[1] for row in result]  # row[1] è il nome colonna
-        
-        # Lista di colonne da aggiungere se mancano
+
+        # Colonne da aggiungere se mancano
         migrations = [
             ("telefono_contatto", "TEXT"),
             ("flame_points", "INTEGER DEFAULT 0"),
@@ -368,7 +397,7 @@ def migrate_db():
             ("date_contract_sent", "DATE"),
             ("date_contract_signed", "DATE"),
         ]
-        
+
         for col_name, col_type in migrations:
             if col_name not in column_names:
                 try:
@@ -381,6 +410,19 @@ def migrate_db():
                     print(f"⚠️ Errore aggiunta colonna {col_name}: {e}")
             else:
                 print(f"ℹ️ Colonna {col_name} già presente")
+
+        # Crea tabella crm_task se non esiste
+        result_tasks = conn.exec_driver_sql(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='crmtask';"
+        ).fetchone()
+
+        if not result_tasks:
+            try:
+                SQLModel.metadata.create_all(engine)
+                print("✅ Tabella CrmTask creata (se non esisteva)")
+            except Exception as e:
+                print(f"⚠️ Errore creazione tabella CrmTask: {e}")
+
 
 def get_session() -> Session:
     """Restituisce una nuova sessione SQLModel"""
