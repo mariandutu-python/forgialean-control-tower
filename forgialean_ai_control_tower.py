@@ -2501,6 +2501,7 @@ def page_crm_sales():
     df_opps["Cliente"] = df_opps["client_id"].map(client_map).fillna(
         df_opps["client_id"]
     )
+
     # === Lead scoring da flame_points ===
     df_opps["flame_points"] = df_opps.get("flame_points", 0).fillna(0)
     df_opps["Lead_temperature"] = df_opps["flame_points"].apply(get_lead_temperature)
@@ -2523,10 +2524,16 @@ def page_crm_sales():
     if filtro_temp:
         df_view = df_view[df_view["Lead_temperature"].isin(filtro_temp)]
 
-    # Ordina: prima per fiamme, poi per data prossima azione (più vicina)
-    df_view["data_prossima_azione"] = pd.to_datetime(
-        df_view.get("data_prossima_azione")
+    # Flag ritardo prossima azione
+    oggi = pd.Timestamp(date.today())
+    df_view["data_prossima_azione"] = pd.to_datetime(df_view.get("data_prossima_azione"))
+    df_view["in_ritardo"] = df_view["data_prossima_azione"].notna() & (
+        df_view["data_prossima_azione"] < oggi
     )
+    # Flag senza prossima azione pianificata
+    df_view["senza_azione"] = df_view["data_prossima_azione"].isna()
+
+    # Ordina: prima per fiamme, poi per data prossima azione (più vicina)
     df_view = df_view.sort_values(
         by=["flame_points", "data_prossima_azione"],
         ascending=[False, True],
@@ -2554,17 +2561,29 @@ def page_crm_sales():
     ]
     cols_da_mostrare = [c for c in cols_da_mostrare if c in df_view.columns]
 
-    st.dataframe(
-        df_view[cols_da_mostrare].rename(
-            columns={
-                "flame_points": "Fiamme",
-                "Lead_temperature": "Temperatura lead",
-                "data_prossima_azione": "Data prossima azione",
-                "tipo_prossima_azione": "Tipo prossima azione",
-            }
-        ),
-        use_container_width=True,
+    df_show = df_view[cols_da_mostrare + ["in_ritardo", "senza_azione"]].copy()
+
+    df_show = df_show.rename(
+        columns={
+            "flame_points": "Fiamme",
+            "Lead_temperature": "Temperatura lead",
+            "data_prossima_azione": "Data prossima azione",
+            "tipo_prossima_azione": "Tipo prossima azione",
+        }
     )
+
+    def highlight_row(row):
+        # Bollente o Caldo e senza azione -> giallo
+        if row.get("Temperatura lead") in ["Bollente", "Caldo"] and row.get("senza_azione"):
+            return ["background-color: #FFF3CD"] * len(row)
+        # In ritardo -> rosso chiaro
+        if row.get("in_ritardo"):
+            return ["background-color: #F8D7DA"] * len(row)
+        return [""] * len(row)
+
+    styled = df_show.style.apply(highlight_row, axis=1)
+
+    st.dataframe(styled, use_container_width=True)
 
     # =========================
     # REPORT CAMPAGNE (UTM)
