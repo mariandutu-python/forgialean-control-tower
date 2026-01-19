@@ -2446,6 +2446,7 @@ def page_crm_sales():
     oggi = date.today()
 
     with get_session() as session:
+        # Task da fare, scaduti o in scadenza oggi
         tasks_oggi = session.exec(
             select(CrmTask)
             .where(CrmTask.data_scadenza <= oggi)
@@ -2457,28 +2458,58 @@ def page_crm_sales():
         else:
             df_tasks = pd.DataFrame([t.__dict__ for t in tasks_oggi])
 
-            # porta dentro le opportunità per avere temperatura
+            # Porta dentro le opportunità per avere temperatura, priorità, valore
             opps = session.exec(select(Opportunity)).all()
             df_opps_for_tasks = pd.DataFrame([o.__dict__ for o in opps])
-            df_opps_for_tasks["Lead_temperature"] = df_opps_for_tasks["flame_points"].apply(
-                get_lead_temperature
-            )
 
-            df_tasks = df_tasks.merge(
-                df_opps_for_tasks[["opportunity_id", "Lead_temperature"]],
-                left_on="opportunity_id",
-                right_on="opportunity_id",
-                how="left",
-            )
+            if not df_opps_for_tasks.empty:
+                # Calcolo temperatura da flame_points se presente
+                if "flame_points" in df_opps_for_tasks.columns:
+                    df_opps_for_tasks["Lead_temperature"] = df_opps_for_tasks["flame_points"].fillna(0).apply(
+                        get_lead_temperature
+                    )
 
-            # Ordine temperatura personalizzato
+                # Priorità coerente con il funnel
+                def compute_priority(row):
+                    if row.get("stato_opportunita") != "aperta":
+                        return "Chiusa"
+                    # in ritardo rispetto a oggi
+                    data_next = row.get("data_prossima_azione")
+                    if data_next and data_next < oggi:
+                        return "Critica"
+                    if row.get("Lead_temperature") in ["Bollente", "Caldo"] and not data_next:
+                        return "Alta"
+                    return "Normale"
+
+                df_opps_for_tasks["priorita"] = df_opps_for_tasks.apply(compute_priority, axis=1)
+
+                df_tasks = df_tasks.merge(
+                    df_opps_for_tasks[
+                        [
+                            "opportunity_id",
+                            "Lead_temperature",
+                            "priorita",
+                            "valore_stimato",
+                            "client_id",
+                        ]
+                    ],
+                    on="opportunity_id",
+                    how="left",
+                )
+
+            # Ordine custom priorità + temperatura + scadenza
+            priority_order = {"Critica": 0, "Alta": 1, "Normale": 2, "Chiusa": 3}
             temp_order = {"Bollente": 0, "Caldo": 1, "Tiepido": 2, "Freddo": 3}
+
+            df_tasks["priority_rank"] = df_tasks["priorita"].map(priority_order).fillna(4)
             df_tasks["temp_rank"] = df_tasks["Lead_temperature"].map(temp_order).fillna(4)
 
             df_tasks = df_tasks.sort_values(
-                by=["temp_rank", "data_scadenza"], ascending=[True, True]
+                by=["priority_rank", "temp_rank", "data_scadenza", "created_at"],
+                ascending=[True, True, True, True],
             )
 
+            # Render come checklist
             for _, t_row in df_tasks.iterrows():
                 t_id = int(t_row["task_id"])
                 t_obj = next(tt for tt in tasks_oggi if tt.task_id == t_id)
@@ -2486,13 +2517,25 @@ def page_crm_sales():
                 opp = session.get(Opportunity, t_obj.opportunity_id)
                 client = session.get(Client, opp.client_id) if opp else None
 
-                label = f"{t_obj.data_scadenza} - [{t_row.get('Lead_temperature', 'N/D')}] {t_obj.titolo}"
+                temp = t_row.get("Lead_temperature", "N/D")
+                prio = t_row.get("priorita", "N/D")
+                data_scad = t_obj.data_scadenza.strftime("%d/%m/%Y")
+
+                label_parts = [
+                    f"{data_scad}",
+                    f"[{prio}]",
+                    f"[{temp}]",
+                    t_obj.titolo,
+                ]
+
                 if t_obj.tipo:
-                    label += f" ({t_obj.tipo})"
+                    label_parts.append(f"({t_obj.tipo})")
                 if client:
-                    label += f" | Cliente: {client.ragione_sociale}"
+                    label_parts.append(f"| Cliente: {client.ragione_sociale}")
                 if opp:
-                    label += f" | Opp: {opp.nome_opportunita}"
+                    label_parts.append(f"| Opp: {opp.nome_opportunita}")
+
+                label = " ".join(label_parts)
 
                 done = st.checkbox(label, key=f"task_{t_obj.task_id}")
                 if done:
