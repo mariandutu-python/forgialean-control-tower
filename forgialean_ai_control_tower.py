@@ -3318,17 +3318,48 @@ def page_crm_sales():
 
     if "data_prossima_azione" in df_opps.columns:
         oggi = date.today()
+
+        # Copia base con prossime azioni presenti
         df_agenda = df_opps.copy()
         df_agenda = df_agenda.dropna(subset=["data_prossima_azione"])
         df_agenda = df_agenda[df_agenda["data_prossima_azione"] >= oggi]
-        df_agenda = df_agenda.sort_values("data_prossima_azione")
 
-        col_f1, col_f2, col_f3 = st.columns(3)
+        # Se non hai ancora Lead_temperature/priorita in df_opps, puoi calcolarli qui
+        if "flame_points" in df_agenda.columns and "Lead_temperature" not in df_agenda.columns:
+            df_agenda["Lead_temperature"] = df_agenda["flame_points"].fillna(0).apply(
+                get_lead_temperature
+            )
+
+        if "priorita" not in df_agenda.columns:
+            def compute_priority(row):
+                if row.get("stato_opportunita") != "aperta":
+                    return "Chiusa"
+                data_next = row.get("data_prossima_azione")
+                if data_next and data_next < oggi:
+                    return "Critica"
+                if row.get("Lead_temperature") in ["Bollente", "Caldo"] and not data_next:
+                    return "Alta"
+                return "Normale"
+
+            df_agenda["priorita"] = df_agenda.apply(compute_priority, axis=1)
+
+        # Ordine base: priorità + data
+        priority_order = {"Critica": 0, "Alta": 1, "Normale": 2, "Chiusa": 3}
+        df_agenda["priority_rank"] = df_agenda["priorita"].map(priority_order).fillna(4)
+
+        df_agenda = df_agenda.sort_values(
+            by=["priority_rank", "data_prossima_azione"],
+            ascending=[True, True],
+        )
+
+        # ===== FILTRI =====
+        col_f1, col_f2, col_f3, col_f4 = st.columns(4)
+
         with col_f1:
             owner_opt = ["Tutti"] + sorted(
                 df_agenda["owner"].dropna().astype(str).unique().tolist()
             )
-            f_owner_ag = st.selectbox("Filtro owner agenda", owner_opt)
+            f_owner_ag = st.selectbox("Filtro owner", owner_opt)
 
         with col_f2:
             tipo_opt = ["Tutti"] + sorted(
@@ -3353,6 +3384,10 @@ def page_crm_sales():
                 camp_opt_ag = ["Tutte"]
             f_camp_ag = st.selectbox("Filtro campagna (UTM)", camp_opt_ag)
 
+        with col_f4:
+            prio_opt = ["Tutte"] + ["Critica", "Alta", "Normale", "Chiusa"]
+            f_prio_ag = st.selectbox("Filtro priorità", prio_opt)
+
         df_agenda_f = df_agenda.copy()
         if f_owner_ag != "Tutti":
             df_agenda_f = df_agenda_f[df_agenda_f["owner"] == f_owner_ag]
@@ -3368,7 +3403,10 @@ def page_crm_sales():
                 ]
             else:
                 df_agenda_f = df_agenda_f[df_agenda_f["utm_campaign"] == f_camp_ag]
+        if f_prio_ag != "Tutte":
+            df_agenda_f = df_agenda_f[df_agenda_f["priorita"] == f_prio_ag]
 
+        # ===== TABELLA AGENDA =====
         cols_agenda = [
             "opportunity_id",
             "data_prossima_azione",
@@ -3379,15 +3417,59 @@ def page_crm_sales():
             "fase_pipeline",
             "probabilita",
             "owner",
+            "Temperatura lead" if "Temperatura lead" in df_agenda_f.columns else "Lead_temperature",
+            "priorita",
         ]
+        # gestisce la differenza eventuale tra colonna rinominata e originale
         cols_agenda = [c for c in cols_agenda if c in df_agenda_f.columns]
-        df_agenda_f = df_agenda_f[cols_agenda]
-        st.dataframe(df_agenda_f, hide_index=True, width="stretch")
+        df_agenda_show = df_agenda_f[cols_agenda].copy()
+
+        # rinomina colonna temperatura se stai usando quella originale
+        if "Lead_temperature" in df_agenda_show.columns:
+            df_agenda_show = df_agenda_show.rename(
+                columns={"Lead_temperature": "Temperatura lead"}
+            )
+
+        st.dataframe(df_agenda_show, hide_index=True, use_container_width=True)
+
+        # ===== INVIO AGENDA DI OGGI SU TELEGRAM =====
+        def build_agenda_oggi_message(df: pd.DataFrame) -> str:
+            if df.empty:
+                return "Nessuna attività in agenda per oggi."
+
+            righe = ["📅 *Agenda di oggi*"]
+            df_today = df[df["data_prossima_azione"] == oggi]
+
+            if df_today.empty:
+                righe.append("_Nessuna azione pianificata per oggi._")
+                return "\n".join(righe)
+
+            for _, r in df_today.iterrows():
+                data_str = r["data_prossima_azione"].strftime("%d/%m")
+                cliente = r.get("Cliente", "")
+                opp_name = r.get("nome_opportunita", "")
+                tipo = r.get("tipo_prossima_azione", "")
+                note = r.get("note_prossima_azione", "")
+                temp = r.get("Temperatura lead", r.get("Lead_temperature", "N/D"))
+                prio = r.get("priorita", "N/D")
+
+                line = f"- {data_str} [{prio}][{temp}] {cliente} – {opp_name} ({tipo})"
+                if note:
+                    line += f" – {note}"
+
+                righe.append(line)
+
+            return "\n".join(righe)
 
         if st.button("🔔 Invia agenda di oggi su Telegram"):
-            send_agenda_oggi_telegram()
-            st.success("Agenda di oggi inviata su Telegram (se ci sono azioni).")
+            try:
+                msg = build_agenda_oggi_message(df_agenda_show)
+                send_agenda_oggi_telegram(msg)  # <<< adegua la firma se diversa
+                st.success("Agenda di oggi inviata su Telegram (se ci sono azioni).")
+            except Exception as e:
+                st.error(f"Errore invio agenda su Telegram: {e}")
 
+        # ===== CALENDARIO PROSSIME AZIONI =====
         st.subheader("📅 Calendario prossime azioni")
 
         base_url = "https://forgialean.streamlit.app"
@@ -3417,13 +3499,13 @@ def page_crm_sales():
         }
 
         calendar(events=events, options=options, key="crm_calendar")
+
     else:
         st.info(
             "Per usare l’agenda venditore aggiungi i campi 'data_prossima_azione', "
             "'tipo_prossima_azione' e 'note_prossima_azione' al modello Opportunity."
         )
         st.stop()
-
     # =========================
     # SEZIONE EDIT / DELETE (SOLO ADMIN)
     # =========================
