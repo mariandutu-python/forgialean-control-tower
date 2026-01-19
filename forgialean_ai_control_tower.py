@@ -2567,6 +2567,18 @@ def page_crm_sales():
     # Flag senza prossima azione pianificata
     df_view["senza_azione"] = df_view["data_prossima_azione"].isna()
 
+    # Priorità opportunità (testuale)
+    def compute_priority(row):
+        if row.get("stato_opportunita") != "aperta":
+            return "Chiusa"
+        if row.get("in_ritardo"):
+            return "Critica"
+        if row.get("Lead_temperature") in ["Bollente", "Caldo"] and row.get("senza_azione"):
+            return "Alta"
+        return "Normale"
+
+    df_view["priorita"] = df_view.apply(compute_priority, axis=1)
+
     # Ordina: prima per fiamme (se spuntato), poi per data prossima azione
     sort_cols = ["data_prossima_azione"]
     ascending = [True]
@@ -2589,6 +2601,7 @@ def page_crm_sales():
         "nome_opportunita",
         "fase_pipeline",
         "stato_opportunita",
+        "priorita",
         "valore_stimato",
         "probabilita",
         "flame_points",
@@ -2610,12 +2623,12 @@ def page_crm_sales():
     )
 
     def highlight_row(row):
-        # Bollente o Caldo e senza azione -> giallo
-        if row.get("Temperatura lead") in ["Bollente", "Caldo"] and row.get("senza_azione"):
-            return ["background-color: #FFF3CD"] * len(row)
-        # In ritardo -> rosso chiaro
-        if row.get("in_ritardo"):
+        # Critica: azione in ritardo -> rosso chiaro
+        if row.get("priorita") == "Critica":
             return ["background-color: #F8D7DA"] * len(row)
+        # Alta: lead caldo/bollente senza prossima azione -> giallo
+        if row.get("priorita") == "Alta":
+            return ["background-color: #FFF3CD"] * len(row)
         return [""] * len(row)
 
     styled = df_show.style.apply(highlight_row, axis=1)
