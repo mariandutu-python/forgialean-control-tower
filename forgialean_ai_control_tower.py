@@ -2256,6 +2256,52 @@ def page_crm_sales():
             st.write(f"**Data azione:** {getattr(opp, 'data_prossima_azione', 'N/A')}")
             st.write(f"**Note:** {getattr(opp, 'note_prossima_azione', '')}")
 
+            # --- FORM NUOVA ATTIVITÀ SU QUESTA OPPORTUNITÀ ---
+            st.markdown("---")
+            st.subheader("📝 Nuova attività su questa opportunità")
+
+            with st.form(f"new_task_opp_{opp.opportunity_id}"):
+                col_t1, col_t2 = st.columns(2)
+                with col_t1:
+                    titolo_task = st.text_input("Titolo attività", "Chiamata di follow-up")
+                    tipo_task = st.selectbox(
+                        "Tipo attività",
+                        ["chiamata", "email", "demo", "riunione", "altro"],
+                        index=0,
+                    )
+                with col_t2:
+                    data_scadenza = st.date_input(
+                        "Data scadenza",
+                        value=date.today(),
+                    )
+                    ora_scadenza = st.text_input(
+                        "Ora (opzionale, formato HH:MM)",
+                        value="",
+                    )
+
+                note_task = st.text_area("Note attività", "")
+
+                submitted_task = st.form_submit_button("💾 Salva attività")
+
+            if submitted_task:
+                if not titolo_task.strip():
+                    st.warning("Il titolo attività è obbligatorio.")
+                else:
+                    with get_session() as session:
+                        new_task = CrmTask(
+                            opportunity_id=opp.opportunity_id,
+                            titolo=titolo_task.strip(),
+                            tipo=tipo_task,
+                            data_scadenza=data_scadenza,
+                            ora_scadenza=ora_scadenza.strip() or None,
+                            stato="da_fare",
+                            note=note_task.strip() or None,
+                        )
+                        session.add(new_task)
+                        session.commit()
+                    st.success("Attività creata con successo.")
+                    st.rerun()
+
             if st.button("← Torna alla lista CRM"):
                 st.query_params.clear()
                 st.rerun()
