@@ -2523,8 +2523,14 @@ def page_crm_sales():
     if filtro_temp:
         df_view = df_view[df_view["Lead_temperature"].isin(filtro_temp)]
 
-    if ordina_per_fiamme:
-        df_view = df_view.sort_values("flame_points", ascending=False)
+    # Ordina: prima per fiamme, poi per data prossima azione (più vicina)
+    df_view["data_prossima_azione"] = pd.to_datetime(
+        df_view.get("data_prossima_azione")
+    )
+    df_view = df_view.sort_values(
+        by=["flame_points", "data_prossima_azione"],
+        ascending=[False, True],
+    )
 
     # Se ho opp_id da querystring, salvo la riga selezionata (sul dataframe filtrato)
     selected_opp = None
@@ -2532,6 +2538,7 @@ def page_crm_sales():
         df_match = df_view[df_view["opportunity_id"] == opp_id]
         if not df_match.empty:
             selected_opp = df_match.iloc[0]
+
     cols_da_mostrare = [
         "opportunity_id",
         "Cliente",
@@ -2552,6 +2559,8 @@ def page_crm_sales():
             columns={
                 "flame_points": "Fiamme",
                 "Lead_temperature": "Temperatura lead",
+                "data_prossima_azione": "Data prossima azione",
+                "tipo_prossima_azione": "Tipo prossima azione",
             }
         ),
         use_container_width=True,
