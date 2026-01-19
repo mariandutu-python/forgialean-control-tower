@@ -2450,33 +2450,59 @@ def page_crm_sales():
             select(CrmTask)
             .where(CrmTask.data_scadenza <= oggi)
             .where(CrmTask.stato == "da_fare")
-            .order_by(CrmTask.data_scadenza)
         ).all()
 
         if not tasks_oggi:
             st.info("Nessuna attività da fare oggi.")
         else:
-            for t in tasks_oggi:
-                opp = session.get(Opportunity, t.opportunity_id)
+            df_tasks = pd.DataFrame([t.__dict__ for t in tasks_oggi])
+
+            # porta dentro le opportunità per avere temperatura
+            opps = session.exec(select(Opportunity)).all()
+            df_opps_for_tasks = pd.DataFrame([o.__dict__ for o in opps])
+            df_opps_for_tasks["Lead_temperature"] = df_opps_for_tasks["flame_points"].apply(
+                get_lead_temperature
+            )
+
+            df_tasks = df_tasks.merge(
+                df_opps_for_tasks[["opportunity_id", "Lead_temperature"]],
+                left_on="opportunity_id",
+                right_on="opportunity_id",
+                how="left",
+            )
+
+            # Ordine temperatura personalizzato
+            temp_order = {"Bollente": 0, "Caldo": 1, "Tiepido": 2, "Freddo": 3}
+            df_tasks["temp_rank"] = df_tasks["Lead_temperature"].map(temp_order).fillna(4)
+
+            df_tasks = df_tasks.sort_values(
+                by=["temp_rank", "data_scadenza"], ascending=[True, True]
+            )
+
+            for _, t_row in df_tasks.iterrows():
+                t_id = int(t_row["task_id"])
+                t_obj = next(tt for tt in tasks_oggi if tt.task_id == t_id)
+
+                opp = session.get(Opportunity, t_obj.opportunity_id)
                 client = session.get(Client, opp.client_id) if opp else None
 
-                label = f"{t.data_scadenza} - {t.titolo}"
-                if t.tipo:
-                    label += f" ({t.tipo})"
+                label = f"{t_obj.data_scadenza} - [{t_row.get('Lead_temperature', 'N/D')}] {t_obj.titolo}"
+                if t_obj.tipo:
+                    label += f" ({t_obj.tipo})"
                 if client:
                     label += f" | Cliente: {client.ragione_sociale}"
                 if opp:
                     label += f" | Opp: {opp.nome_opportunita}"
 
-                done = st.checkbox(label, key=f"task_{t.task_id}")
+                done = st.checkbox(label, key=f"task_{t_obj.task_id}")
                 if done:
-                    t.stato = "fatto"
-                    t.updated_at = datetime.utcnow()
-                    session.add(t)
+                    t_obj.stato = "fatto"
+                    t_obj.updated_at = datetime.utcnow()
+                    session.add(t_obj)
                     session.commit()
 
                     # 🔄 aggiorna la prossima azione per l'opportunità di questo task
-                    sync_next_action_from_tasks(t.opportunity_id)
+                    sync_next_action_from_tasks(t_obj.opportunity_id)
 
                     st.rerun()
     # =========================
