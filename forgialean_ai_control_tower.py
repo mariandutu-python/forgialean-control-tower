@@ -254,6 +254,17 @@ def render_flame_badge(flame_points: int):
     </div>
     """
     return html
+def get_lead_temperature(flame_points: int | None) -> str:
+    """Ritorna etichetta temperatura lead in base alle fiamme."""
+    fp = flame_points or 0
+    if fp >= 100:
+        return "Bollente"
+    elif fp >= 50:
+        return "Caldo"
+    elif fp >= 20:
+        return "Tiepido"
+    else:
+        return "Freddo"
 
 # === LETTURA SECRETS ===
 TELEGRAM_BOT_TOKEN = st.secrets["tracking"]["TELEGRAM_BOT_TOKEN"]
@@ -2382,13 +2393,61 @@ def page_crm_sales():
     df_opps["Cliente"] = df_opps["client_id"].map(client_map).fillna(
         df_opps["client_id"]
     )
+    # === Lead scoring da flame_points ===
+    df_opps["flame_points"] = df_opps.get("flame_points", 0).fillna(0)
+    df_opps["Lead_temperature"] = df_opps["flame_points"].apply(get_lead_temperature)
+    st.markdown("### 🔥 Priorità lead (fiamme)")
 
-    # Se ho opp_id da querystring, salvo la riga selezionata
+    col_f1, col_f2 = st.columns(2)
+    with col_f1:
+        filtro_temp = st.multiselect(
+            "Mostra temperature lead",
+            options=["Bollente", "Caldo", "Tiepido", "Freddo"],
+            default=["Bollente", "Caldo", "Tiepido", "Freddo"],
+        )
+    with col_f2:
+        ordina_per_fiamme = st.checkbox(
+            "Ordina per fiamme (lead più caldi in alto)",
+            value=True,
+        )
+
+    df_view = df_opps.copy()
+    if filtro_temp:
+        df_view = df_view[df_view["Lead_temperature"].isin(filtro_temp)]
+
+    if ordina_per_fiamme:
+        df_view = df_view.sort_values("flame_points", ascending=False)
+
+    # Se ho opp_id da querystring, salvo la riga selezionata (sul dataframe filtrato)
     selected_opp = None
-    if opp_id is not None and not df_opps.empty:
-        df_match = df_opps[df_opps["opportunity_id"] == opp_id]
+    if opp_id is not None and not df_view.empty:
+        df_match = df_view[df_view["opportunity_id"] == opp_id]
         if not df_match.empty:
             selected_opp = df_match.iloc[0]
+    cols_da_mostrare = [
+        "opportunity_id",
+        "Cliente",
+        "nome_opportunita",
+        "fase_pipeline",
+        "stato_opportunita",
+        "valore_stimato",
+        "probabilita",
+        "flame_points",
+        "Lead_temperature",
+        "data_prossima_azione",
+        "tipo_prossima_azione",
+    ]
+    cols_da_mostrare = [c for c in cols_da_mostrare if c in df_view.columns]
+
+    st.dataframe(
+        df_view[cols_da_mostrare].rename(
+            columns={
+                "flame_points": "Fiamme",
+                "Lead_temperature": "Temperatura lead",
+            }
+        ),
+        use_container_width=True,
+    )
 
     # =========================
     # REPORT CAMPAGNE (UTM)
