@@ -2532,18 +2532,23 @@ def page_crm_sales():
 
     # Flag ritardo prossima azione
     oggi = pd.Timestamp(date.today())
-    df_view["data_prossima_azione"] = pd.to_datetime(df_view.get("data_prossima_azione"))
+    df_view["data_prossima_azione"] = pd.to_datetime(
+        df_view.get("data_prossima_azione")
+    )
     df_view["in_ritardo"] = df_view["data_prossima_azione"].notna() & (
         df_view["data_prossima_azione"] < oggi
     )
     # Flag senza prossima azione pianificata
     df_view["senza_azione"] = df_view["data_prossima_azione"].isna()
 
-    # Ordina: prima per fiamme, poi per data prossima azione (più vicina)
-    df_view = df_view.sort_values(
-        by=["flame_points", "data_prossima_azione"],
-        ascending=[False, True],
-    )
+    # Ordina: prima per fiamme (se spuntato), poi per data prossima azione
+    sort_cols = ["data_prossima_azione"]
+    ascending = [True]
+    if ordina_per_fiamme:
+        sort_cols = ["flame_points"] + sort_cols
+        ascending = [False] + ascending
+
+    df_view = df_view.sort_values(by=sort_cols, ascending=ascending)
 
     # Se ho opp_id da querystring, salvo la riga selezionata (sul dataframe filtrato)
     selected_opp = None
@@ -2905,6 +2910,9 @@ def page_crm_sales():
             f"{durata_media:.1f} giorni",
         )
 
+    # =========================
+    # FILTRI OPPORTUNITÀ
+    # =========================
     col_c, col1, col2 = st.columns(3)
     with col_c:
         clienti_opt = ["Tutti"] + sorted(
@@ -2976,7 +2984,7 @@ def page_crm_sales():
                 st.write(f"Probabilità: {row['probabilita']} %")
                 st.write(f"Data apertura: {row['data_apertura']}")
                 st.write(f"Data chiusura prevista: {row['data_chiusura_prevista']}")
-                st.write(f"📱 Telefono contatto: {row.get('telefono_contatto', '-')}") 
+                st.write(f"📱 Telefono contatto: {row.get('telefono_contatto', '-')}")
                 st.write(
                     f"Data prossima azione: {row.get('data_prossima_azione', '')}"
                 )
@@ -2986,6 +2994,7 @@ def page_crm_sales():
                 st.write(
                     f"Note prossima azione: {row.get('note_prossima_azione', '')}"
                 )
+                st.write(f"🔥 Fiamme: {row.get('flame_points', 0)}")
 
                 st.markdown("**Dati campagna (UTM)**")
                 st.write(f"utm_source: {row.get('utm_source', '')}")
@@ -2993,6 +3002,96 @@ def page_crm_sales():
                 st.write(f"utm_campaign: {row.get('utm_campaign', '')}")
                 st.write(f"utm_content: {row.get('utm_content', '')}")
 
+                # -------------------------
+                # Avanzamento rapido pipeline
+                # -------------------------
+                st.markdown("---")
+                st.markdown("**Avanzamento rapido pipeline**")
+
+                col_p1, col_p2, col_p3, col_p4 = st.columns(4)
+                with col_p1:
+                    if st.button(
+                        "➡ Offerta",
+                        key=f"to_offerta_{row['opportunity_id']}",
+                    ):
+                        with get_session() as session:
+                            opp_db = session.get(Opportunity, row["opportunity_id"])
+                            if opp_db:
+                                old_status = opp_db.stato_opportunita
+                                opp_db.fase_pipeline = "Offerta"
+                                opp_db.stato_opportunita = "aperta"
+                                session.add(opp_db)
+                                session.commit()
+                                track_generate_lead_from_crm(
+                                    opp_db,
+                                    new_status=opp_db.stato_opportunita or "aperta",
+                                    old_status=old_status,
+                                )
+                        st.rerun()
+
+                with col_p2:
+                    if st.button(
+                        "➡ Negoziazione",
+                        key=f"to_nego_{row['opportunity_id']}",
+                    ):
+                        with get_session() as session:
+                            opp_db = session.get(Opportunity, row["opportunity_id"])
+                            if opp_db:
+                                old_status = opp_db.stato_opportunita
+                                opp_db.fase_pipeline = "Negoziazione"
+                                opp_db.stato_opportunita = "aperta"
+                                session.add(opp_db)
+                                session.commit()
+                                track_generate_lead_from_crm(
+                                    opp_db,
+                                    new_status=opp_db.stato_opportunita or "aperta",
+                                    old_status=old_status,
+                                )
+                        st.rerun()
+
+                with col_p3:
+                    if st.button(
+                        "✅ Segna Vinta",
+                        key=f"to_won_{row['opportunity_id']}",
+                    ):
+                        with get_session() as session:
+                            opp_db = session.get(Opportunity, row["opportunity_id"])
+                            if opp_db:
+                                old_status = opp_db.stato_opportunita
+                                opp_db.fase_pipeline = "Vinta"
+                                opp_db.stato_opportunita = "vinta"
+                                session.add(opp_db)
+                                session.commit()
+                                track_generate_lead_from_crm(
+                                    opp_db,
+                                    new_status=opp_db.stato_opportunita or "vinta",
+                                    old_status=old_status,
+                                )
+                        st.rerun()
+
+                with col_p4:
+                    if st.button(
+                        "❌ Segna Persa",
+                        key=f"to_lost_{row['opportunity_id']}",
+                    ):
+                        with get_session() as session:
+                            opp_db = session.get(Opportunity, row["opportunity_id"])
+                            if opp_db:
+                                old_status = opp_db.stato_opportunita
+                                opp_db.fase_pipeline = "Persa"
+                                opp_db.stato_opportunita = "persa"
+                                session.add(opp_db)
+                                session.commit()
+                                track_generate_lead_from_crm(
+                                    opp_db,
+                                    new_status=opp_db.stato_opportunita or "persa",
+                                    old_status=old_status,
+                                )
+                        st.rerun()
+
+                # -------------------------
+                # Pianifica prossima azione (resta)
+                # -------------------------
                 st.markdown("---")
                 st.markdown("**Pianifica prossima azione**")
 
