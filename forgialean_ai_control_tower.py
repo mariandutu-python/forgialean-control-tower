@@ -43,6 +43,7 @@ from db import (
     CashflowBudget, 
     CashflowEvent,
     CrmTask,
+    sync_next_action_from_tasks,
 )
 
 from cache_functions import (
@@ -2306,6 +2307,8 @@ def page_crm_sales():
                         )
                         session.add(new_task)
                         session.commit()
+                    # 🔄 Sincronizza prossima azione dall'elenco task
+                    sync_next_action_from_tasks(opp.opportunity_id)
                     st.success("Attività creata con successo.")
                     st.rerun()
 
@@ -2471,8 +2474,11 @@ def page_crm_sales():
                     t.updated_at = datetime.utcnow()
                     session.add(t)
                     session.commit()
-                    st.rerun()
 
+                    # 🔄 aggiorna la prossima azione per l'opportunità di questo task
+                    sync_next_action_from_tasks(t.opportunity_id)
+
+                    st.rerun()
     # =========================
     # VISTA / FILTRI OPPORTUNITÀ
     # =========================
