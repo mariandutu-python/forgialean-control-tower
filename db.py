@@ -3,7 +3,7 @@ from datetime import date, datetime
 from pathlib import Path
 
 from sqlalchemy import Column, DateTime
-from sqlmodel import SQLModel, Field, Relationship, create_engine, Session
+from sqlmodel import SQLModel, Field, Relationship, create_engine, Session, select
 
 # =========================
 # PATH DB IN CARTELLA SCRIVIBILE
@@ -109,6 +109,34 @@ class CrmTask(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
     opportunity: Optional[Opportunity] = Relationship(back_populates="tasks")
+
+
+def sync_next_action_from_tasks(opportunity_id: int) -> None:
+    """Aggiorna i campi 'prossima azione' dell'opportunità in base ai task aperti."""
+    with Session(engine) as session:
+        opp = session.get(Opportunity, opportunity_id)
+        if not opp:
+            return
+
+        tasks_open = session.exec(
+            select(CrmTask)
+            .where(CrmTask.opportunity_id == opportunity_id)
+            .where(CrmTask.stato == "da_fare")
+            .order_by(CrmTask.data_scadenza, CrmTask.created_at)
+        ).all()
+
+        if not tasks_open:
+            opp.data_prossima_azione = None
+            opp.tipo_prossima_azione = None
+            opp.note_prossima_azione = None
+        else:
+            next_task = tasks_open[0]
+            opp.data_prossima_azione = next_task.data_scadenza
+            opp.tipo_prossima_azione = next_task.tipo or "Attività"
+            opp.note_prossima_azione = next_task.titolo
+
+        session.add(opp)
+        session.commit()
 
 
 class Invoice(SQLModel, table=True):
