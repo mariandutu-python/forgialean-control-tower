@@ -67,7 +67,90 @@ import requests
 import smtplib
 from email.mime.text import MIMEText
 
-from analytics import track_event
+import json
+import uuid
+
+GA4_MEASUREMENT_ID = "G-XXXXXXXXXX"  # TODO: inserisci il tuo
+GA4_API_SECRET = "YOUR_API_SECRET"   # TODO: inserisci il tuo
+
+GA4_ENDPOINT = (
+    "https://www.google-analytics.com/mp/collect"
+    f"?measurement_id={GA4_MEASUREMENT_ID}&api_secret={GA4_API_SECRET}"
+)
+
+
+def get_or_set_client_id() -> str:
+    if "ga4_client_id" not in st.session_state:
+        st.session_state["ga4_client_id"] = str(uuid.uuid4())
+    return st.session_state["ga4_client_id"]
+
+
+def track_event(event_name: str, params: dict | None = None, debug: bool = False):
+    if not GA4_MEASUREMENT_ID or not GA4_API_SECRET:
+        return
+
+    client_id = get_or_set_client_id()
+
+    payload = {
+        "client_id": client_id,
+        "non_personalized_ads": True,
+        "events": [
+            {
+                "name": event_name,
+                "params": params or {},
+            }
+        ],
+    }
+
+    if debug:
+        payload["debug_mode"] = 1
+
+    try:
+        requests.post(GA4_ENDPOINT, data=json.dumps(payload), timeout=3)
+    except Exception:
+        pass
+
+
+STATUS_TO_EVENT = {
+    "nuovo": "generate_lead",
+    "lead pre-qualificato (mql)": "generate_lead",
+    "aperta": "working_lead",
+    "lead qualificato (sql)": "qualify_lead",
+    "lead": "working_lead",
+    "offerta": "qualify_lead",
+    "negoziazione": "qualify_lead",
+    "vinta": "close_convert_lead",
+    "persa": "close_unconvert_lead",
+}
+
+
+def track_generate_lead_from_crm(opp, new_status: str, old_status: str | None = None):
+    event_name = STATUS_TO_EVENT.get((new_status or "").lower())
+    if not event_name:
+        return
+
+    client_id = getattr(opp, "ga4_client_id", None)
+    if not client_id:
+        client_id = get_or_set_client_id()
+
+    value = float(getattr(opp, "valore_stimato", 0.0) or 0.0)
+
+    source = getattr(opp, "utm_source", "") or ""
+    medium = getattr(opp, "utm_medium", "") or ""
+    campaign = getattr(opp, "utm_campaign", "") or ""
+
+    params = {
+        "lead_id": str(getattr(opp, "opportunity_id", "")),
+        "lead_status": new_status,
+        "lead_old_status": old_status or "",
+        "lead_source": source,
+        "lead_medium": medium,
+        "lead_campaign": campaign,
+        "value": value,
+        "currency": "EUR",
+    }
+
+    track_event(event_name, params)
 
 # =================== GAMIFICATION - FLAME POINTS SYSTEM ===================
 
@@ -2139,12 +2222,13 @@ def page_crm_sales():
             opp_id = int(opp_id)
         except ValueError:
             opp_id = None
+
     # Se arriva dal calendario con opp_id, mostra SOLO quella Opportunity
     if opp_id:
         with get_session() as session:
             opp = session.get(Opportunity, opp_id)
             client = session.get(Client, opp.client_id) if opp else None
-        
+
         if opp:
             st.subheader(f"📌 {opp.nome_opportunita}")
             col1, col2, col3 = st.columns(3)
@@ -2154,17 +2238,18 @@ def page_crm_sales():
                 st.metric("Fase", opp.fase_pipeline)
             with col3:
                 st.metric("Probabilità", f"{opp.probabilita:.0f}%")
-            
+
             st.write(f"**Owner:** {opp.owner}")
             st.write(f"**Prossima azione:** {getattr(opp, 'tipo_prossima_azione', 'N/A')}")
             st.write(f"**Data azione:** {getattr(opp, 'data_prossima_azione', 'N/A')}")
             st.write(f"**Note:** {getattr(opp, 'note_prossima_azione', '')}")
-            
+
             if st.button("← Torna alla lista CRM"):
                 st.query_params.clear()
                 st.rerun()
-            
+
             st.stop()
+
     # Cattura eventuali parametri UTM dall'URL
     capture_utm_params()
 
@@ -2271,7 +2356,6 @@ def page_crm_sales():
 
     # =========================
     # VISTA / FILTRI OPPORTUNITÀ
-    # (carico df_opps UNA VOLTA qui)
     # =========================
     st.markdown("---")
     st.subheader("🎯 Funnel Opportunità")
@@ -2307,7 +2391,7 @@ def page_crm_sales():
             selected_opp = df_match.iloc[0]
 
     # =========================
-    # REPORT CAMPAGNE (UTM) - OPPORTUNITÀ + FUNNEL
+    # REPORT CAMPAGNE (UTM)
     # =========================
     if "utm_campaign" in df_opps.columns and not df_opps.empty:
         st.markdown("---")
@@ -2316,7 +2400,6 @@ def page_crm_sales():
         df_camp = df_opps.copy()
         df_camp["utm_campaign"] = df_camp["utm_campaign"].fillna("(no campaign)")
 
-        # report base lead/opportunità
         agg = (
             df_camp.groupby("utm_campaign")
             .agg(
@@ -2338,7 +2421,6 @@ def page_crm_sales():
             width="stretch",
         )
 
-        # --- STATO CAMPAGNA NEL FUNNEL ---
         st.subheader("Stato campagna nel funnel")
 
         df_c = df_camp.copy()
@@ -2370,7 +2452,6 @@ def page_crm_sales():
             width="stretch",
         )
 
-        # --- CONVERSIONI PRONTE PER EXPORT (GOOGLE/META OFFLINE) ---
         st.subheader("Conversioni da campagne (opportunità vinte)")
 
         df_conv = df_c[df_c["is_won"]].copy()
@@ -2453,7 +2534,6 @@ def page_crm_sales():
                     "Data chiusura prevista", value=date.today()
                 )
 
-            # --- PROSSIMA AZIONE ---
             col_a1, col_a2 = st.columns(2)
             with col_a1:
                 data_prossima_azione = st.date_input(
@@ -2479,78 +2559,83 @@ def page_crm_sales():
 
             submitted_opp = st.form_submit_button("Salva opportunità")
 
-        if submitted_opp:
-            if not nome_opportunita.strip():
-                st.warning("Il nome opportunità è obbligatorio.")
-            else:
-                client_id_sel = int(client_label.split(" - ")[0])
+    if submitted_opp:
+        if not nome_opportunita.strip():
+            st.warning("Il nome opportunità è obbligatorio.")
+        else:
+            client_id_sel = int(client_label.split(" - ")[0])
 
-                client_row = df_clients[
-                    df_clients["client_id"] == client_id_sel
-                ].iloc[0]
-                client_name = client_row["ragione_sociale"]
+            client_row = df_clients[
+                df_clients["client_id"] == client_id_sel
+            ].iloc[0]
+            client_name = client_row["ragione_sociale"]
 
-                # UTM da session_state
-                utm_source = st.session_state.get("utm_source") or None
-                utm_medium = st.session_state.get("utm_medium") or None
-                utm_campaign = st.session_state.get("utm_campaign") or None
-                utm_content = st.session_state.get("utm_content") or None
+            # UTM da session_state
+            utm_source = st.session_state.get("utm_source") or None
+            utm_medium = st.session_state.get("utm_medium") or None
+            utm_campaign = st.session_state.get("utm_campaign") or None
+            utm_content = st.session_state.get("utm_content") or None
 
-                with get_session() as session:
-                    new_opp = Opportunity(
-                        client_id=client_id_sel,
-                        nome_opportunita=nome_opportunita.strip(),
-                        fase_pipeline=fase_pipeline,
-                        owner=owner.strip() or None,
-                        valore_stimato=valore_stimato,
-                        probabilita=float(probabilita),
-                        data_apertura=data_apertura,
-                        data_chiusura_prevista=data_chiusura_prevista,
-                        data_prossima_azione=data_prossima_azione,
-                        tipo_prossima_azione=tipo_prossima_azione or None,
-                        note_prossima_azione=note_prossima_azione or None,
-                        stato_opportunita=stato_opportunita,
-                        utm_source=utm_source,
-                        utm_medium=utm_medium,
-                        utm_campaign=utm_campaign,
-                        utm_content=utm_content,
-                    )
-                    session.add(new_opp)
-                    session.commit()
-                    session.refresh(new_opp)
-
-                track_ga4_event(
-                    "lead_generato",
-                    {
-                        "client_name": client_name,
-                        "opportunity_name": new_opp.nome_opportunita,
-                        "opportunity_id": str(new_opp.opportunity_id),
-                        "pipeline_stage": new_opp.fase_pipeline,
-                        "owner": new_opp.owner or "",
-                        "opportunity_value": float(new_opp.valore_stimato or 0),
-                        "probability": float(new_opp.probabilita or 0),
-                        "status": new_opp.stato_opportunita,
-                    },
-                    client_id=None,
+            with get_session() as session:
+                new_opp = Opportunity(
+                    client_id=client_id_sel,
+                    nome_opportunita=nome_opportunita.strip(),
+                    fase_pipeline=fase_pipeline,
+                    owner=owner.strip() or None,
+                    valore_stimato=valore_stimato,
+                    probabilita=float(probabilita),
+                    data_apertura=data_apertura,
+                    data_chiusura_prevista=data_chiusura_prevista,
+                    data_prossima_azione=data_prossima_azione,
+                    tipo_prossima_azione=tipo_prossima_azione or None,
+                    note_prossima_azione=note_prossima_azione or None,
+                    stato_opportunita=stato_opportunita,
+                    utm_source=utm_source,
+                    utm_medium=utm_medium,
+                    utm_campaign=utm_campaign,
+                    utm_content=utm_content,
                 )
+                session.add(new_opp)
+                session.commit()
+                session.refresh(new_opp)
 
-                track_facebook_event(
-                    "Lead",
-                    {
-                        "value": float(new_opp.valore_stimato or 0),
-                        "currency": "EUR",
-                        "content_name": new_opp.nome_opportunita,
-                        "content_category": "CRM-Opportunity",
-                        "client_name": client_name,
-                        "status": new_opp.stato_opportunita,
-                    },
-                )
+            # GA4 lead lifecycle (generate_lead / working_lead / ecc.)
+            track_generate_lead_from_crm(
+                new_opp,
+                new_status=new_opp.stato_opportunita or "nuovo",
+                old_status=None,
+            )
 
-                st.success(f"Opportunità creata con ID {new_opp.opportunity_id}")
-                st.rerun()
+            # Eventi marketing esistenti
+            track_ga4_event(
+                "lead_generato",
+                {
+                    "client_name": client_name,
+                    "opportunity_name": new_opp.nome_opportunita,
+                    "opportunity_id": str(new_opp.opportunity_id),
+                    "pipeline_stage": new_opp.fase_pipeline,
+                    "owner": new_opp.owner or "",
+                    "opportunity_value": float(new_opp.valore_stimato or 0),
+                    "probability": float(new_opp.probabilita or 0),
+                    "status": new_opp.stato_opportunita,
+                },
+                client_id=None,
+            )
 
-    st.markdown("---")
+            track_facebook_event(
+                "Lead",
+                {
+                    "value": float(new_opp.valore_stimato or 0),
+                    "currency": "EUR",
+                    "content_name": new_opp.nome_opportunita,
+                    "content_category": "CRM-Opportunity",
+                    "client_name": client_name,
+                    "status": new_opp.stato_opportunita,
+                },
+            )
 
+            st.success(f"Opportunità creata con ID {new_opp.opportunity_id}")
+            st.rerun()
     # =========================
     # KPI E FILTRI FUNNEL (usano df_opps già caricato)
     # =========================
