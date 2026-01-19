@@ -91,6 +91,9 @@ class Opportunity(SQLModel, table=True):
     # relationship con task CRM
     tasks: list["CrmTask"] = Relationship(back_populates="opportunity")
 
+    # relationship con attività CRM (log chiamate/email/meeting)
+    activities: list["CrmActivity"] = Relationship(back_populates="opportunity")
+
 
 class CrmTask(SQLModel, table=True):
     """Task operativi collegati alle opportunità CRM."""
@@ -109,6 +112,25 @@ class CrmTask(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
     opportunity: Optional[Opportunity] = Relationship(back_populates="tasks")
+
+
+class CrmActivity(SQLModel, table=True):
+    """Log attività (chiamate, email, meeting, note) collegati a un'opportunità."""
+    activity_id: Optional[int] = Field(default=None, primary_key=True)
+    opportunity_id: int = Field(foreign_key="opportunity.opportunity_id")
+
+    tipo: str  # es. "chiamata", "email", "meeting", "whatsapp", "nota"
+    canale: Optional[str] = None  # es. "telefono", "gmail", "whatsapp", "linkedin"
+    oggetto: Optional[str] = None
+    descrizione: Optional[str] = None
+
+    esito: Optional[str] = None  # es. "risposta", "non_risponde", "rimandare", "interessato"
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+    # opzionale: data/ora specifica attività se diversa da created_at
+    data_attivita: Optional[date] = None
+
+    opportunity: Optional[Opportunity] = Relationship(back_populates="activities")
 
 
 def sync_next_action_from_tasks(opportunity_id: int) -> None:
@@ -450,6 +472,18 @@ def migrate_db():
                 print("✅ Tabella CrmTask creata (se non esisteva)")
             except Exception as e:
                 print(f"⚠️ Errore creazione tabella CrmTask: {e}")
+
+        # Crea tabella crmactivity se non esiste
+        result_act = conn.exec_driver_sql(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='crmactivity';"
+        ).fetchone()
+
+        if not result_act:
+            try:
+                SQLModel.metadata.create_all(engine)
+                print("✅ Tabella CrmActivity creata (se non esisteva)")
+            except Exception as e:
+                print(f"⚠️ Errore creazione tabella CrmActivity: {e}")
 
 
 def get_session() -> Session:
