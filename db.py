@@ -158,7 +158,118 @@ class CrmActivity(SQLModel, table=True):
     data_attivita: Optional[date] = None
 
     opportunity: Optional[Opportunity] = Relationship(back_populates="activities")
+class CrmAutomationRule(SQLModel, table=True):
+    """Regole di automazione CRM (stile Keap/Infusionsoft, versione semplificata)."""
+    rule_id: Optional[int] = Field(default=None, primary_key=True)
 
+    # Trigger: per ora gestiamo solo cambio stato opportunità
+    trigger_type: str = Field(
+        default="status_change"
+    )  # in futuro: "tag_added", "tag_removed", ecc.
+
+    from_status: Optional[str] = Field(
+        default=None,
+        description="Stato opportunità prima (es. 'aperta'). Se None, vale per qualsiasi stato precedente."
+    )
+    to_status: str = Field(
+        description="Stato opportunità dopo (es. 'vinta', 'persa', 'in_valutazione')."
+    )
+
+    # Filtro opzionale per tag cliente (ContactTag)
+    required_tag_id: Optional[int] = Field(
+        default=None,
+        foreign_key="tag.tag_id",
+        description="Se valorizzato, la regola si applica solo se il client ha questo tag."
+    )
+
+    # Azione principale
+    action_type: str = Field(
+        default="create_task"
+    )  # "create_task", "telegram_notify"
+
+    # Campi per azione create_task
+    task_title: Optional[str] = None
+    task_type: Optional[str] = None  # es. "telefonata", "email", "demo"
+    days_offset: int = 0  # giorni da oggi per la scadenza del task
+    owner: Optional[str] = None  # opzionale: owner del task/opportunità
+
+    # Campi per azione telegram_notify
+    telegram_message: Optional[str] = None
+
+    attiva: bool = Field(default=True)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+def run_crm_automations(opportunity_id: int, old_status: Optional[str]) -> None:
+    """
+    Esegue le regole di automazione CRM basate sul cambio di stato opportunità.
+    Va chiamata subito dopo aver aggiornato opp.stato_opportunita.
+    """
+    from forgialean_ai_control_tower import send_telegram_message  # evita import circolare se necessario
+
+    with Session(engine) as session:
+        opp = session.get(Opportunity, opportunity_id)
+        if not opp:
+            return
+
+        new_status = opp.stato_opportunita
+
+        # Prendi il client e i suoi tag (se servono per filtrare)
+        client = session.get(Client, opp.client_id) if opp.client_id else None
+
+        client_tag_ids: set[int] = set()
+        if client:
+            ct_rows = session.exec(
+                select(ContactTag.tag_id).where(ContactTag.contact_id == client.client_id)
+            ).all()
+            client_tag_ids = {tid for (tid,) in ct_rows}
+
+        # Carica regole attive di tipo "status_change"
+        rules = session.exec(
+            select(CrmAutomationRule).where(
+                CrmAutomationRule.attiva == True,  # noqa
+                CrmAutomationRule.trigger_type == "status_change",
+                CrmAutomationRule.to_status == new_status,
+            )
+        ).all()
+
+        for rule in rules:
+            # Controlla from_status (se valorizzato)
+            if rule.from_status and rule.from_status != old_status:
+                continue
+
+            # Controlla required_tag_id (se valorizzato)
+            if rule.required_tag_id and rule.required_tag_id not in client_tag_ids:
+                continue
+
+            # Azione: CREATE_TASK
+            if rule.action_type == "create_task":
+                due_date = date.today() + timedelta(days=rule.days_offset or 0)
+                new_task = CrmTask(
+                    opportunity_id=opp.opportunity_id,
+                    titolo=rule.task_title or f"Task auto per stato {new_status}",
+                    tipo=rule.task_type or "attivita",
+                    data_scadenza=due_date,
+                    stato="da_fare",
+                    note=f"Regola #{rule.rule_id} su cambio stato {old_status} -> {new_status}",
+                )
+                session.add(new_task)
+
+            # Azione: TELEGRAM_NOTIFY
+            if rule.action_type == "telegram_notify" and rule.telegram_message:
+                try:
+                    msg = rule.telegram_message.format(
+                        opp_id=opp.opportunity_id,
+                        client_name=getattr(client, "ragione_sociale", ""),
+                        old_status=old_status or "",
+                        new_status=new_status or "",
+                    )
+                    send_telegram_message(msg)
+                except Exception as e:
+                    print(f"Errore Telegram in run_crm_automations: {e}")
+
+        session.commit()
+
+        # Dopo eventuali nuovi task, riallinea prossima azione
+        sync_next_action_from_tasks(opportunity_id)
 
 def sync_next_action_from_tasks(opportunity_id: int) -> None:
     """Aggiorna i campi 'prossima azione' dell'opportunità in base ai task aperti."""
