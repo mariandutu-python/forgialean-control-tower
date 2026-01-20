@@ -529,7 +529,7 @@ def migrate_db():
 
         column_names = [row[1] for row in result]  # row[1] è il nome colonna
 
-        # Colonne da aggiungere se mancano
+        # Colonne da aggiungere se mancano (opportunity)
         migrations = [
             ("telefono_contatto", "TEXT"),
             ("flame_points", "INTEGER DEFAULT 0"),
@@ -558,6 +558,24 @@ def migrate_db():
                     print(f"⚠️ Errore aggiunta colonna {col_name}: {e}")
             else:
                 print(f"ℹ️ Colonna {col_name} già presente")
+
+        # Migrazione tabella expense (campaign_id)
+        result_expense_info = conn.exec_driver_sql(
+            "PRAGMA table_info(expense);"
+        ).fetchall()
+        expense_columns = [row[1] for row in result_expense_info]
+
+        if "campaign_id" not in expense_columns:
+            try:
+                conn.exec_driver_sql(
+                    "ALTER TABLE expense ADD COLUMN campaign_id INTEGER;"
+                )
+                conn.commit()
+                print("✅ Colonna campaign_id aggiunta a expense con successo")
+            except Exception as e:
+                print(f"⚠️ Errore aggiunta colonna campaign_id su expense: {e}")
+        else:
+            print("ℹ️ Colonna campaign_id già presente in expense")
 
         # Crea tabella crm_task se non esiste
         result_tasks = conn.exec_driver_sql(
