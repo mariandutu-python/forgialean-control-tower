@@ -43,8 +43,14 @@ from db import (
     CashflowBudget, 
     CashflowEvent,
     CrmTask,
+    CrmActivity,
     sync_next_action_from_tasks,
     MarketingCampaign,
+    Tag,
+    ContactTag,
+    Company,
+    Campaign,
+    CampaignEvent,
 )
 
 from cache_functions import (
@@ -2313,7 +2319,7 @@ def page_crm_sales():
                     st.success("Attività creata con successo.")
                     st.rerun()
 
-            # --- LISTA ATTIVITÀ COLLEGATE ---
+            # --- LISTA ATTIVITÀ COLLEGATE (TASK) ---
             st.markdown("### 📚 Attività collegate")
 
             if not tasks_opp:
@@ -2328,6 +2334,51 @@ def page_crm_sales():
                     st.write(riga)
                     if t.note:
                         st.caption(t.note)
+
+            # --- TIMELINE ATTIVITÀ (CrmActivity) ---
+            st.markdown("---")
+            st.subheader("🕒 Timeline attività (log)")
+
+            with get_session() as session:
+                acts = session.exec(
+                    select(CrmActivity)
+                    .where(CrmActivity.opportunity_id == opp.opportunity_id)
+                    .order_by(CrmActivity.created_at.desc())
+                ).all()
+
+            if not acts:
+                st.caption("Nessuna attività registrata in timeline per questa opportunità.")
+            else:
+                for a in acts:
+                    quando = a.created_at.strftime("%d/%m/%Y %H:%M") if a.created_at else "-"
+                    tipo = a.tipo or "attività"
+                    canale = f" via {a.canale}" if a.canale else ""
+                    ogg = f" – {a.oggetto}" if a.oggetto else ""
+                    desc = f": {a.descrizione}" if a.descrizione else ""
+                    esito = f" [{a.esito}]" if a.esito else ""
+                    st.markdown(f"- `{quando}` – **{tipo}**{canale}{ogg}{esito}{desc}")
+
+            st.markdown("**Aggiungi nota veloce alla timeline**")
+            nota_log = st.text_area(
+                "Testo nota",
+                key=f"nota_log_{opp.opportunity_id}",
+                height=80,
+            )
+            if st.button("💾 Aggiungi alla timeline", key=f"btn_add_log_{opp.opportunity_id}"):
+                if nota_log.strip():
+                    with get_session() as session:
+                        act = CrmActivity(
+                            opportunity_id=opp.opportunity_id,
+                            tipo="nota",
+                            canale="crm",
+                            descrizione=nota_log.strip(),
+                        )
+                        session.add(act)
+                        session.commit()
+                    st.success("Nota aggiunta alla timeline.")
+                    st.rerun()
+                else:
+                    st.warning("Scrivi qualcosa prima di salvare.")
 
             if st.button("← Torna alla lista CRM"):
                 st.query_params.clear()
