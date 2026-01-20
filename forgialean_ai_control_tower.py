@@ -2379,12 +2379,189 @@ def page_crm_sales():
                     st.rerun()
                 else:
                     st.warning("Scrivi qualcosa prima di salvare.")
+            # --- TAG DEL CLIENTE (stile Keap) ---
+            st.markdown("---")
+            st.subheader("🏷️ Tag del cliente")
+
+            if client is None:
+                st.info("Nessun cliente collegato a questa opportunità, impossibile gestire i tag.")
+            else:
+                with get_session() as session:
+                    # tutti i tag disponibili
+                    all_tags = session.exec(select(Tag).order_by(Tag.nome)).all()
+                    # tag già applicati a questo client
+                    applied_ct = session.exec(
+                        select(ContactTag)
+                        .where(ContactTag.client_id == client.client_id)
+                    ).all()
+                    applied_tag_ids = {ct.tag_id for ct in applied_ct}
+
+                # mappa id -> nome
+                tag_map = {t.tag_id: t.nome for t in (all_tags or [])}
+                applied_names = [tag_map[tid] for tid in applied_tag_ids if tid in tag_map]
+
+                # elenco tag esistenti su questo cliente
+                if applied_names:
+                    st.write("Tag attivi:")
+                    st.write(", ".join(sorted(applied_names)))
+                else:
+                    st.caption("Nessun tag ancora applicato a questo cliente.")
+
+                col_tag1, col_tag2 = st.columns(2)
+
+                # Aggiungi tag esistente
+                with col_tag1:
+                    if all_tags:
+                        # solo quelli non ancora applicati
+                        available_tags = [t for t in all_tags if t.tag_id not in applied_tag_ids]
+                        if available_tags:
+                            tag_to_add_label = st.selectbox(
+                                "Aggiungi tag esistente",
+                                options=["(seleziona)"] + [t.nome for t in available_tags],
+                                key=f"tag_add_{client.client_id}",
+                            )
+                            if tag_to_add_label != "(seleziona)":
+                                if st.button("➕ Applica tag", key=f"btn_add_tag_{client.client_id}"):
+                                    with get_session() as session:
+                                        tag_obj = session.exec(
+                                            select(Tag).where(Tag.nome == tag_to_add_label)
+                                        ).first()
+                                        if tag_obj:
+                                            ct = ContactTag(
+                                                client_id=client.client_id,
+                                                tag_id=tag_obj.tag_id,
+                                            )
+                                            session.add(ct)
+                                            session.commit()
+                                    st.success(f"Tag '{tag_to_add_label}' applicato al cliente.")
+                                    st.rerun()
+                        else:
+                            st.caption("Tutti i tag esistenti sono già applicati.")
+                    else:
+                        st.caption("Nessun tag definito nel sistema.")
+
+                # Rimuovi tag
+                with col_tag2:
+                    if applied_names:
+                        tag_to_remove_label = st.selectbox(
+                            "Rimuovi tag",
+                            options=["(seleziona)"] + sorted(applied_names),
+                            key=f"tag_remove_{client.client_id}",
+                        )
+                        if tag_to_remove_label != "(seleziona)":
+                            if st.button("🗑️ Rimuovi tag", key=f"btn_remove_tag_{client.client_id}"):
+                                with get_session() as session:
+                                    tag_obj = session.exec(
+                                        select(Tag).where(Tag.nome == tag_to_remove_label)
+                                    ).first()
+                                    if tag_obj:
+                                        session.exec(
+                                            delete(ContactTag).where(
+                                                ContactTag.client_id == client.client_id,
+                                                ContactTag.tag_id == tag_obj.tag_id,
+                                            )
+                                        )
+                                        session.commit()
+                                st.success(f"Tag '{tag_to_remove_label}' rimosso dal cliente.")
+                                st.rerun()
+
+                # (Opzionale) crea nuovo tag al volo
+                with st.expander("Crea nuovo tag"):
+                    new_tag_name = st.text_input(
+                        "Nome nuovo tag",
+                        key=f"new_tag_name_{client.client_id}",
+                    )
+                    if st.button("💾 Crea tag", key=f"btn_create_tag_{client.client_id}"):
+                        if not new_tag_name.strip():
+                            st.warning("Inserisci un nome per il tag.")
+                        else:
+                            with get_session() as session:
+                                existing = session.exec(
+                                    select(Tag).where(Tag.nome == new_tag_name.strip())
+                                ).first()
+                                if existing:
+                                    st.info("Esiste già un tag con questo nome.")
+                                else:
+                                    t = Tag(nome=new_tag_name.strip())
+                                    session.add(t)
+                                    session.commit()
+                                    st.success("Tag creato. Puoi ora applicarlo al cliente.")
+                                    st.rerun()
 
             if st.button("← Torna alla lista CRM"):
                 st.query_params.clear()
                 st.rerun()
 
             st.stop()
+def page_crm_segments():
+    st.title("📂 Segmenti CRM per tag")
+    role = st.session_state.get("role", "user")
+
+    with get_session() as session:
+        clients = session.exec(select(Client).order_by(Client.ragione_sociale)).all()
+        tags = session.exec(select(Tag).order_by(Tag.nome)).all()
+        contact_tags = session.exec(select(ContactTag)).all()
+
+    if not clients:
+        st.info("Nessun cliente registrato.")
+        return
+
+    df_clients = pd.DataFrame([c.__dict__ for c in clients])
+    df_clients["label"] = (
+        df_clients["client_id"].astype(str) + " - " + df_clients["ragione_sociale"]
+    )
+
+    # Mappa client_id -> set(tag_id)
+    ct_map: dict[int, set[int]] = {}
+    for ct in contact_tags or []:
+        ct_map.setdefault(ct.client_id, set()).add(ct.tag_id)
+
+    # scelta tag filtro
+    st.subheader("Filtra clienti per tag")
+
+    if not tags:
+        st.info("Nessun tag definito. Crea tag dalla pagina CRM / opportunità.")
+        return
+
+    tag_options = {t.nome: t.tag_id for t in tags}
+    selected_tag_names = st.multiselect(
+        "Seleziona uno o più tag",
+        options=list(tag_options.keys()),
+    )
+
+    if not selected_tag_names:
+        st.caption("Seleziona almeno un tag per vedere i clienti segmentati.")
+        return
+
+    selected_tag_ids = {tag_options[n] for n in selected_tag_names}
+
+    # clienti che hanno TUTTI i tag selezionati (AND)
+    def has_all_tags(cid: int) -> bool:
+        tag_set = ct_map.get(cid, set())
+        return selected_tag_ids.issubset(tag_set)
+
+    df_seg = df_clients[df_clients["client_id"].apply(has_all_tags)].copy()
+
+    st.markdown(
+        f"Risultati: **{df_seg.shape}** clienti con tutti i tag selezionati."
+    )
+
+    if df_seg.empty:
+        st.info("Nessun cliente corrisponde a questa combinazione di tag.")
+        return
+
+    cols_show = ["client_id", "ragione_sociale", "email", "telefono"]
+    cols_show = [c for c in cols_show if c in df_seg.columns]
+
+    st.dataframe(
+        df_seg[cols_show].rename(
+            columns={
+                "client_id": "ID",
+                "ragione_sociale": "Cliente",
+            }
+        ),
+        use_container_width=True,
+    )
 
     # Cattura eventuali parametri UTM dall'URL
     capture_utm_params()
@@ -8790,6 +8967,7 @@ PAGES = {
     "📊 Gestionale Operativo": {
         "Clienti": page_clients,
         "CRM & Vendite": page_crm_sales,
+        "Segmenti CRM": page_crm_segments,
         "Treno vendite": page_sales_train,
         "Lead da campagne": page_lead_capture,
         "Operations / Commesse": page_operations,
