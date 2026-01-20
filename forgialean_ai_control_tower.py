@@ -4023,6 +4023,7 @@ class StepOutcome(str, Enum):
     OK = "ok"
     APPROFONDISCI = "approfondisci"
     RINVIA = "rinvia"
+
 def page_crm_segments():
     st.title("📂 Segmenti CRM per tag")
     role = st.session_state.get("role", "user")
@@ -4072,15 +4073,32 @@ def page_crm_segments():
 
     df_seg = df_clients[df_clients["client_id"].apply(has_all_tags)].copy()
 
+    if df_seg.empty:
+        st.markdown(
+            "Risultati: **0** clienti con tutti i tag selezionati."
+        )
+        st.info("Nessun cliente corrisponde a questa combinazione di tag.")
+        return
+
+    # Conta opportunità per ogni client_id
+    with get_session() as session:
+        opps_seg = session.exec(
+            select(Opportunity.client_id).where(
+                Opportunity.client_id.in_(df_seg["client_id"].tolist())
+            )
+        ).all()
+
+    opp_counts: dict[int, int] = {}
+    for (cid,) in opps_seg:
+        opp_counts[cid] = opp_counts.get(cid, 0) + 1
+
+    df_seg["num_opps"] = df_seg["client_id"].map(opp_counts).fillna(0).astype(int)
+
     st.markdown(
         f"Risultati: **{df_seg.shape[0]}** clienti con tutti i tag selezionati."
     )
 
-    if df_seg.empty:
-        st.info("Nessun cliente corrisponde a questa combinazione di tag.")
-        return
-
-    cols_show = ["client_id", "ragione_sociale", "email", "telefono"]
+    cols_show = ["client_id", "ragione_sociale", "email", "telefono", "num_opps"]
     cols_show = [c for c in cols_show if c in df_seg.columns]
 
     st.dataframe(
@@ -4088,10 +4106,12 @@ def page_crm_segments():
             columns={
                 "client_id": "ID",
                 "ragione_sociale": "Cliente",
+                "num_opps": "Num. opportunità CRM",
             }
         ),
         use_container_width=True,
     )
+
 
 def page_lead_capture():
     """
@@ -4245,7 +4265,7 @@ def page_lead_capture():
 
         # 6) Deep-link al CRM
         base_url = "https://forgialean.streamlit.app"
-        crm_url = f"{base_url}?page=crm&opp_id={nuova_opp.opportunity_id}"
+        crm_url = f"{base_url}?step=crm_detail&opp_id={nuova_opp.opportunity_id}"
         st.markdown(
             f"[Apri subito la scheda nel CRM]({crm_url})"
         )
@@ -4255,6 +4275,7 @@ def page_lead_capture():
 def page_sales_train():
     st.title("Treno vendite – Call guidata")
     st.write(
+
         "Usa i 7 vagoni per seguire la call in modo guidato, "
         "restando entro 30–40 minuti complessivi."
     )
