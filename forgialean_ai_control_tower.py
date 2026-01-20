@@ -44,6 +44,7 @@ from db import (
     CashflowEvent,
     CrmTask,
     sync_next_action_from_tasks,
+    MarketingCampaign,
 )
 
 from cache_functions import (
@@ -2780,6 +2781,7 @@ def page_crm_sales():
 
     with get_session() as session:
         clients = session.exec(select(Client)).all()
+        campaigns = session.exec(select(MarketingCampaign)).all()
 
     if not clients:
         st.info("Prima crea almeno un cliente nella pagina 'Clienti'.")
@@ -2790,6 +2792,12 @@ def page_crm_sales():
             + " - "
             + df_clients["ragione_sociale"]
         )
+
+        # prep campagne per select
+        campaign_id_sel = None
+        df_camp_sel = pd.DataFrame(
+            [{"campaign_id": c.campaign_id, "nome": c.nome} for c in (campaigns or [])]
+        ) if campaigns else pd.DataFrame()
 
         with st.form("new_opportunity"):
             col1, col2 = st.columns(2)
@@ -2839,6 +2847,22 @@ def page_crm_sales():
                 value="",
             )
 
+            # --- Campagna marketing (opzionale) ---
+            if not df_camp_sel.empty:
+                df_camp_sel["label"] = (
+                    df_camp_sel["campaign_id"].astype(str)
+                    + " - "
+                    + df_camp_sel["nome"]
+                )
+                camp_label = st.selectbox(
+                    "Campagna marketing (opzionale)",
+                    options=["Nessuna"] + df_camp_sel["label"].tolist(),
+                )
+                if camp_label != "Nessuna":
+                    campaign_id_sel = int(camp_label.split(" - ")[0])
+            else:
+                st.caption("Nessuna campagna marketing definita (pagina 'Campagne marketing').")
+
             stato_opportunita = st.selectbox(
                 "Stato opportunità",
                 ["aperta", "vinta", "persa"],
@@ -2882,6 +2906,7 @@ def page_crm_sales():
                     utm_medium=utm_medium,
                     utm_campaign=utm_campaign,
                     utm_content=utm_content,
+                    campaign_id=campaign_id_sel,
                 )
                 session.add(new_opp)
                 session.commit()
@@ -2924,6 +2949,7 @@ def page_crm_sales():
 
             st.success(f"Opportunità creata con ID {new_opp.opportunity_id}")
             st.rerun()
+
     # =========================
     # KPI E FILTRI FUNNEL (usano df_opps già caricato)
     # =========================
@@ -6091,6 +6117,55 @@ def page_operations():
             st.success("Riga timesheet eliminata e ore ricalcolate.")
             st.rerun()
 
+def page_marketing_campaigns():
+    st.title("📣 Campagne marketing")
+
+    # Carica campagne
+    with get_session() as session:
+        campaigns = session.exec(select(MarketingCampaign)).all()
+
+    st.subheader("➕ Nuova campagna")
+    with st.form("new_campaign"):
+        col1, col2 = st.columns(2)
+        with col1:
+            nome = st.text_input("Nome campagna", "")
+            tipo = st.text_input("Tipo (ads, email, evento...)", "")
+            canale = st.text_input("Canale (google_ads, meta_ads, linkedin, email...)", "")
+        with col2:
+            data_inizio = st.date_input("Data inizio", value=date.today())
+            data_fine = st.date_input("Data fine", value=date.today())
+            budget_previsto = st.number_input("Budget previsto (€)", min_value=0.0, step=100.0)
+        note = st.text_area("Note", "")
+
+        submitted = st.form_submit_button("Salva campagna")
+
+    if submitted:
+        if not nome.strip():
+            st.warning("Il nome campagna è obbligatorio.")
+        else:
+            with get_session() as session:
+                new_camp = MarketingCampaign(
+                    nome=nome.strip(),
+                    tipo=tipo.strip() or None,
+                    canale=canale.strip() or None,
+                    data_inizio=data_inizio,
+                    data_fine=data_fine,
+                    budget_previsto=budget_previsto,
+                    note=note.strip() or None,
+                )
+                session.add(new_camp)
+                session.commit()
+            st.success("Campagna salvata.")
+            st.rerun()
+
+    st.markdown("---")
+    st.subheader("📋 Elenco campagne")
+    if campaigns:
+        df = pd.DataFrame([c.__dict__ for c in campaigns])
+        st.dataframe(df)
+    else:
+        st.info("Nessuna campagna registrata.")
+
 def page_people_departments():
     st.title("👥 People & Reparti (SQLite)")
 
@@ -8340,6 +8415,7 @@ PAGES = {
         "Treno vendite": page_sales_train,
         "Lead da campagne": page_lead_capture,
         "Operations / Commesse": page_operations,
+        "Campagne marketing": page_marketing_campaigns,
     },
     "💰 Finanza & Pagamenti": {
         "Finanza / Fatture": page_finance_invoices,
