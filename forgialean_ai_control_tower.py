@@ -5625,6 +5625,10 @@ def page_operations():
     # =========================
     st.subheader("📁 Inserisci nuova commessa")
 
+    with get_session() as session:
+        # (niente letture per il form, ma manteniamo pattern uniforme)
+        pass
+
     with st.form("new_commessa"):
         col1, col2 = st.columns(2)
         with col1:
@@ -6117,6 +6121,7 @@ def page_operations():
             st.success("Riga timesheet eliminata e ore ricalcolate.")
             st.rerun()
 
+
 def page_marketing_campaigns():
     st.title("📣 Campagne marketing")
 
@@ -6165,6 +6170,8 @@ def page_marketing_campaigns():
         st.dataframe(df)
     else:
         st.info("Nessuna campagna registrata.")
+
+
 def page_marketing_roi():
     st.title("📈 Marketing ROI & CAC per campagna")
 
@@ -6194,6 +6201,7 @@ def page_marketing_roi():
 
     if not df_opp.empty:
         # consideriamo opportunità vinte come clienti acquisiti
+        df_opp["stato_opportunita"] = df_opp["stato_opportunita"].fillna("").astype(str)
         df_opp["is_won"] = df_opp["stato_opportunita"].str.lower().eq("vinta")
     else:
         df_opp["is_won"] = []
@@ -6203,9 +6211,10 @@ def page_marketing_roi():
     clienti_per_campagna = {}
 
     if not df_opp.empty and not df_inv.empty:
+        df_opp["campaign_id"] = df_opp["campaign_id"].astype("Int64")
+
         # mappiamo client_id -> campaign_id usando le opp vinte
         df_won = df_opp[df_opp["is_won"] & df_opp["campaign_id"].notna()].copy()
-        # per semplicità: primo campaign_id associato al client
         df_won = df_won.sort_values("data_apertura").drop_duplicates(subset=["client_id"])
 
         client_to_campaign = df_won.set_index("client_id")["campaign_id"].to_dict()
@@ -6228,6 +6237,7 @@ def page_marketing_roi():
     # ---- Costi marketing per campagna (Expense) ----
     costi_per_campagna = {}
     if not df_exp.empty:
+        df_exp["campaign_id"] = df_exp["campaign_id"].astype("Int64")
         df_exp2 = df_exp[df_exp["campaign_id"].notna()].copy()
         grp_cost = df_exp2.groupby("campaign_id")["importo_totale"].sum().rename("costi_marketing").reset_index()
         costi_per_campagna = dict(zip(grp_cost["campaign_id"], grp_cost["costi_marketing"]))
@@ -6240,12 +6250,9 @@ def page_marketing_roi():
         costi = float(costi_per_campagna.get(cid, 0.0) or 0.0)
         n_clienti = int(clienti_per_campagna.get(cid, 0) or 0)
 
-        # CAC = costi marketing / n_clienti (se > 0) [web:624][web:628]
-        cac = costi / n_clienti if n_clienti > 0 else 0.0
-        # LTV semplice = ricavi / n_clienti
-        ltv = ricavi / n_clienti if n_clienti > 0 else 0.0
-        # ROI = (ricavi - costi) / costi [web:630][web:633]
-        roi = ((ricavi - costi) / costi) if costi > 0 else 0.0
+        cac = costi / n_clienti if n_clienti > 0 else 0.0  # [web:624][web:628]
+        ltv = ricavi / n_clienti if n_clienti > 0 else 0.0  # [web:629][web:632]
+        roi = ((ricavi - costi) / costi) if costi > 0 else 0.0  # [web:630][web:633]
         ltv_cac = (ltv / cac) if cac > 0 else 0.0
 
         kpis.append(
