@@ -6277,9 +6277,42 @@ def page_marketing_roi():
 
     df_kpi = pd.DataFrame(kpis)
 
+    # ---- Filtri su KPI: anno (fatture) e canale ----
+    st.subheader("Filtri vista KPI")
+
+    col_f1, col_f2 = st.columns(2)
+    with col_f1:
+        # Anno ricavato dalle fatture (se presente)
+        anni_disponibili = []
+        if not df_inv.empty and "data_fattura" in df_inv.columns:
+            anni_disponibili = sorted(
+                df_inv["data_fattura"].dropna().apply(lambda d: d.year).unique().tolist()
+            )
+        anno_sel = st.selectbox(
+            "Filtra per anno fatture (solo vista, non ricalcolo)",
+            options=["Tutti"] + anni_disponibili if anni_disponibili else ["Tutti"],
+        )
+    with col_f2:
+        canali_disponibili = sorted(
+            [c for c in df_kpi["Canale"].dropna().unique().tolist() if c]
+        )
+        canali_sel = st.multiselect(
+            "Filtra per canale",
+            options=canali_disponibili,
+            default=canali_disponibili,
+        )
+
+    # Applica filtro canale sulla tabella KPI
+    df_kpi_view = df_kpi.copy()
+    if canali_sel:
+        df_kpi_view = df_kpi_view[df_kpi_view["Canale"].isin(canali_sel)]
+
+    # (Per l'anno, qui facciamo solo "etichetta": i KPI sono già calcolati su tutto il periodo;
+    # se vorrai, nel passo successivo possiamo far ricalcolare ricavi/costi solo per anno_sel)
+
     st.subheader("KPI per campagna marketing")
     st.dataframe(
-        df_kpi.sort_values("Ricavi (€)", ascending=False).style.format(
+        df_kpi_view.sort_values("Ricavi (€)", ascending=False).style.format(
             {
                 "Ricavi (€)": "{:,.0f}",
                 "Costi marketing (€)": "{:,.0f}",
@@ -6293,14 +6326,17 @@ def page_marketing_roi():
     )
 
     st.subheader("ROI per campagna")
-    fig = px.bar(
-        df_kpi,
-        x="Nome campagna",
-        y="ROI",
-        color="Canale",
-        title="ROI per campagna",
-    )
-    st.plotly_chart(fig, use_container_width=True)
+    if not df_kpi_view.empty:
+        fig = px.bar(
+            df_kpi_view,
+            x="Nome campagna",
+            y="ROI",
+            color="Canale",
+            title="ROI per campagna",
+        )
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("Nessuna campagna corrisponde ai filtri selezionati.")
 
 def page_people_departments():
     st.title("👥 People & Reparti (SQLite)")
