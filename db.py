@@ -544,7 +544,6 @@ def migrate_db():
             ("date_contract_sent", "DATE"),
             ("date_contract_signed", "DATE"),
             ("campaign_id", "INTEGER"),
-
         ]
 
         for col_name, col_type in migrations:
@@ -583,6 +582,19 @@ def migrate_db():
                 print("✅ Tabella CrmActivity creata (se non esisteva)")
             except Exception as e:
                 print(f"⚠️ Errore creazione tabella CrmActivity: {e}")
+
+        # Crea tabella expense (e correlate) se non esiste
+        result_expense = conn.exec_driver_sql(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='expense';"
+        ).fetchone()
+
+        if not result_expense:
+            try:
+                # crea solo le tabelle mancanti, inclusa Expense
+                SQLModel.metadata.create_all(engine)
+                print("✅ Tabella Expense creata (se non esisteva)")
+            except Exception as e:
+                print(f"⚠️ Errore creazione tabella Expense: {e}")
 
 
 def get_session() -> Session:
