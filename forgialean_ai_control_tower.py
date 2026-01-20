@@ -8032,6 +8032,7 @@ def page_finance_dashboard():
         st.info("Per registrare una spesa serve almeno una categoria e un conto.")
         st.stop()
 
+    # Prepara mappe per select
     df_cat = pd.DataFrame([c.__dict__ for c in categories])
     df_cat["label"] = df_cat["category_id"].astype(str) + " - " + df_cat["nome"]
 
@@ -8045,6 +8046,14 @@ def page_finance_dashboard():
     df_comm = pd.DataFrame([c.__dict__ for c in (commesse or [])]) if commesse else pd.DataFrame()
     if not df_comm.empty:
         df_comm["label"] = df_comm["commessa_id"].astype(str) + " - " + df_comm["cod_commessa"]
+
+    # 🔹 carica campagne marketing per collegare la spesa
+    with get_session() as session:
+        campaigns = session.exec(select(MarketingCampaign)).all()
+
+    df_camp = pd.DataFrame([c.__dict__ for c in (campaigns or [])]) if campaigns else pd.DataFrame()
+    if not df_camp.empty:
+        df_camp["label"] = df_camp["campaign_id"].astype(str) + " - " + df_camp["nome"]
 
     with st.form("new_expense"):
         col1, col2 = st.columns(2)
@@ -8064,6 +8073,16 @@ def page_finance_dashboard():
             )
             importo_imp = st.number_input("Imponibile (€)", min_value=0.0, step=50.0)
             iva_perc = st.number_input("Aliquota IVA (%)", min_value=0.0, max_value=50.0, value=22.0, step=1.0)
+
+        # 🔹 selezione campagna marketing opzionale
+        camp_options = ["Nessuna campagna"]
+        if not df_camp.empty:
+            camp_options = ["Nessuna campagna"] + df_camp["label"].tolist()
+
+        camp_label = st.selectbox(
+            "Campagna marketing (opzionale)",
+            camp_options,
+        )
 
         col3, col4 = st.columns(2)
         with col3:
@@ -8089,6 +8108,11 @@ def page_finance_dashboard():
             if not df_comm.empty and comm_label in df_comm["label"].tolist():
                 commessa_id = int(comm_label.split(" - ")[0])
 
+            # 🔹 ricava campaign_id se selezionata
+            campaign_id = None
+            if not df_camp.empty and camp_label in df_camp["label"].tolist():
+                campaign_id = int(camp_label.split(" - ")[0])
+
             iva_val = importo_imp * iva_perc / 100.0
             totale_val = importo_imp + iva_val
 
@@ -8107,13 +8131,12 @@ def page_finance_dashboard():
                     pagata=pagata,
                     data_pagamento=data_pag if pagata else None,
                     note=None,
+                    campaign_id=campaign_id,  # 🔹 collegamento alla campagna
                 )
                 session.add(new_exp)
                 session.commit()
             st.success("Spesa salvata.")
             st.rerun()
-
-    st.markdown("---")
 
     # ---------- 4) ELENCO SPESE ----------
     st.subheader("📋 Elenco spese")
