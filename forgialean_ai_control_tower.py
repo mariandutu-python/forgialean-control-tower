@@ -3179,8 +3179,21 @@ def page_crm_sales():
                                 old_status = opp_db.stato_opportunita
                                 opp_db.fase_pipeline = "Offerta"
                                 opp_db.stato_opportunita = "aperta"
+
+                                # Log in timeline
+                                session.add(
+                                    CrmActivity(
+                                        opportunity_id=opp_db.opportunity_id,
+                                        tipo="fase",
+                                        canale="crm",
+                                        oggetto=f"Cambio fase: {opp_db.fase_pipeline}",
+                                        descrizione=f"Stato: {opp_db.stato_opportunita} (da: {old_status})",
+                                    )
+                                )
+
                                 session.add(opp_db)
                                 session.commit()
+
                                 track_generate_lead_from_crm(
                                     opp_db,
                                     new_status=opp_db.stato_opportunita or "aperta",
@@ -3199,8 +3212,21 @@ def page_crm_sales():
                                 old_status = opp_db.stato_opportunita
                                 opp_db.fase_pipeline = "Negoziazione"
                                 opp_db.stato_opportunita = "aperta"
+
+                                # Log in timeline
+                                session.add(
+                                    CrmActivity(
+                                        opportunity_id=opp_db.opportunity_id,
+                                        tipo="fase",
+                                        canale="crm",
+                                        oggetto=f"Cambio fase: {opp_db.fase_pipeline}",
+                                        descrizione=f"Stato: {opp_db.stato_opportunita} (da: {old_status})",
+                                    )
+                                )
+
                                 session.add(opp_db)
                                 session.commit()
+
                                 track_generate_lead_from_crm(
                                     opp_db,
                                     new_status=opp_db.stato_opportunita or "aperta",
@@ -3219,8 +3245,21 @@ def page_crm_sales():
                                 old_status = opp_db.stato_opportunita
                                 opp_db.fase_pipeline = "Vinta"
                                 opp_db.stato_opportunita = "vinta"
+
+                                # Log in timeline
+                                session.add(
+                                    CrmActivity(
+                                        opportunity_id=opp_db.opportunity_id,
+                                        tipo="fase",
+                                        canale="crm",
+                                        oggetto=f"Cambio fase: {opp_db.fase_pipeline}",
+                                        descrizione=f"Stato: {opp_db.stato_opportunita} (da: {old_status})",
+                                    )
+                                )
+
                                 session.add(opp_db)
                                 session.commit()
+
                                 track_generate_lead_from_crm(
                                     opp_db,
                                     new_status=opp_db.stato_opportunita or "vinta",
@@ -3239,8 +3278,21 @@ def page_crm_sales():
                                 old_status = opp_db.stato_opportunita
                                 opp_db.fase_pipeline = "Persa"
                                 opp_db.stato_opportunita = "persa"
+
+                                # Log in timeline
+                                session.add(
+                                    CrmActivity(
+                                        opportunity_id=opp_db.opportunity_id,
+                                        tipo="fase",
+                                        canale="crm",
+                                        oggetto=f"Cambio fase: {opp_db.fase_pipeline}",
+                                        descrizione=f"Stato: {opp_db.stato_opportunita} (da: {old_status})",
+                                    )
+                                )
+
                                 session.add(opp_db)
                                 session.commit()
+
                                 track_generate_lead_from_crm(
                                     opp_db,
                                     new_status=opp_db.stato_opportunita or "persa",
@@ -4738,12 +4790,23 @@ def page_sales_train():
                         nuova_prob = prob_attuale
                     opp.probabilita = nuova_prob
 
+                    # 🔎 Log della call nella timeline CrmActivity
+                    session.add(
+                        CrmActivity(
+                            opportunity_id=opp.opportunity_id,
+                            tipo="call",
+                            canale="treno_vendite",
+                            oggetto="Call treno vendite",
+                            descrizione="Call treno vendite salvata (vedi note e campi opportunità).",
+                        )
+                    )
+
                     session.add(opp)
                     session.commit()
-                    st.success("Call salvata sull'opportunity e campi CRM aggiornati.")
+                    st.success("Call salvata sull'opportunity, timeline e campi CRM aggiornati.")
 
     with col_save2:
-        st.caption("Dopo il salvataggio trovi subito note e stato aggiornato nella pagina CRM / Opportunità.")
+        st.caption("Dopo il salvataggio trovi subito note, timeline e stato aggiornato nella pagina CRM / Opportunità.")
 
     st.caption("Treno vendite guidato per call di 30–40 minuti, integrato con il CRM.")
 
