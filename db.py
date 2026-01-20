@@ -1,5 +1,6 @@
 from typing import Optional, List
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
+from sqlmodel import delete
 from pathlib import Path
 
 from sqlalchemy import Column, DateTime
@@ -198,6 +199,7 @@ class CrmAutomationRule(SQLModel, table=True):
 
     attiva: bool = Field(default=True)
     created_at: datetime = Field(default_factory=datetime.utcnow)
+
 def run_crm_automations(opportunity_id: int, old_status: Optional[str]) -> None:
     """
     Esegue le regole di automazione CRM basate sul cambio di stato opportunità.
@@ -218,14 +220,16 @@ def run_crm_automations(opportunity_id: int, old_status: Optional[str]) -> None:
         client_tag_ids: set[int] = set()
         if client:
             ct_rows = session.exec(
-                select(ContactTag.tag_id).where(ContactTag.contact_id == client.client_id)
+                select(ContactTag.tag_id).where(
+                    ContactTag.contact_id == client.client_id
+                )
             ).all()
             client_tag_ids = {tid for (tid,) in ct_rows}
 
         # Carica regole attive di tipo "status_change"
         rules = session.exec(
             select(CrmAutomationRule).where(
-                CrmAutomationRule.attiva == True,  # noqa
+                CrmAutomationRule.attiva == True,          # noqa
                 CrmAutomationRule.trigger_type == "status_change",
                 CrmAutomationRule.to_status == new_status,
             )
