@@ -6165,6 +6165,136 @@ def page_marketing_campaigns():
         st.dataframe(df)
     else:
         st.info("Nessuna campagna registrata.")
+def page_marketing_roi():
+    st.title("📈 Marketing ROI & CAC per campagna")
+
+    # ---- Carica campagne, opportunità, spese ----
+    session, = get_session()
+    campaigns = session.exec(select(MarketingCampaign)).all()
+    opps = session.exec(select(Opportunity)).all()
+    expenses = session.exec(select(Expense)).all()
+    invoices = session.exec(select(Invoice)).all()
+    session.close()
+
+    if not campaigns:
+        st.info("Nessuna campagna marketing definita. Crea almeno una campagna nella pagina 'Campagne marketing'.")
+        return
+
+    df_camp = pd.DataFrame([c.__dict__ for c in campaigns])
+    df_opp = pd.DataFrame([o.__dict__ for o in opps]) if opps else pd.DataFrame()
+    df_exp = pd.DataFrame([e.__dict__ for e in expenses]) if expenses else pd.DataFrame()
+    df_inv = pd.DataFrame([i.__dict__ for i in invoices]) if invoices else pd.DataFrame()
+
+    # ---- Filtri base periodo (opzionale) ----
+    st.subheader("Filtri periodo (facoltativi)")
+    col_f1, col_f2 = st.columns(2)
+    with col_f1:
+        data_da = st.date_input("Da data (fatture)", value=None)
+    with col_f2:
+        data_a = st.date_input("A data (fatture)", value=None)
+
+    if not df_opp.empty:
+        # consideriamo opportunità vinte come clienti acquisiti
+        df_opp["is_won"] = df_opp["stato_opportunita"].str.lower().eq("vinta")
+    else:
+        df_opp["is_won"] = []
+
+    # ---- Ricavi per campagna (via fatture) ----
+    ricavi_per_campagna = {}
+    clienti_per_campagna = {}
+
+    if not df_opp.empty and not df_inv.empty:
+        # mappiamo client_id -> campaign_id usando le opp vinte
+        df_won = df_opp[df_opp["is_won"] & df_opp["campaign_id"].notna()].copy()
+        # per semplicità: primo campaign_id associato al client
+        df_won = df_won.sort_values("data_apertura").drop_duplicates(subset=["client_id"])
+
+        client_to_campaign = df_won.set_index("client_id")["campaign_id"].to_dict()
+
+        df_inv2 = df_inv.copy()
+        if data_da:
+            df_inv2 = df_inv2[df_inv2["data_fattura"] >= data_da]
+        if data_a:
+            df_inv2 = df_inv2[df_inv2["data_fattura"] <= data_a]
+
+        df_inv2["campaign_id"] = df_inv2["client_id"].map(client_to_campaign)
+        df_inv2 = df_inv2[df_inv2["campaign_id"].notna()]
+
+        grp_rev = df_inv2.groupby("campaign_id")["importo_totale"].sum().rename("ricavi").reset_index()
+        ricavi_per_campagna = dict(zip(grp_rev["campaign_id"], grp_rev["ricavi"]))
+
+        grp_clients = df_inv2.groupby("campaign_id")["client_id"].nunique().rename("n_clienti").reset_index()
+        clienti_per_campagna = dict(zip(grp_clients["campaign_id"], grp_clients["n_clienti"]))
+
+    # ---- Costi marketing per campagna (Expense) ----
+    costi_per_campagna = {}
+    if not df_exp.empty:
+        df_exp2 = df_exp[df_exp["campaign_id"].notna()].copy()
+        grp_cost = df_exp2.groupby("campaign_id")["importo_totale"].sum().rename("costi_marketing").reset_index()
+        costi_per_campagna = dict(zip(grp_cost["campaign_id"], grp_cost["costi_marketing"]))
+
+    # ---- Costruisci tabella KPI per campagna ----
+    kpis = []
+    for _, row in df_camp.iterrows():
+        cid = row["campaign_id"]
+        ricavi = float(ricavi_per_campagna.get(cid, 0.0) or 0.0)
+        costi = float(costi_per_campagna.get(cid, 0.0) or 0.0)
+        n_clienti = int(clienti_per_campagna.get(cid, 0) or 0)
+
+        # CAC = costi marketing / n_clienti (se > 0) [web:624][web:628]
+        cac = costi / n_clienti if n_clienti > 0 else 0.0
+        # LTV semplice = ricavi / n_clienti
+        ltv = ricavi / n_clienti if n_clienti > 0 else 0.0
+        # ROI = (ricavi - costi) / costi [web:630][web:633]
+        roi = ((ricavi - costi) / costi) if costi > 0 else 0.0
+        ltv_cac = (ltv / cac) if cac > 0 else 0.0
+
+        kpis.append(
+            {
+                "campaign_id": cid,
+                "Nome campagna": row["nome"],
+                "Tipo": row.get("tipo", None),
+                "Canale": row.get("canale", None),
+                "Ricavi (€)": ricavi,
+                "Costi marketing (€)": costi,
+                "Clienti acquisiti": n_clienti,
+                "CAC (€)": cac,
+                "LTV (€)": ltv,
+                "LTV/CAC": ltv_cac,
+                "ROI": roi,
+            }
+        )
+
+    if not kpis:
+        st.info("Nessun dato sufficiente per calcolare CAC/ROI (mancano fatture e/o spese collegate a campagne).")
+        return
+
+    df_kpi = pd.DataFrame(kpis)
+
+    st.subheader("KPI per campagna marketing")
+    st.dataframe(
+        df_kpi.sort_values("Ricavi (€)", ascending=False).style.format(
+            {
+                "Ricavi (€)": "{:,.0f}",
+                "Costi marketing (€)": "{:,.0f}",
+                "CAC (€)": "{:,.0f}",
+                "LTV (€)": "{:,.0f}",
+                "ROI": "{:,.2f}",
+                "LTV/CAC": "{:,.2f}",
+            }
+        ),
+        use_container_width=True,
+    )
+
+    st.subheader("ROI per campagna")
+    fig = px.bar(
+        df_kpi,
+        x="Nome campagna",
+        y="ROI",
+        color="Canale",
+        title="ROI per campagna",
+    )
+    st.plotly_chart(fig, use_container_width=True)
 
 def page_people_departments():
     st.title("👥 People & Reparti (SQLite)")
@@ -8416,6 +8546,7 @@ PAGES = {
         "Lead da campagne": page_lead_capture,
         "Operations / Commesse": page_operations,
         "Campagne marketing": page_marketing_campaigns,
+                     
     },
     "💰 Finanza & Pagamenti": {
         "Finanza / Fatture": page_finance_invoices,
@@ -8423,6 +8554,7 @@ PAGES = {
         "Incassi / Scadenze": page_payments,
         "Spese": page_expenses,
         "Finanza / Dashboard": page_finance_dashboard,
+        "Marketing ROI": page_marketing_roi,
     },
     "📋 Checklist Mensile": {
         "Bilancio gestionale": page_bilancio_gestionale,
