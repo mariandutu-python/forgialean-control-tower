@@ -51,6 +51,9 @@ from db import (
     Company,
     Campaign,
     CampaignEvent,
+    CrmAutomationRule,
+    run_crm_automations,
+
 )
 
 from cache_functions import (
