@@ -6169,12 +6169,11 @@ def page_marketing_roi():
     st.title("📈 Marketing ROI & CAC per campagna")
 
     # ---- Carica campagne, opportunità, spese ----
-    session, = get_session()
-    campaigns = session.exec(select(MarketingCampaign)).all()
-    opps = session.exec(select(Opportunity)).all()
-    expenses = session.exec(select(Expense)).all()
-    invoices = session.exec(select(Invoice)).all()
-    session.close()
+    with get_session() as session:
+        campaigns = session.exec(select(MarketingCampaign)).all()
+        opps = session.exec(select(Opportunity)).all()
+        expenses = session.exec(select(Expense)).all()
+        invoices = session.exec(select(Invoice)).all()
 
     if not campaigns:
         st.info("Nessuna campagna marketing definita. Crea almeno una campagna nella pagina 'Campagne marketing'.")
