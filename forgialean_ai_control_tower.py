@@ -3074,6 +3074,9 @@ def page_crm_sales():
                 session.commit()
                 session.refresh(new_opp)
 
+            # 🔁 Automazioni CRM su creazione (old_status = None)
+            run_crm_automations(new_opp.opportunity_id, old_status=None)
+
             # GA4 lead lifecycle (generate_lead / working_lead / ecc.)
             track_generate_lead_from_crm(
                 new_opp,
