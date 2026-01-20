@@ -2493,75 +2493,6 @@ def page_crm_sales():
                 st.rerun()
 
             st.stop()
-def page_crm_segments():
-    st.title("📂 Segmenti CRM per tag")
-    role = st.session_state.get("role", "user")
-
-    with get_session() as session:
-        clients = session.exec(select(Client).order_by(Client.ragione_sociale)).all()
-        tags = session.exec(select(Tag).order_by(Tag.nome)).all()
-        contact_tags = session.exec(select(ContactTag)).all()
-
-    if not clients:
-        st.info("Nessun cliente registrato.")
-        return
-
-    df_clients = pd.DataFrame([c.__dict__ for c in clients])
-    df_clients["label"] = (
-        df_clients["client_id"].astype(str) + " - " + df_clients["ragione_sociale"]
-    )
-
-    # Mappa client_id -> set(tag_id)
-    ct_map: dict[int, set[int]] = {}
-    for ct in contact_tags or []:
-        ct_map.setdefault(ct.client_id, set()).add(ct.tag_id)
-
-    # scelta tag filtro
-    st.subheader("Filtra clienti per tag")
-
-    if not tags:
-        st.info("Nessun tag definito. Crea tag dalla pagina CRM / opportunità.")
-        return
-
-    tag_options = {t.nome: t.tag_id for t in tags}
-    selected_tag_names = st.multiselect(
-        "Seleziona uno o più tag",
-        options=list(tag_options.keys()),
-    )
-
-    if not selected_tag_names:
-        st.caption("Seleziona almeno un tag per vedere i clienti segmentati.")
-        return
-
-    selected_tag_ids = {tag_options[n] for n in selected_tag_names}
-
-    # clienti che hanno TUTTI i tag selezionati (AND)
-    def has_all_tags(cid: int) -> bool:
-        tag_set = ct_map.get(cid, set())
-        return selected_tag_ids.issubset(tag_set)
-
-    df_seg = df_clients[df_clients["client_id"].apply(has_all_tags)].copy()
-
-    st.markdown(
-        f"Risultati: **{df_seg.shape}** clienti con tutti i tag selezionati."
-    )
-
-    if df_seg.empty:
-        st.info("Nessun cliente corrisponde a questa combinazione di tag.")
-        return
-
-    cols_show = ["client_id", "ragione_sociale", "email", "telefono"]
-    cols_show = [c for c in cols_show if c in df_seg.columns]
-
-    st.dataframe(
-        df_seg[cols_show].rename(
-            columns={
-                "client_id": "ID",
-                "ragione_sociale": "Cliente",
-            }
-        ),
-        use_container_width=True,
-    )
 
     # Cattura eventuali parametri UTM dall'URL
     capture_utm_params()
@@ -4092,6 +4023,75 @@ class StepOutcome(str, Enum):
     OK = "ok"
     APPROFONDISCI = "approfondisci"
     RINVIA = "rinvia"
+def page_crm_segments():
+    st.title("📂 Segmenti CRM per tag")
+    role = st.session_state.get("role", "user")
+
+    with get_session() as session:
+        clients = session.exec(select(Client).order_by(Client.ragione_sociale)).all()
+        tags = session.exec(select(Tag).order_by(Tag.nome)).all()
+        contact_tags = session.exec(select(ContactTag)).all()
+
+    if not clients:
+        st.info("Nessun cliente registrato.")
+        return
+
+    df_clients = pd.DataFrame([c.__dict__ for c in clients])
+    df_clients["label"] = (
+        df_clients["client_id"].astype(str) + " - " + df_clients["ragione_sociale"]
+    )
+
+    # Mappa client_id -> set(tag_id)
+    ct_map: dict[int, set[int]] = {}
+    for ct in contact_tags or []:
+        ct_map.setdefault(ct.client_id, set()).add(ct.tag_id)
+
+    # scelta tag filtro
+    st.subheader("Filtra clienti per tag")
+
+    if not tags:
+        st.info("Nessun tag definito. Crea tag dalla pagina CRM / opportunità.")
+        return
+
+    tag_options = {t.nome: t.tag_id for t in tags}
+    selected_tag_names = st.multiselect(
+        "Seleziona uno o più tag",
+        options=list(tag_options.keys()),
+    )
+
+    if not selected_tag_names:
+        st.caption("Seleziona almeno un tag per vedere i clienti segmentati.")
+        return
+
+    selected_tag_ids = {tag_options[n] for n in selected_tag_names}
+
+    # clienti che hanno TUTTI i tag selezionati (AND)
+    def has_all_tags(cid: int) -> bool:
+        tag_set = ct_map.get(cid, set())
+        return selected_tag_ids.issubset(tag_set)
+
+    df_seg = df_clients[df_clients["client_id"].apply(has_all_tags)].copy()
+
+    st.markdown(
+        f"Risultati: **{df_seg.shape[0]}** clienti con tutti i tag selezionati."
+    )
+
+    if df_seg.empty:
+        st.info("Nessun cliente corrisponde a questa combinazione di tag.")
+        return
+
+    cols_show = ["client_id", "ragione_sociale", "email", "telefono"]
+    cols_show = [c for c in cols_show if c in df_seg.columns]
+
+    st.dataframe(
+        df_seg[cols_show].rename(
+            columns={
+                "client_id": "ID",
+                "ragione_sociale": "Cliente",
+            }
+        ),
+        use_container_width=True,
+    )
 
 def page_lead_capture():
     """
