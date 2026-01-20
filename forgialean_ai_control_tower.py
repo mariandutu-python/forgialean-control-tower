@@ -6175,7 +6175,7 @@ def page_marketing_campaigns():
 def page_marketing_roi():
     st.title("📈 Marketing ROI & CAC per campagna")
 
-    # ---- Carica campagne, opportunità, spese ----
+    # ---- Carica campagne, opportunità, spese, fatture ----
     with get_session() as session:
         campaigns = session.exec(select(MarketingCampaign)).all()
         opps = session.exec(select(Opportunity)).all()
@@ -6191,20 +6191,89 @@ def page_marketing_roi():
     df_exp = pd.DataFrame([e.__dict__ for e in expenses]) if expenses else pd.DataFrame()
     df_inv = pd.DataFrame([i.__dict__ for i in invoices]) if invoices else pd.DataFrame()
 
-    # ---- Filtri base periodo (opzionale) ----
-    st.subheader("Filtri periodo (facoltativi)")
+    # ---- Anno e filtri periodo ----
+    st.subheader("Filtri periodo")
+
+    col_top1, col_top2 = st.columns(2)
+    with col_top1:
+        anni_disponibili = []
+        if not df_inv.empty and "data_fattura" in df_inv.columns:
+            anni_disponibili = sorted(
+                df_inv["data_fattura"].dropna().apply(lambda d: d.year).unique().tolist()
+            )
+        anno_sel = st.selectbox(
+            "Anno di analisi (fatture)",
+            options=anni_disponibili if anni_disponibili else [date.today().year],
+            index=0,
+        )
+    with col_top2:
+        st.caption("Puoi restringere ulteriormente con un intervallo preciso (opzionale).")
+
     col_f1, col_f2 = st.columns(2)
     with col_f1:
-        data_da = st.date_input("Da data (fatture)", value=None)
+        data_da = st.date_input("Da data (fatture, opzionale)", value=None)
     with col_f2:
-        data_a = st.date_input("A data (fatture)", value=None)
+        data_a = st.date_input("A data (fatture, opzionale)", value=None)
 
+    # ---- Prepara flag opportunità vinte ----
     if not df_opp.empty:
-        # consideriamo opportunità vinte come clienti acquisiti
         df_opp["stato_opportunita"] = df_opp["stato_opportunita"].fillna("").astype(str)
         df_opp["is_won"] = df_opp["stato_opportunita"].str.lower().eq("vinta")
     else:
         df_opp["is_won"] = []
+
+    # ---- Ricavi per campagna (via fatture) ----
+    ricavi_per_campagna = {}
+    clienti_per_campagna = {}
+
+    if not df_opp.empty and not df_inv.empty:
+        df_opp["campaign_id"] = df_opp["campaign_id"].astype("Int64")
+
+        # mappiamo client_id -> campaign_id usando le opp vinte
+        df_won = df_opp[df_opp["is_won"] & df_opp["campaign_id"].notna()].copy()
+        df_won = df_won.sort_values("data_apertura").drop_duplicates(subset=["client_id"])
+        client_to_campaign = df_won.set_index("client_id")["campaign_id"].to_dict()
+
+        df_inv2 = df_inv.copy()
+
+        # filtro anno obbligatorio sulla data fattura
+        df_inv2 = df_inv2[df_inv2["data_fattura"].notna()]
+        df_inv2["anno"] = df_inv2["data_fattura"].apply(lambda d: d.year)
+        df_inv2 = df_inv2[df_inv2["anno"] == anno_sel]
+
+        # filtri opzionali data_da / data_a
+        if data_da:
+            df_inv2 = df_inv2[df_inv2["data_fattura"] >= data_da]
+        if data_a:
+            df_inv2 = df_inv2[df_inv2["data_fattura"] <= data_a]
+
+        df_inv2["campaign_id"] = df_inv2["client_id"].map(client_to_campaign)
+        df_inv2 = df_inv2[df_inv2["campaign_id"].notna()]
+
+        grp_rev = df_inv2.groupby("campaign_id")["importo_totale"].sum().rename("ricavi").reset_index()
+        ricavi_per_campagna = dict(zip(grp_rev["campaign_id"], grp_rev["ricavi"]))
+
+        grp_clients = df_inv2.groupby("campaign_id")["client_id"].nunique().rename("n_clienti").reset_index()
+        clienti_per_campagna = dict(zip(grp_clients["campaign_id"], grp_clients["n_clienti"]))
+
+    # ---- Costi marketing per campagna (Expense) ----
+    costi_per_campagna = {}
+    if not df_exp.empty:
+        df_exp["campaign_id"] = df_exp["campaign_id"].astype("Int64")
+
+        df_exp2 = df_exp[df_exp["campaign_id"].notna()].copy()
+
+        # uso data_pagamento se presente, altrimenti data
+        df_exp2["data_rif"] = pd.to_datetime(
+            df_exp2["data_pagamento"].fillna(df_exp2["data"]),
+            errors="coerce",
+        )
+        df_exp2 = df_exp2.dropna(subset=["data_rif"])
+        df_exp2["anno"] = df_exp2["data_rif"].dt.year
+        df_exp2 = df_exp2[df_exp2["anno"] == anno_sel]
+
+        grp_cost = df_exp2.groupby("campaign_id")["importo_totale"].sum().rename("costi_marketing").reset_index()
+        costi_per_campagna = dict(zip(grp_cost["campaign_id"], grp_cost["costi_marketing"]))
 
     # ---- Ricavi per campagna (via fatture) ----
     ricavi_per_campagna = {}
