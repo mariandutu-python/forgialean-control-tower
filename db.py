@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, List
 from datetime import date, datetime
 from pathlib import Path
 
@@ -46,6 +46,26 @@ class Client(SQLModel, table=True):
     codice_destinatario: Optional[str] = None
     pec_fatturazione: Optional[str] = None
 
+class MarketingCampaign(SQLModel, table=True):
+    """Campagne marketing collegate a opportunità e spese (per CAC/ROI)."""
+    campaign_id: Optional[int] = Field(default=None, primary_key=True)
+    nome: str
+    tipo: Optional[str] = Field(
+        default=None,
+        description="es. ads, email, referral, evento"
+    )
+    canale: Optional[str] = Field(
+        default=None,
+        description="es. google_ads, meta_ads, linkedin, email, organico"
+    )
+    data_inizio: Optional[date] = None
+    data_fine: Optional[date] = None
+    budget_previsto: Optional[float] = Field(default=0.0)
+    note: Optional[str] = None
+
+    # relazioni logiche (non obbligatorie ma utili)
+    opportunities: List["Opportunity"] = Relationship(back_populates="campaign")
+    expenses: List["Expense"] = Relationship(back_populates="campaign")
 
 class Opportunity(SQLModel, table=True):
     opportunity_id: Optional[int] = Field(default=None, primary_key=True)
@@ -71,6 +91,13 @@ class Opportunity(SQLModel, table=True):
     utm_medium: Optional[str] = None
     utm_campaign: Optional[str] = None
     utm_content: Optional[str] = None
+
+    # collegamento (opzionale) a campagna marketing
+    campaign_id: Optional[int] = Field(default=None, foreign_key="marketingcampaign.campaign_id")
+    campaign: Optional[MarketingCampaign] = Relationship(back_populates="opportunities")
+
+    # gamification
+    flame_points: int = Field(default=0)
 
     # gamification
     flame_points: int = Field(default=0)
@@ -378,6 +405,9 @@ class Expense(SQLModel, table=True):
     pagata: bool = True                  # per default la considero già pagata
     data_pagamento: Optional[date] = None
     note: Optional[str] = None
+    # collegamento opzionale a campagna marketing (per costi marketing/CAC)
+    campaign_id: Optional[int] = Field(default=None, foreign_key="marketingcampaign.campaign_id")
+    campaign: Optional[MarketingCampaign] = Relationship(back_populates="expenses")
 
 
 class CashflowBudget(SQLModel, table=True):
@@ -513,6 +543,8 @@ def migrate_db():
             ("date_demo", "DATE"),
             ("date_contract_sent", "DATE"),
             ("date_contract_signed", "DATE"),
+            ("campaign_id", "INTEGER"),
+
         ]
 
         for col_name, col_type in migrations:
