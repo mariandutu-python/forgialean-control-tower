@@ -2945,6 +2945,10 @@ def page_crm_sales():
         clients = session.exec(select(Client)).all()
         campaigns = session.exec(select(MarketingCampaign)).all()
 
+    # inizializzo per evitare UnboundLocalError
+    submitted_opp = False
+    campaign_id_sel = None
+
     if not clients:
         st.info("Prima crea almeno un cliente nella pagina 'Clienti'.")
     else:
@@ -2956,10 +2960,13 @@ def page_crm_sales():
         )
 
         # prep campagne per select
-        campaign_id_sel = None
-        df_camp_sel = pd.DataFrame(
-            [{"campaign_id": c.campaign_id, "nome": c.nome} for c in (campaigns or [])]
-        ) if campaigns else pd.DataFrame()
+        df_camp_sel = (
+            pd.DataFrame(
+                [{"campaign_id": c.campaign_id, "nome": c.nome} for c in (campaigns or [])]
+            )
+            if campaigns
+            else pd.DataFrame()
+        )
 
         with st.form("new_opportunity"):
             col1, col2 = st.columns(2)
@@ -3023,7 +3030,9 @@ def page_crm_sales():
                 if camp_label != "Nessuna":
                     campaign_id_sel = int(camp_label.split(" - ")[0])
             else:
-                st.caption("Nessuna campagna marketing definita (pagina 'Campagne marketing').")
+                st.caption(
+                    "Nessuna campagna marketing definita (pagina 'Campagne marketing')."
+                )
 
             stato_opportunita = st.selectbox(
                 "Stato opportunità",
@@ -3033,6 +3042,7 @@ def page_crm_sales():
 
             submitted_opp = st.form_submit_button("Salva opportunità")
 
+    # viene eseguito solo se c'erano clienti ed è stato inviato il form
     if submitted_opp:
         if not nome_opportunita.strip():
             st.warning("Il nome opportunità è obbligatorio.")
@@ -3077,7 +3087,7 @@ def page_crm_sales():
             # 🔁 Automazioni CRM su creazione (old_status = None)
             run_crm_automations(new_opp.opportunity_id, old_status=None)
 
-            # GA4 lead lifecycle (generate_lead / working_lead / ecc.)
+            # GA4 lead lifecycle
             track_generate_lead_from_crm(
                 new_opp,
                 new_status=new_opp.stato_opportunita or "nuovo",
