@@ -3282,145 +3282,6 @@ def page_crm_sales():
                 st.markdown("**Avanzamento rapido pipeline**")
 
                 col_p1, col_p2, col_p3, col_p4 = st.columns(4)
-                with col_p1:
-                    if st.button(
-                        "➡ Offerta",
-                        key=f"to_offerta_{row['opportunity_id']}",
-                    ):
-                        with get_session() as session:
-                            opp_db = session.get(Opportunity, row["opportunity_id"])
-                            if opp_db:
-                                old_status = opp_db.stato_opportunita
-                                opp_db.fase_pipeline = "Offerta"
-                                opp_db.stato_opportunita = "aperta"
-
-                                # Log in timeline
-                                session.add(
-                                    CrmActivity(
-                                        opportunity_id=opp_db.opportunity_id,
-                                        tipo="fase",
-                                        canale="crm",
-                                        oggetto=f"Cambio fase: {opp_db.fase_pipeline}",
-                                        descrizione=f"Stato: {opp_db.stato_opportunita} (da: {old_status})",
-                                    )
-                                )
-
-                                session.add(opp_db)
-                                session.commit()
-
-                                track_generate_lead_from_crm(
-                                    opp_db,
-                                    new_status=opp_db.stato_opportunita or "aperta",
-                                    old_status=old_status,
-                                )
-                        st.rerun()
-
-                with col_p2:
-                    if st.button(
-                        "➡ Negoziazione",
-                        key=f"to_nego_{row['opportunity_id']}",
-                    ):
-                        with get_session() as session:
-                            opp_db = session.get(Opportunity, row["opportunity_id"])
-                            if opp_db:
-                                old_status = opp_db.stato_opportunita
-                                opp_db.fase_pipeline = "Negoziazione"
-                                opp_db.stato_opportunita = "aperta"
-
-                                # Log in timeline
-                                session.add(
-                                    CrmActivity(
-                                        opportunity_id=opp_db.opportunity_id,
-                                        tipo="fase",
-                                        canale="crm",
-                                        oggetto=f"Cambio fase: {opp_db.fase_pipeline}",
-                                        descrizione=f"Stato: {opp_db.stato_opportunita} (da: {old_status})",
-                                    )
-                                )
-
-                                session.add(opp_db)
-                                session.commit()
-
-                                track_generate_lead_from_crm(
-                                    opp_db,
-                                    new_status=opp_db.stato_opportunita or "aperta",
-                                    old_status=old_status,
-                                )
-                        st.rerun()
-
-                with col_p3:
-                    if st.button(
-                        "✅ Segna Vinta",
-                        key=f"to_won_{row['opportunity_id']}",
-                    ):
-                        with get_session() as session:
-                            opp_db = session.get(Opportunity, row["opportunity_id"])
-                            if opp_db:
-                                old_status = opp_db.stato_opportunita
-                                opp_db.fase_pipeline = "Vinta"
-                                opp_db.stato_opportunita = "vinta"
-
-                                # Log in timeline
-                                session.add(
-                                    CrmActivity(
-                                        opportunity_id=opp_db.opportunity_id,
-                                        tipo="fase",
-                                        canale="crm",
-                                        oggetto=f"Cambio fase: {opp_db.fase_pipeline}",
-                                        descrizione=f"Stato: {opp_db.stato_opportunita} (da: {old_status})",
-                                    )
-                                )
-
-                                session.add(opp_db)
-                                session.commit()
-
-                                track_generate_lead_from_crm(
-                                    opp_db,
-                                    new_status=opp_db.stato_opportunita or "vinta",
-                                    old_status=old_status,
-                                )
-                        st.rerun()
-
-                with col_p4:
-                    if st.button(
-                        "❌ Segna Persa",
-                        key=f"to_lost_{row['opportunity_id']}",
-                    ):
-                        with get_session() as session:
-                            opp_db = session.get(Opportunity, row["opportunity_id"])
-                            if opp_db:
-                                old_status = opp_db.stato_opportunita
-                                opp_db.fase_pipeline = "Persa"
-                                opp_db.stato_opportunita = "persa"
-
-                                # Log in timeline
-                                session.add(
-                                    CrmActivity(
-                                        opportunity_id=opp_db.opportunity_id,
-                                        tipo="fase",
-                                        canale="crm",
-                                        oggetto=f"Cambio fase: {opp_db.fase_pipeline}",
-                                        descrizione=f"Stato: {opp_db.stato_opportunita} (da: {old_status})",
-                                    )
-                                )
-
-                                session.add(opp_db)
-                                session.commit()
-
-                                track_generate_lead_from_crm(
-                                    opp_db,
-                                    new_status=opp_db.stato_opportunita or "persa",
-                                    old_status=old_status,
-                                )
-                        st.rerun()
-
-                # -------------------------
-                # Avanzamento rapido pipeline
-                # -------------------------
-                st.markdown("---")
-                st.markdown("**Avanzamento rapido pipeline**")
-
-                col_p1, col_p2, col_p3, col_p4 = st.columns(4)
 
                 # ➡ Offerta
                 with col_p1:
@@ -3442,10 +3303,11 @@ def page_crm_sales():
                                         tipo="fase",
                                         canale="crm",
                                         oggetto=f"Cambio fase: {opp_db.fase_pipeline}",
-                                        descrizione=f"Stato: {opp_db.stato_opportunita} (da: {old_status})",
+                                        descrizione=(
+                                            f"Stato: {opp_db.stato_opportunita} (da: {old_status})"
+                                        ),
                                     )
                                 )
-
                                 session.add(opp_db)
                                 session.commit()
 
@@ -3480,10 +3342,11 @@ def page_crm_sales():
                                         tipo="fase",
                                         canale="crm",
                                         oggetto=f"Cambio fase: {opp_db.fase_pipeline}",
-                                        descrizione=f"Stato: {opp_db.stato_opportunita} (da: {old_status})",
+                                        descrizione=(
+                                            f"Stato: {opp_db.stato_opportunita} (da: {old_status})"
+                                        ),
                                     )
                                 )
-
                                 session.add(opp_db)
                                 session.commit()
 
@@ -3516,10 +3379,11 @@ def page_crm_sales():
                                         tipo="fase",
                                         canale="crm",
                                         oggetto=f"Cambio fase: {opp_db.fase_pipeline}",
-                                        descrizione=f"Stato: {opp_db.stato_opportunita} (da: {old_status})",
+                                        descrizione=(
+                                            f"Stato: {opp_db.stato_opportunita} (da: {old_status})"
+                                        ),
                                     )
                                 )
-
                                 session.add(opp_db)
                                 session.commit()
 
@@ -3552,10 +3416,11 @@ def page_crm_sales():
                                         tipo="fase",
                                         canale="crm",
                                         oggetto=f"Cambio fase: {opp_db.fase_pipeline}",
-                                        descrizione=f"Stato: {opp_db.stato_opportunita} (da: {old_status})",
+                                        descrizione=(
+                                            f"Stato: {opp_db.stato_opportunita} (da: {old_status})"
+                                        ),
                                     )
                                 )
-
                                 session.add(opp_db)
                                 session.commit()
 
@@ -3569,7 +3434,7 @@ def page_crm_sales():
                         st.rerun()
 
                 # -------------------------
-                # Pianifica prossima azione (resta)
+                # Pianifica prossima azione
                 # -------------------------
                 st.markdown("---")
                 st.markdown("**Pianifica prossima azione**")
@@ -3620,9 +3485,7 @@ def page_crm_sales():
                         key=f"done_{row['opportunity_id']}",
                     ):
                         with get_session() as session:
-                            opp_db = session.get(
-                                Opportunity, row["opportunity_id"]
-                            )
+                            opp_db = session.get(Opportunity, row["opportunity_id"])
                             if opp_db:
                                 opp_db.data_prossima_azione = None
                                 opp_db.tipo_prossima_azione = None
@@ -3640,9 +3503,7 @@ def page_crm_sales():
                         key=f"next_{row['opportunity_id']}",
                     ):
                         with get_session() as session:
-                            opp_db = session.get(
-                                Opportunity, row["opportunity_id"]
-                            )
+                            opp_db = session.get(Opportunity, row["opportunity_id"])
                             if opp_db:
                                 opp_db.data_prossima_azione = nuova_data
                                 opp_db.tipo_prossima_azione = nuovo_tipo or None
@@ -3651,7 +3512,6 @@ def page_crm_sales():
                                 session.commit()
                         st.success("Nuova prossima azione salvata.")
                         st.rerun()
-
     # =========================
     # SINTESI ATTIVITÀ COMMERCIALI
     # =========================
