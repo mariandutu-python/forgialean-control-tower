@@ -2187,13 +2187,19 @@ def page_clients():
             piva_e = st.text_input("Partita IVA", client_obj.piva or "")
             settore_e = st.text_input("Settore", client_obj.settore or "")
             paese_e = st.text_input("Paese", client_obj.paese or "")
-            segmento_cliente_e = st.text_input("Segmento cliente (es. A/B/C)", client_obj.segmento_cliente or "")
+            segmento_cliente_e = st.text_input(
+                "Segmento cliente (es. A/B/C)", client_obj.segmento_cliente or ""
+            )
         with col2:
-            canale_acquisizione_e = st.text_input("Canale acquisizione", client_obj.canale_acquisizione or "")
+            canale_acquisizione_e = st.text_input(
+                "Canale acquisizione", client_obj.canale_acquisizione or ""
+            )
             stato_cliente_e = st.selectbox(
                 "Stato cliente",
                 ["attivo", "prospect", "perso"],
-                index=["attivo", "prospect", "perso"].index(client_obj.stato_cliente or "attivo"),
+                index=["attivo", "prospect", "perso"].index(
+                    client_obj.stato_cliente or "attivo"
+                ),
             )
             data_creazione_e = st.date_input(
                 "Data creazione",
@@ -2229,12 +2235,47 @@ def page_clients():
     if delete_clicked:
         with get_session() as session:
             obj = session.get(Client, client_id_sel)
-            if obj:
+            if not obj:
+                st.warning("Cliente non trovato in database.")
+            else:
+                # 1) opportunità del cliente
+                opps = session.exec(
+                    select(Opportunity).where(Opportunity.client_id == obj.client_id)
+                ).all()
+
+                for opp in opps:
+                    # task collegati all'opportunità
+                    tasks = session.exec(
+                        select(CrmTask).where(CrmTask.opportunity_id == opp.opportunity_id)
+                    ).all()
+                    for t in tasks:
+                        session.delete(t)
+
+                    # attività CRM collegate
+                    acts = session.exec(
+                        select(CrmActivity).where(CrmActivity.opportunity_id == opp.opportunity_id)
+                    ).all()
+                    for a in acts:
+                        session.delete(a)
+
+                    # eventuali altre entità collegate all'opportunità (se ne aggiungerai)
+
+                    session.delete(opp)
+
+                # qui puoi aggiungere altre cancellazioni dirette sul client_id
+                # es. CashflowEvent, Invoice, ContactTag, ecc. se vuoi:
+                # events = session.exec(
+                #     select(CashflowEvent).where(CashflowEvent.client_id == obj.client_id)
+                # ).all()
+                # for ev in events:
+                #     session.delete(ev)
+
+                # 2) finalmente elimina il cliente
                 session.delete(obj)
                 session.commit()
-        st.success("Cliente eliminato.")
-        st.rerun()
 
+        st.success("Cliente e dati collegati eliminati.")
+        st.rerun()
 
 def page_crm_sales():
     # Lettura querystring per deep-link da calendario
