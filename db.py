@@ -729,6 +729,52 @@ def migrate_db():
             except Exception as e:
                 print(f"⚠️ Errore creazione tabella Expense: {e}")
 
+        # =========================
+        # MIGRAZIONE / DEFAULT CRM AUTOMATION RULES
+        # =========================
+        # Verifica esistenza tabella crmautomationrule
+        result_automation = conn.exec_driver_sql(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='crmautomationrule';"
+        ).fetchone()
+
+        if result_automation:
+            # Controlla se esiste già la regola "Primo contatto lead"
+            existing_rule = conn.exec_driver_sql(
+                """
+                SELECT rule_id
+                FROM crmautomationrule
+                WHERE trigger_type = 'status_change'
+                  AND (from_status IS NULL OR from_status = '')
+                  AND to_status = 'aperta'
+                  AND action_type = 'create_task'
+                  AND task_title = 'Primo contatto lead'
+                """
+            ).fetchone()
+
+            if not existing_rule:
+                try:
+                    conn.exec_driver_sql(
+                        """
+                        INSERT INTO crmautomationrule
+                        (trigger_type, from_status, to_status,
+                         required_tag_id, action_type,
+                         task_title, task_type, days_offset, owner,
+                         telegram_message, attiva, created_at)
+                        VALUES
+                        ('status_change', NULL, 'aperta',
+                         NULL, 'create_task',
+                         'Primo contatto lead', 'telefonata', 1, NULL,
+                         NULL, 1, CURRENT_TIMESTAMP)
+                        """
+                    )
+                    conn.commit()
+                    print("✅ Regola CRM 'Primo contatto lead' creata")
+                except Exception as e:
+                    print(f"⚠️ Errore creazione regola CRM 'Primo contatto lead': {e}")
+            else:
+                print("ℹ️ Regola CRM 'Primo contatto lead' già presente")
+        else:
+            print("ℹ️ Tabella CrmAutomationRule non trovata (nessuna regola auto creata)")
 
 def get_session() -> Session:
     """Restituisce una nuova sessione SQLModel"""

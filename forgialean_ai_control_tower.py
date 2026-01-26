@@ -4189,6 +4189,93 @@ def page_crm_segments():
         use_container_width=True,
     )
 
+def page_crm_funnel():
+    st.title("📈 Funnel CRM & campagne")
+
+    with get_session() as session:
+        opps = session.exec(select(Opportunity)).all()
+
+    if not opps:
+        st.info("Nessuna opportunità presente nel CRM.")
+        return
+
+    df_opps = pd.DataFrame([o.__dict__ for o in opps])
+
+    # Normalizza un minimo i NaN
+    df_opps["fase_pipeline"] = df_opps["fase_pipeline"].fillna("Senza fase")
+    df_opps["stato_opportunita"] = df_opps["stato_opportunita"].fillna("sconosciuto")
+    df_opps["valore_stimato"] = df_opps["valore_stimato"].fillna(0.0)
+
+    st.subheader("📊 Volume per fase pipeline")
+
+    fase_counts = (
+        df_opps.groupby("fase_pipeline")
+        .agg(
+            num_opps=("opportunity_id", "count"),
+            valore_stimato=("valore_stimato", "sum"),
+        )
+        .reset_index()
+        .sort_values("num_opps", ascending=False)
+    )
+    st.dataframe(fase_counts, use_container_width=True)
+
+    st.subheader("🏁 Win rate complessivo e per fase")
+
+    df_closed = df_opps[df_opps["stato_opportunita"].isin(["vinta", "persa"])].copy()
+    if df_closed.empty:
+        st.info("Nessuna opportunità chiusa (vinta/persa) per calcolare il win rate.")
+    else:
+        num_won = (df_closed["stato_opportunita"] == "vinta").sum()
+        num_closed = len(df_closed)
+        win_rate = num_won / num_closed * 100 if num_closed > 0 else 0.0
+
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Opportunità chiuse", num_closed)
+        c2.metric("Vinte", num_won)
+        c3.metric("Win rate", f"{win_rate:.1f}%")
+
+        # Win rate per fase_pipeline "finale"
+        win_per_fase = (
+            df_closed.groupby("fase_pipeline")
+            .agg(
+                num_chiuse=("opportunity_id", "count"),
+                vinte=("stato_opportunita", lambda s: (s == "vinta").sum()),
+            )
+            .reset_index()
+        )
+        win_per_fase["win_rate_%"] = (
+            win_per_fase["vinte"] / win_per_fase["num_chiuse"] * 100
+        ).round(1)
+
+        st.markdown("**Dettaglio win rate per fase pipeline**")
+        st.dataframe(win_per_fase, use_container_width=True)
+
+    st.subheader("📣 Funnel per campagna (UTM)")
+
+    if "utm_campaign" not in df_opps.columns:
+        st.info("Nessuna colonna utm_campaign trovata sulle opportunità.")
+        return
+
+    df_opps["utm_campaign"] = df_opps["utm_campaign"].fillna("(no campaign)")
+    funnel_camp = (
+        df_opps.groupby("utm_campaign")
+        .agg(
+            num_opps=("opportunity_id", "count"),
+            num_vinte=("stato_opportunita", lambda s: (s == "vinta").sum()),
+            valore_vinto=(
+                "valore_stimato",
+                lambda v: v[df_opps.loc[v.index, "stato_opportunita"] == "vinta"].sum(),
+            ),
+        )
+        .reset_index()
+    )
+    funnel_camp["win_rate_%"] = (
+        funnel_camp["num_vinte"]
+        / funnel_camp["num_opps"].replace(0, pd.NA)
+        * 100
+    ).round(1)
+
+    st.dataframe(funnel_camp, use_container_width=True)
 
 def page_lead_capture():
     """
@@ -9065,6 +9152,7 @@ PAGES = {
     "📊 Gestionale Operativo": {
         "Clienti": page_clients,
         "CRM & Vendite": page_crm_sales,
+        "Funnel CRM & campagne": page_crm_funnel,
         "Segmenti CRM": page_crm_segments,
         "Treno vendite": page_sales_train,
         "Lead da campagne": page_lead_capture,
