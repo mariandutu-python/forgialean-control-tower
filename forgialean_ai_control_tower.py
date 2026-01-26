@@ -3315,6 +3315,7 @@ def page_crm_sales():
                 st.write(f"Data apertura: {row['data_apertura']}")
                 st.write(f"Data chiusura prevista: {row['data_chiusura_prevista']}")
                 st.write(f"📱 Telefono contatto: {row.get('telefono_contatto', '-')}")
+
                 st.write(
                     f"Data prossima azione: {row.get('data_prossima_azione', '')}"
                 )
@@ -3343,17 +3344,21 @@ def page_crm_sales():
                 # ➡ Offerta
                 with col_p1:
                     if st.button(
-                        "➡ Offerta",
-                        key=f"to_offerta_{row['opportunity_id']}",
+                            "➡ Offerta",
+                            key=f"to_offerta_{row['opportunity_id']}",
                     ):
+                        old_status = None
+                        new_status = None
+                        opp_id = row["opportunity_id"]
+
                         with get_session() as session:
-                            opp_db = session.get(Opportunity, row["opportunity_id"])
+                            opp_db = session.get(Opportunity, opp_id)
                             if opp_db:
                                 old_status = opp_db.stato_opportunita
                                 opp_db.fase_pipeline = "Offerta"
                                 opp_db.stato_opportunita = "aperta"
+                                new_status = opp_db.stato_opportunita
 
-                                # Log in timeline
                                 session.add(
                                     CrmActivity(
                                         opportunity_id=opp_db.opportunity_id,
@@ -3368,31 +3373,33 @@ def page_crm_sales():
                                 session.add(opp_db)
                                 session.commit()
 
-                        # 🔁 Automazioni CRM su cambio stato
-                        run_crm_automations(row["opportunity_id"], old_status=old_status)
-
-                        # GA4 lead lifecycle
-                        track_generate_lead_from_crm(
-                            opp_db,
-                            new_status=opp_db.stato_opportunita or "aperta",
-                            old_status=old_status,
-                        )
+                        if new_status is not None:
+                            run_crm_automations(opp_id, old_status=old_status)
+                            track_generate_lead_from_crm(
+                                opp_id,
+                                new_status=new_status,
+                                old_status=old_status,
+                            )
                         st.rerun()
 
                 # ➡ Negoziazione
                 with col_p2:
                     if st.button(
-                        "➡ Negoziazione",
-                        key=f"to_nego_{row['opportunity_id']}",
+                            "➡ Negoziazione",
+                            key=f"to_nego_{row['opportunity_id']}",
                     ):
+                        old_status = None
+                        new_status = None
+                        opp_id = row["opportunity_id"]
+
                         with get_session() as session:
-                            opp_db = session.get(Opportunity, row["opportunity_id"])
+                            opp_db = session.get(Opportunity, opp_id)
                             if opp_db:
                                 old_status = opp_db.stato_opportunita
                                 opp_db.fase_pipeline = "Negoziazione"
                                 opp_db.stato_opportunita = "aperta"
+                                new_status = opp_db.stato_opportunita
 
-                                # Log in timeline
                                 session.add(
                                     CrmActivity(
                                         opportunity_id=opp_db.opportunity_id,
@@ -3407,76 +3414,74 @@ def page_crm_sales():
                                 session.add(opp_db)
                                 session.commit()
 
-                        run_crm_automations(row["opportunity_id"], old_status=old_status)
-
-                        track_generate_lead_from_crm(
-                            opp_db,
-                            new_status=opp_db.stato_opportunita or "aperta",
-                            old_status=old_status,
-                        )
+                        if new_status is not None:
+                            run_crm_automations(opp_id, old_status=old_status)
+                            track_generate_lead_from_crm(
+                                opp_id,
+                                new_status=new_status,
+                                old_status=old_status,
+                            )
                         st.rerun()
 
-# ✅ Segna Vinta
-with col_p3:
-    if st.button(
-        "✅ Segna Vinta",
-        key=f"to_won_{row['opportunity_id']}",
-    ):
-        # inizializza variabili per usarle fuori dal with
-        old_status = None
-        new_status = None
-        opp_id = row["opportunity_id"]
+                # ✅ Segna Vinta
+                with col_p3:
+                    if st.button(
+                            "✅ Segna Vinta",
+                            key=f"to_won_{row['opportunity_id']}",
+                    ):
+                        old_status = None
+                        new_status = None
+                        opp_id = row["opportunity_id"]
 
-        with get_session() as session:
-            opp_db = session.get(Opportunity, opp_id)
-            if opp_db:
-                old_status = opp_db.stato_opportunita
-                opp_db.fase_pipeline = "Vinta"
-                opp_db.stato_opportunita = "vinta"
-                new_status = opp_db.stato_opportunita  # salva il valore PRIMA del commit
+                        with get_session() as session:
+                            opp_db = session.get(Opportunity, opp_id)
+                            if opp_db:
+                                old_status = opp_db.stato_opportunita
+                                opp_db.fase_pipeline = "Vinta"
+                                opp_db.stato_opportunita = "vinta"
+                                new_status = opp_db.stato_opportunita
 
-                # Log in timeline
-                session.add(
-                    CrmActivity(
-                        opportunity_id=opp_db.opportunity_id,
-                        tipo="fase",
-                        canale="crm",
-                        oggetto=f"Cambio fase: {opp_db.fase_pipeline}",
-                        descrizione=(
-                            f"Stato: {opp_db.stato_opportunita} (da: {old_status})"
-                        ),
-                    )
-                )
-                session.add(opp_db)
-                session.commit()
+                                session.add(
+                                    CrmActivity(
+                                        opportunity_id=opp_db.opportunity_id,
+                                        tipo="fase",
+                                        canale="crm",
+                                        oggetto=f"Cambio fase: {opp_db.fase_pipeline}",
+                                        descrizione=(
+                                            f"Stato: {opp_db.stato_opportunita} (da: {old_status})"
+                                        ),
+                                    )
+                                )
+                                session.add(opp_db)
+                                session.commit()
 
-        # qui NON usi più opp_db (ormai è detached), ma solo valori primitivi
-        if new_status is not None:
-            run_crm_automations(opp_id, old_status=old_status)
-
-            track_generate_lead_from_crm(
-                opp_id,             # meglio passare l'ID, non l'oggetto ORM
-                new_status=new_status,
-                old_status=old_status,
-            )
-
-        st.rerun()
-
+                        if new_status is not None:
+                            run_crm_automations(opp_id, old_status=old_status)
+                            track_generate_lead_from_crm(
+                                opp_id,
+                                new_status=new_status,
+                                old_status=old_status,
+                            )
+                        st.rerun()
 
                 # ❌ Segna Persa
                 with col_p4:
                     if st.button(
-                        "❌ Segna Persa",
-                        key=f"to_lost_{row['opportunity_id']}",
+                            "❌ Segna Persa",
+                            key=f"to_lost_{row['opportunity_id']}",
                     ):
+                        old_status = None
+                        new_status = None
+                        opp_id = row["opportunity_id"]
+
                         with get_session() as session:
-                            opp_db = session.get(Opportunity, row["opportunity_id"])
+                            opp_db = session.get(Opportunity, opp_id)
                             if opp_db:
                                 old_status = opp_db.stato_opportunita
                                 opp_db.fase_pipeline = "Persa"
                                 opp_db.stato_opportunita = "persa"
+                                new_status = opp_db.stato_opportunita
 
-                                # Log in timeline
                                 session.add(
                                     CrmActivity(
                                         opportunity_id=opp_db.opportunity_id,
@@ -3491,13 +3496,13 @@ with col_p3:
                                 session.add(opp_db)
                                 session.commit()
 
-                        run_crm_automations(row["opportunity_id"], old_status=old_status)
-
-                        track_generate_lead_from_crm(
-                            opp_db,
-                            new_status=opp_db.stato_opportunita or "persa",
-                            old_status=old_status,
-                        )
+                        if new_status is not None:
+                            run_crm_automations(opp_id, old_status=old_status)
+                            track_generate_lead_from_crm(
+                                opp_id,
+                                new_status=new_status,
+                                old_status=old_status,
+                            )
                         st.rerun()
 
                 # -------------------------
@@ -3548,8 +3553,8 @@ with col_p3:
                 col_b1, col_b2 = st.columns(2)
                 with col_b1:
                     if st.button(
-                        "✅ Segna azione come fatta (svuota)",
-                        key=f"done_{row['opportunity_id']}",
+                            "✅ Segna azione come fatta (svuota)",
+                            key=f"done_{row['opportunity_id']}",
                     ):
                         with get_session() as session:
                             opp_db = session.get(Opportunity, row["opportunity_id"])
@@ -3566,8 +3571,8 @@ with col_p3:
 
                 with col_b2:
                     if st.button(
-                        "📅 Salva nuova prossima azione",
-                        key=f"next_{row['opportunity_id']}",
+                            "📅 Salva nuova prossima azione",
+                            key=f"next_{row['opportunity_id']}",
                     ):
                         with get_session() as session:
                             opp_db = session.get(Opportunity, row["opportunity_id"])
@@ -3579,6 +3584,7 @@ with col_p3:
                                 session.commit()
                         st.success("Nuova prossima azione salvata.")
                         st.rerun()
+
     # =========================
     # SINTESI ATTIVITÀ COMMERCIALI
     # =========================
