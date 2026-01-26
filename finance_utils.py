@@ -203,6 +203,10 @@ def calcola_imposte_e_inps_normative(year: int) -> dict:
             )
             session.add(cfg)
             session.commit()
+            session.refresh(cfg)
+
+        # --- usa cfg DENTRO la sessione ---
+        regime = (cfg.regime or "").lower()
 
         invoices = session.exec(select(Invoice)).all()
         expenses = session.exec(select(Expense)).all()
@@ -213,65 +217,69 @@ def calcola_imposte_e_inps_normative(year: int) -> dict:
             select(InpsContribution).where(InpsContribution.year == year)
         ).all()
 
+        # Ricavi fiscali
+        df_inv = pd.DataFrame([i.__dict__ for i in (invoices or [])])
+        ricavi_fiscali = 0.0
+        if not df_inv.empty:
+            df_inv["data_rif"] = pd.to_datetime(
+                df_inv["data_incasso"].fillna(df_inv["data_fattura"]),
+                errors="coerce",
+            )
+            df_inv = df_inv.dropna(subset=["data_rif"])
+            df_inv["anno"] = df_inv["data_rif"].dt.year
+            ricavi_fiscali = float(
+                df_inv.loc[df_inv["anno"] == year, "importo_totale"].sum()
+            )
 
-    regime = (cfg.regime or "").lower()
+        # Costi fiscali (solo regime ordinario)
+        df_exp = pd.DataFrame([e.__dict__ for e in (expenses or [])])
+        costi_fiscali = 0.0
+        if regime == "ordinario" and not df_exp.empty:
+            df_exp["data_rif"] = pd.to_datetime(
+                df_exp["data_pagamento"].fillna(df_exp["data"]),
+                errors="coerce",
+            )
+            df_exp = df_exp.dropna(subset=["data_rif"])
+            df_exp["anno"] = df_exp["data_rif"].dt.year
+            costi_fiscali = float(
+                df_exp.loc[df_exp["anno"] == year, "importo_totale"].sum()
+            )
 
-    df_inv = pd.DataFrame([i.__dict__ for i in (invoices or [])])
-    ricavi_fiscali = 0.0
-    if not df_inv.empty:
-        df_inv["data_rif"] = pd.to_datetime(
-            df_inv["data_incasso"].fillna(df_inv["data_fattura"]),
-            errors="coerce",
-        )
-        df_inv = df_inv.dropna(subset=["data_rif"])
-        df_inv["anno"] = df_inv["data_rif"].dt.year
-        ricavi_fiscali = float(
-            df_inv.loc[df_inv["anno"] == year, "importo_totale"].sum()
-        )
-
-    df_exp = pd.DataFrame([e.__dict__ for e in (expenses or [])])
-    costi_fiscali = 0.0
-    if regime == "ordinario" and not df_exp.empty:
-        df_exp["data_rif"] = pd.to_datetime(
-            df_exp["data_pagamento"].fillna(df_exp["data"]),
-            errors="coerce",
-        )
-        df_exp = df_exp.dropna(subset=["data_rif"])
-        df_exp["anno"] = df_exp["data_rif"].dt.year
-        costi_fiscali = float(
-            df_exp.loc[df_exp["anno"] == year, "importo_totale"].sum()
-        )
-
-    redditivita = cfg.redditivita_forfettario or 1.0
-
-    if regime == "forfettario":
-        reddito_imponibile = ricavi_fiscali * redditivita
-    else:
-        reddito_imponibile = ricavi_fiscali - costi_fiscali
-
-    aliquota_imposta = cfg.aliquota_imposta or 0.0
-    imposta_dovuta = max(reddito_imponibile, 0.0) * aliquota_imposta
-
-    aliquota_inps = cfg.aliquota_inps or 0.0
-    base_inps = max(reddito_imponibile, 0.0)
-    inps_dovuti = base_inps * aliquota_inps
-
-    imposte_registrate = 0.0
-    for d in (deadlines or []):
-        tipo = (d.type or "").lower()
-        if "imposta" in tipo or "tasse" in tipo or "irpef" in tipo:
-            if d.amount_paid:
-                imposte_registrate += d.amount_paid
-            else:
-                imposte_registrate += d.estimated_amount or 0.0
-
-    inps_registrati = 0.0
-    for r in (inps_rows or []):
-        if r.amount_paid:
-            inps_registrati += r.amount_paid
+        # Reddito imponibile
+        redditivita = cfg.redditivita_forfettario or 1.0
+        if regime == "forfettario":
+            reddito_imponibile = ricavi_fiscali * redditivita
         else:
-            inps_registrati += r.amount_due or 0.0
+            reddito_imponibile = ricavi_fiscali - costi_fiscali
 
+        # Imposta dovuta
+        aliquota_imposta = cfg.aliquota_imposta or 0.0
+        imposta_dovuta = max(reddito_imponibile, 0.0) * aliquota_imposta
+
+        # INPS dovuti
+        aliquota_inps = cfg.aliquota_inps or 0.0
+        base_inps = max(reddito_imponibile, 0.0)
+        inps_dovuti = base_inps * aliquota_inps
+
+        # Imposte già registrate (TaxDeadline)
+        imposte_registrate = 0.0
+        for d in (deadlines or []):
+            tipo = (d.type or "").lower()
+            if "imposta" in tipo or "tasse" in tipo or "irpef" in tipo:
+                if d.amount_paid:
+                    imposte_registrate += d.amount_paid
+                else:
+                    imposte_registrate += d.estimated_amount or 0.0
+
+        # INPS già registrati (InpsContribution)
+        inps_registrati = 0.0
+        for r in (inps_rows or []):
+            if r.amount_paid:
+                inps_registrati += r.amount_paid
+            else:
+                inps_registrati += r.amount_due or 0.0
+
+    # Fuori dal with usi solo valori primitivi → niente DetachedInstanceError
     return {
         "year": year,
         "regime": regime,
