@@ -9162,7 +9162,6 @@ PAGES = {
         "Funnel CRM & campagne": page_crm_funnel,
         "Segmenti CRM": page_crm_segments,
         "Treno vendite": page_sales_train,
-        "Lead da campagne": page_lead_capture,
         "Operations / Commesse": page_operations,
         "Campagne marketing": page_marketing_campaigns,
                      
