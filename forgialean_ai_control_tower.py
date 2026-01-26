@@ -4349,31 +4349,38 @@ def page_lead_capture():
                 session.commit()
                 session.refresh(client)
 
-            # 2) Crea Opportunity collegata
-            nuova_opp = Opportunity(
-                client_id=client.client_id,
-                nome_opportunita=f"Lead da campagna - {azienda.strip()}",
-                fase_pipeline="Lead pre-qualificato (MQL)",
-                owner=None,  # opzionale: puoi sostituire con owner di default
-                valore_stimato=0.0,  # opzionale: stimare o lasciare 0
-                probabilita=10.0,
-                data_apertura=date.today(),
-                data_chiusura_prevista=date.today(),
-                data_prossima_azione=date.today(),
-                tipo_prossima_azione="Telefonata",
-                note_prossima_azione=(
-                    f"Lead da form: {note}\n"
-                    f"Nome: {nome}, Email: {email}, Tel: {telefono}, Ruolo: {ruolo}"
-                ),
-                stato_opportunita="aperta",
-                utm_source=utm_source,
-                utm_medium=utm_medium,
-                utm_campaign=utm_campaign,
-                utm_content=utm_content,
-            )
-            session.add(nuova_opp)
-            session.commit()
-            session.refresh(nuova_opp)
+        # 2) Crea Opportunity collegata
+        nuova_opp = Opportunity(
+            client_id=client.client_id,
+            nome_opportunita=f"Lead da campagna - {azienda.strip()}",
+            fase_pipeline="Lead pre-qualificato (MQL)",
+            owner=None,  # opzionale: puoi sostituire con owner di default
+            valore_stimato=0.0,  # opzionale: stimare o lasciare 0
+            probabilita=10.0,
+            data_apertura=date.today(),
+            data_chiusura_prevista=date.today(),
+            data_prossima_azione=date.today(),
+            tipo_prossima_azione="Telefonata",
+            note_prossima_azione=(
+                f"Lead da form: {note}\n"
+                f"Nome: {nome}, Email: {email}, Tel: {telefono}, Ruolo: {ruolo}"
+            ),
+            stato_opportunita="aperta",
+            utm_source=utm_source,
+            utm_medium=utm_medium,
+            utm_campaign=utm_campaign,
+            utm_content=utm_content,
+        )
+        session.add(nuova_opp)
+        session.commit()
+        session.refresh(nuova_opp)
+
+        # 🔁 Automazioni CRM su nuova opportunità aperta
+        try:
+            from db import run_crm_automations  # importa dalla tua db.py
+            run_crm_automations(nuova_opp.opportunity_id, old_status=None)
+        except Exception as e:
+            print(f"Errore run_crm_automations su nuova_opp: {e}")
 
         # 3) Tracking GA4 lead generato da campagna
         track_ga4_event(
