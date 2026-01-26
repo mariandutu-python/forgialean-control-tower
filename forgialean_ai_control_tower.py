@@ -3673,7 +3673,12 @@ def page_crm_sales():
             owner_opt = ["Tutti"] + sorted(
                 df_agenda["owner"].dropna().astype(str).unique().tolist()
             )
-            f_owner_ag = st.selectbox("Filtro owner", owner_opt)
+            f_owner_ag = st.selectbox(
+                                    "Filtro owner",
+                                       owner_opt,
+                                       key="filtro_owner_agenda"
+                                  )
+
 
         with col_f2:
             tipo_opt = ["Tutti"] + sorted(
