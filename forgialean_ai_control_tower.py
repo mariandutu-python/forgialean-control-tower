@@ -3585,6 +3585,68 @@ def page_crm_sales():
                         st.success("Nuova prossima azione salvata.")
                         st.rerun()
 
+        # =========================
+        # FUNNEL PER UTM (sorgente / campagna)
+        # =========================
+        st.markdown("---")
+        st.subheader("🎯 Funnel per UTM (sorgente / campagna)")
+
+        df_funnel = df_f.copy()
+        df_funnel["utm_source"] = df_funnel["utm_source"].fillna("n.d.")
+        df_funnel["utm_campaign"] = df_funnel["utm_campaign"].fillna("n.d.")
+
+        def map_stage(row):
+            fase = (row.get("fase_pipeline") or "").lower()
+            stato = (row.get("stato_opportunita") or "").lower()
+
+            if "lead pre-qualificato" in fase:
+                return "MQL"
+            if "lead qualificato" in fase:
+                return "SQL"
+            if "offerta" in fase:
+                return "Offerta"
+            if "negoziazione" in fase:
+                return "Negoziazione"
+            if stato == "vinta":
+                return "Vinta"
+            if stato == "persa":
+                return "Persa"
+            return "Altro"
+
+        df_funnel["step_funnel"] = df_funnel.apply(map_stage, axis=1)
+
+        pivot_funnel = (
+            df_funnel
+            .groupby(["utm_source", "utm_campaign", "step_funnel"])["opportunity_id"]
+            .count()
+            .reset_index()
+            .rename(columns={"opportunity_id": "n_opps"})
+        )
+
+        pivot_table = pivot_funnel.pivot_table(
+            index=["utm_source", "utm_campaign"],
+            columns="step_funnel",
+            values="n_opps",
+            fill_value=0,
+        ).reset_index()
+
+        col_order = [
+            "utm_source",
+            "utm_campaign",
+            "MQL",
+            "SQL",
+            "Offerta",
+            "Negoziazione",
+            "Vinta",
+            "Persa",
+            "Altro",
+        ]
+        existing_cols = [c for c in col_order if c in pivot_table.columns]
+        pivot_table = pivot_table[existing_cols]
+
+        st.markdown("**Funnel per sorgente/campagna**")
+        st.dataframe(pivot_table, hide_index=True, width="stretch")
+
     # =========================
     # SINTESI ATTIVITÀ COMMERCIALI
     # =========================
