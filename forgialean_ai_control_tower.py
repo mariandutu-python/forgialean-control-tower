@@ -4,6 +4,7 @@ from pathlib import Path
 import io
 import urllib.parse 
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import plotly.express as px
 import pdfplumber
@@ -81,6 +82,18 @@ from email.mime.text import MIMEText
 
 import json
 import uuid
+def inject_google_ads_tag():
+    GA_JS = """
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id='AW-17880625558'"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){window.dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'AW-17880625558');
+    </script>
+    """
+    st.markdown(GA_JS, unsafe_allow_html=True)
 
 GA4_MEASUREMENT_ID = "G-XXXXXXXXXX"  # TODO: inserisci il tuo
 GA4_API_SECRET = "YOUR_API_SECRET"   # TODO: inserisci il tuo
@@ -9301,7 +9314,8 @@ def render_breadcrumb(section: str, page: str):
 
 
 def main():
-    # 👉 chiamata subito all'inizio
+    # 👉 chiamate subito all'inizio
+    inject_google_ads_tag()
     capture_utm_params()
 
     # ---------- Leggi querystring per deep-link (CRM detail) ----------
@@ -9327,12 +9341,10 @@ def main():
 
     # ========== GESTIONE DEEP LINK CRM DETAIL ==========
     if step == "crm_detail" and opp_id:
-        # login tecnico per mostrare il dettaglio CRM
         st.session_state["authenticated"] = True
         st.session_state["role"] = "admin"
         st.session_state["username"] = "DeepLink"
 
-        # chiama direttamente la pagina CRM con gestione opp_id
         page_crm_sales()
         st.stop()
 
