@@ -1331,83 +1331,58 @@ def page_presentation():
 
                 st.balloons()
                 st.markdown(
-                    "### 📋 Prossimi passi:\\n"
-                    "1. **Ricevi la chiamata**\\n"
-                    "2. **Demo personalizzata**\\n"
+                    "### 📋 Prossimi passi:\n"
+                    "1. **Ricevi la chiamata**\n"
+                    "2. **Demo personalizzata**\n"
                     "3. **Dashboard attiva**"
                 )
                 st.stop()
         st.stop()
 
     # =====================
-    # FORM MINI‑REPORT OEE (PRIMA DI TUTTO - SPAZIO INIZIALE)
+    # FORM MINI‑REPORT OEE - SUBITO IN ALTO (RICHIESTO)
     # =====================
-    st.markdown("# 📊 Mini‑report OEE gratuito in 3 minuti")
-    
+    st.markdown("### 🔥 Richiedi il tuo mini‑report OEE ForgiaLean")
+
     st.markdown(
         """
-**Da qui inizia il tuo check OEE in 3 minuti.**
-
-Se gestisci **impianti o linee automatiche** (elettronica, metalmeccanico, packaging, food, ecc.)
-e vedi che produzione e margini non tornano, compila il form qui sotto per ricevere via email:
-
-- Una stima del tuo **OEE reale** sulla tua linea o macchina principale.
-- Una quantificazione in **€/giorno** della capacità che stai perdendo **per una macchina/linea**.
-- Una stima dell'impatto se hai **più macchine/linee simili** (es. 3 linee = circa 3× perdita €/giorno).
-- **3 leve di miglioramento immediate** su cui iniziare a lavorare.
-"""
+**Ottieni in 3 minuti via email:**
+- Stima **OEE reale** della tua linea/macchina
+- **€/giorno** di capacità persa  
+- **3 leve immediate** per migliorare
+        """
     )
 
     st.markdown("---")
-    st.subheader("🔥 Richiedi il tuo mini‑report OEE ForgiaLean")
 
     with st.form("lead_oee_form"):
-        nome = st.text_input("👤 Nome e cognome *")
-        azienda = st.text_input("🏭 Azienda *")
-        email = st.text_input("📧 Email aziendale *")
-        descrizione = st.text_area("⚙️ Descrizione impianto / linea principale")
+        col1, col2 = st.columns([1.2, 1])
+        with col1:
+            nome = st.text_input("👤 Nome e cognome *", help="Obbligatorio")
+            azienda = st.text_input("🏭 Azienda *", help="Obbligatorio")
+            email = st.text_input("📧 Email aziendale *", help="Obbligatorio")
+            descrizione = st.text_area("⚙️ Descrizione impianto / linea principale")
+        with col2:
+            ore_fermi = st.number_input("⏱️ Ore fermo/turno", min_value=0.0, step=0.5, value=1.0)
+            scarti = st.number_input("🗑️ Scarti (%)", min_value=0.0, max_value=100.0, step=0.5, value=3.0)
+            velocita = st.number_input("⚡ Velocità reale (%)", min_value=0.0, max_value=200.0, step=1.0, value=85.0)
+            valore_orario = st.number_input("💰 Valore/ora (€)", min_value=0.0, step=10.0, value=150.0)
 
-        col_f1, col_f2 = st.columns(2)
-        with col_f1:
-            ore_fermi = st.number_input(
-                "⏱️ Ore di fermo macchina per turno (stima)",
-                min_value=0.0,
-                step=0.5,
-            )
-            scarti = st.number_input(
-                "🗑️ Percentuale scarti / rilavorazioni (%)",
-                min_value=0.0,
-                max_value=100.0,
-                step=0.5,
-            )
-        with col_f2:
-            velocita = st.number_input(
-                "⚡ Velocità reale vs nominale (%)",
-                min_value=0.0,
-                max_value=200.0,
-                step=1.0,
-            )
-            valore_orario = st.number_input(
-                "💰 Valore economico di 1 ora di produzione (€ / ora, stima)",
-                min_value=0.0,
-                step=10.0,
-            )
-
-        submitted = st.form_submit_button("🚀 Ottieni il mini‑report OEE GRATIS", type="primary")
+        submitted = st.form_submit_button("🚀 OTTIENI REPORT GRATIS", type="primary", use_container_width=True)
 
     if submitted:
         if not (nome and azienda and email):
             st.error("❌ Nome, azienda ed email sono obbligatori.")
         else:
             msg = (
-                "🟢 Nuova richiesta mini‑report OEE ForgiaLean\\n"
-                f"Nome: {nome}\\n"
-                f"Azienda: {azienda}\\n"
-                f"Email: {email}\\n"
-                f"Ore fermi/turno: {ore_fermi}\\n"
-                f"Scarti (%): {scarti}\\n"
-                f"Velocità reale vs nominale (%): {velocita}\\n"
-                f"Valore orario (€): {valore_orario}\\n"
+                "🟢 Nuova richiesta mini‑report OEE ForgiaLean\n"
+                f"Nome: {nome}\n"
+                f"Azienda: {azienda}\n"
+                f"Email: {email}\n"
+                f"Ore fermi/turno: {ore_fermi}\n"
+                f"Scarti (%): {scarti}\n"
+                f"Velocità reale vs nominale (%): {velocita}\n"
+                f"Valore orario (€): {valore_orario}\n"
                 f"Descrizione impianto: {descrizione[:200]}..."
             )
             send_telegram_message(msg)
@@ -1482,22 +1457,14 @@ e vedi che produzione e margini non tornano, compila il form qui sotto per ricev
                 invia_minireport_oee(email, subject, body)
 
                 st.success(
-                    "**🎉 GRAZIE!!!**\\n\\n"
+                    "**🎉 GRAZIE!!!**\n\n"
                     "Richiesta ricevuta. Riceverai entro **2 ore lavorative** una mail da "
                     "**info@forgialean.it** con il tuo mini‑report OEE personalizzato: "
-                    "**stima degli sprechi €/giorno** per una macchina/linea e **3 leve operative** su cui intervenire.\\n\\n"
+                    "**stima degli sprechi €/giorno** per una macchina/linea e **3 leve operative** su cui intervenire.\n\n"
                     "_⚠️ Se non la vedi in posta in arrivo, controlla anche la **cartella spam/indesiderata**._"
                 )
 
-                st.markdown(
-                    """
-**Turni lunghi, impianti sotto il loro potenziale e margini che si assottigliano non sono sostenibili a lungo.**
-
-Quando riceverai la mail da **info@forgialean.it**, se vuoi davvero intervenire su questi problemi,
-segui le istruzioni e completa il **passo successivo** lasciando i dati richiesti per essere contattato.
-È pensato per chi vuole trasformare il check OEE in un **miglioramento concreto**, non solo in un numero da guardare.
-"""
-                )
+                st.balloons()
 
             except Exception as e:
                 st.error("❌ Si è verificato un errore nel salvataggio del lead OEE.")
@@ -1508,13 +1475,14 @@ segui le istruzioni e completa il **passo successivo** lasciando i dati richiest
     # =====================
     # HERO + COPY
     # =====================
-    st.markdown("## 🏭 Turni lunghi, OEE basso e margini sotto pressione?")
+    st.title("🏭 Turni lunghi, OEE basso e margini sotto pressione?")
 
     st.markdown(
         """
-**Se gestisci impianti o linee automatiche** (elettronica, metalmeccanico, packaging, food, ecc.)
-e vedi che produzione e margini non tornano, probabilmente ti ritrovi in almeno uno di questi punti:
+**Da qui inizia il tuo check OEE in 3 minuti.**
 
+Se gestisci **impianti o linee automatiche** (elettronica, metalmeccanico, packaging, food, ecc.)
+e vedi che produzione e margini non tornano, probabilmente ti ritrovi in almeno uno di questi punti:
 - L'OEE reale delle tue linee è tra **60% e 80%**, oppure nessuno sa dirti il valore.
 - Fermi, cambi formato/setup, lotti urgenti e scarti stanno mangiando capacità ogni giorno.
 - Straordinari continui, ma clienti comunque insoddisfatti e margini sotto pressione.
@@ -1770,7 +1738,6 @@ sarà la base per valutare se un progetto ForgiaLean può portarti **+16% OEE e 
                     st.write(
                         "Per più macchine/linee simili moltiplica questa stima per il numero di asset."
                     )
-
 
 # =========================
 # PAGINA: OVERVIEW
