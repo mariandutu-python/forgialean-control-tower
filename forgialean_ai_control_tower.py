@@ -1339,37 +1339,6 @@ def page_presentation():
     # =====================
     # HERO + COPY
     # =====================
-    st.title("🏭 Turni lunghi, OEE basso e margini sotto pressione?")
-
-    st.markdown(
-        """
-**Da qui inizia il tuo check OEE in 3 minuti.**
-
-Se gestisci **impianti o linee automatiche** (elettronica, metalmeccanico, packaging, food, ecc.)
-e vedi che produzione e margini non tornano, probabilmente ti ritrovi in almeno uno di questi punti:
-- L'OEE reale delle tue linee è tra **60% e 80%**, oppure nessuno sa dirti il valore.
-- Fermi, cambi formato/setup, lotti urgenti e scarti stanno mangiando capacità ogni giorno.
-- Straordinari continui, ma clienti comunque insoddisfatti e margini sotto pressione.
-"""
-    )
-
-    # =====================
-    # FORM MINI‑REPORT (visibile subito)
-    # =====================
-    st.markdown("### 📊 Mini‑report OEE gratuito in 3 minuti")
-
-    st.markdown(
-        """
-Compilando il form qui sotto riceverai via email un **mini‑report OEE** con:
-- Una stima del tuo **OEE reale** sulla tua linea o macchina principale.
-- Una quantificazione in **€/giorno** della capacità che stai perdendo **per una macchina/linea**.
-- Una stima dell'impatto se hai **più macchine/linee simili** (es. 3 linee = circa 3× perdita €/giorno).
-- **3 leve di miglioramento immediate** su cui iniziare a lavorare.
-
-Fai il primo passo: prenota il tuo **Audit 30 minuti + piano personalizzato**.
-"""
-    )
-
     st.markdown("---")
     st.subheader("Richiedi il tuo mini‑report OEE ForgiaLean")
 
