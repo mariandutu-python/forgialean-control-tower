@@ -1219,9 +1219,6 @@ Le informazioni aggregate in questa Nota Integrativa gestionale, insieme ai pros
 def page_presentation():
     from datetime import date, timedelta
     from sqlmodel import select
-    import streamlit as st
-    import pandas as pd
-    import plotly.express as px
 
     # 1) Leggo lo step dalla URL
     query_params = st.query_params.to_dict()
@@ -1290,24 +1287,24 @@ def page_presentation():
                             opp.tipo_prossima_azione = f"CALL OEE - {disponibilita}"
                         if hasattr(opp, "note_prossima_azione"):
                             opp.note_prossima_azione = (
-                                f"Nome: {nome}\\nDisponibilità: {disponibilita}\\n{note}"
+                                f"Nome: {nome}\nDisponibilità: {disponibilita}\n{note}"
                             )
 
                         extra = (
-                            "\\n\\n--- Step call OEE ---\\n"
-                            f"Nome: {nome}\\n"
-                            f"Telefono: {telefono}\\n"
-                            f"Disponibilità: {disponibilita}\\n"
+                            "\n\n--- Step call OEE ---\n"
+                            f"Nome: {nome}\n"
+                            f"Telefono: {telefono}\n"
+                            f"Disponibilità: {disponibilita}\n"
                         )
                         if note.strip():
-                            extra += f"Note: {note.strip()}\\n"
+                            extra += f"Note: {note.strip()}\n"
 
                         if hasattr(opp, "note"):
                             opp.note = (opp.note or "") + extra
 
                         session.add(opp)
                         session.commit()
-                        opp_id = opp.opportunity_id  # salvo l'ID prima che la sessione si chiuda
+                        opp_id = opp.opportunity_id  # salvo l’ID prima che la sessione si chiuda
 
                 if opp_id is not None:
                     flame_points = assign_flame_points(opp_id, "form_call_submitted")
@@ -1331,83 +1328,98 @@ def page_presentation():
 
                 st.balloons()
                 st.markdown(
-                    "### 📋 Prossimi passi:\\n"
-                    "1. **Ricevi la chiamata**\\n"
-                    "2. **Demo personalizzata**\\n"
+                    "### 📋 Prossimi passi:\n"
+                    "1. **Ricevi la chiamata**\n"
+                    "2. **Demo personalizzata**\n"
                     "3. **Dashboard attiva**"
                 )
                 st.stop()
         st.stop()
 
     # =====================
-    # FORM MINI‑REPORT OEE (PRIMA DI TUTTO - SPAZIO INIZIALE)
+    # HERO + COPY
     # =====================
-    st.markdown("# 📊 Mini‑report OEE gratuito in 3 minuti")
-    
+    st.title("🏭 Turni lunghi, OEE basso e margini sotto pressione?")
+
     st.markdown(
         """
 **Da qui inizia il tuo check OEE in 3 minuti.**
 
 Se gestisci **impianti o linee automatiche** (elettronica, metalmeccanico, packaging, food, ecc.)
-e vedi che produzione e margini non tornano, compila il form qui sotto per ricevere via email:
+e vedi che produzione e margini non tornano, probabilmente ti ritrovi in almeno uno di questi punti:
+- L'OEE reale delle tue linee è tra **60% e 80%**, oppure nessuno sa dirti il valore.
+- Fermi, cambi formato/setup, lotti urgenti e scarti stanno mangiando capacità ogni giorno.
+- Straordinari continui, ma clienti comunque insoddisfatti e margini sotto pressione.
+"""
+    )
 
+    # =====================
+    # FORM MINI‑REPORT (visibile subito)
+    # =====================
+    st.markdown("### 📊 Mini‑report OEE gratuito in 3 minuti")
+
+    st.markdown(
+        """
+Compilando il form qui sotto riceverai via email un **mini‑report OEE** con:
 - Una stima del tuo **OEE reale** sulla tua linea o macchina principale.
 - Una quantificazione in **€/giorno** della capacità che stai perdendo **per una macchina/linea**.
 - Una stima dell'impatto se hai **più macchine/linee simili** (es. 3 linee = circa 3× perdita €/giorno).
 - **3 leve di miglioramento immediate** su cui iniziare a lavorare.
+
+Fai il primo passo: prenota il tuo **Audit 30 minuti + piano personalizzato**.
 """
     )
 
     st.markdown("---")
-    st.subheader("🔥 Richiedi il tuo mini‑report OEE ForgiaLean")
+    st.subheader("Richiedi il tuo mini‑report OEE ForgiaLean")
 
     with st.form("lead_oee_form"):
-        nome = st.text_input("👤 Nome e cognome *")
-        azienda = st.text_input("🏭 Azienda *")
-        email = st.text_input("📧 Email aziendale *")
-        descrizione = st.text_area("⚙️ Descrizione impianto / linea principale")
+        nome = st.text_input("Nome e cognome")
+        azienda = st.text_input("Azienda")
+        email = st.text_input("Email aziendale")
+        descrizione = st.text_area("Descrizione impianto / linea principale")
 
         col_f1, col_f2 = st.columns(2)
         with col_f1:
             ore_fermi = st.number_input(
-                "⏱️ Ore di fermo macchina per turno (stima)",
+                "Ore di fermo macchina per turno (stima)",
                 min_value=0.0,
                 step=0.5,
             )
             scarti = st.number_input(
-                "🗑️ Percentuale scarti / rilavorazioni (%)",
+                "Percentuale scarti / rilavorazioni (%)",
                 min_value=0.0,
                 max_value=100.0,
                 step=0.5,
             )
         with col_f2:
             velocita = st.number_input(
-                "⚡ Velocità reale vs nominale (%)",
+                "Velocità reale vs nominale (%)",
                 min_value=0.0,
                 max_value=200.0,
                 step=1.0,
             )
             valore_orario = st.number_input(
-                "💰 Valore economico di 1 ora di produzione (€ / ora, stima)",
+                "Valore economico di 1 ora di produzione (€ / ora, stima)",
                 min_value=0.0,
                 step=10.0,
             )
 
-        submitted = st.form_submit_button("🚀 Ottieni il mini‑report OEE GRATIS", type="primary")
+        submitted = st.form_submit_button("🚀 Ottieni il mini‑report OEE", type="primary")
 
     if submitted:
         if not (nome and azienda and email):
-            st.error("❌ Nome, azienda ed email sono obbligatori.")
+            st.error("Nome, azienda ed email sono obbligatori.")
         else:
             msg = (
-                "🟢 Nuova richiesta mini‑report OEE ForgiaLean\\n"
-                f"Nome: {nome}\\n"
-                f"Azienda: {azienda}\\n"
-                f"Email: {email}\\n"
-                f"Ore fermi/turno: {ore_fermi}\\n"
-                f"Scarti (%): {scarti}\\n"
-                f"Velocità reale vs nominale (%): {velocita}\\n"
-                f"Valore orario (€): {valore_orario}\\n"
+                "🟢 Nuova richiesta mini‑report OEE ForgiaLean\n"
+                f"Nome: {nome}\n"
+                f"Azienda: {azienda}\n"
+                f"Email: {email}\n"
+                f"Ore fermi/turno: {ore_fermi}\n"
+                f"Scarti (%): {scarti}\n"
+                f"Velocità reale vs nominale (%): {velocita}\n"
+                f"Valore orario (€): {valore_orario}\n"
                 f"Descrizione impianto: {descrizione[:200]}..."
             )
             send_telegram_message(msg)
@@ -1452,7 +1464,7 @@ e vedi che produzione e margini non tornano, compila il form qui sotto per ricev
                     session.refresh(new_opp)
                     new_opp_id = new_opp.opportunity_id
 
-                # flame points e GA fuori dalla sessione usando solo l'ID
+                # flame points e GA fuori dalla sessione usando solo l’ID
                 if new_opp_id is not None:
                     flame_points = assign_flame_points(new_opp_id, "form_oee_submitted")
                     track_event(
@@ -1482,49 +1494,32 @@ e vedi che produzione e margini non tornano, compila il form qui sotto per ricev
                 invia_minireport_oee(email, subject, body)
 
                 st.success(
-                    "**🎉 GRAZIE!!!**\\n\\n"
-                    "Richiesta ricevuta. Riceverai entro **2 ore lavorative** una mail da "
-                    "**info@forgialean.it** con il tuo mini‑report OEE personalizzato: "
-                    "**stima degli sprechi €/giorno** per una macchina/linea e **3 leve operative** su cui intervenire.\\n\\n"
-                    "_⚠️ Se non la vedi in posta in arrivo, controlla anche la **cartella spam/indesiderata**._"
+                    "**GRAZIE!!!** Richiesta ricevuta. Riceverai entro **2 ore lavorative** una mail da "
+                    "**info@forgialean.it** con il tuo mini‑report OEE: stima degli sprechi €/giorno "
+                    "per una macchina/linea e 3 leve operative su cui intervenire.\n\n"
+                    "_Se non la vedi in posta in arrivo, controlla anche la **cartella spam/indesiderata**._"
                 )
 
                 st.markdown(
                     """
-**Turni lunghi, impianti sotto il loro potenziale e margini che si assottigliano non sono sostenibili a lungo.**
+Turni lunghi, impianti sotto il loro potenziale e margini che si assottigliano **non sono sostenibili a lungo**.
 
 Quando riceverai la mail da **info@forgialean.it**, se vuoi davvero intervenire su questi problemi,
 segui le istruzioni e completa il **passo successivo** lasciando i dati richiesti per essere contattato.
-È pensato per chi vuole trasformare il check OEE in un **miglioramento concreto**, non solo in un numero da guardare.
+È pensato per chi vuole trasformare il check OEE in un miglioramento concreto, non solo in un numero da guardare.
 """
                 )
 
             except Exception as e:
-                st.error("❌ Si è verificato un errore nel salvataggio del lead OEE.")
+                st.error("Si è verificato un errore nel salvataggio del lead OEE.")
                 st.text(str(e))
 
     st.markdown("---")
 
     # =====================
-    # HERO + COPY
-    # =====================
-    st.markdown("## 🏭 Turni lunghi, OEE basso e margini sotto pressione?")
-
-    st.markdown(
-        """
-**Se gestisci impianti o linee automatiche** (elettronica, metalmeccanico, packaging, food, ecc.)
-e vedi che produzione e margini non tornano, probabilmente ti ritrovi in almeno uno di questi punti:
-
-- L'OEE reale delle tue linee è tra **60% e 80%**, oppure nessuno sa dirti il valore.
-- Fermi, cambi formato/setup, lotti urgenti e scarti stanno mangiando capacità ogni giorno.
-- Straordinari continui, ma clienti comunque insoddisfatti e margini sotto pressione.
-"""
-    )
-
-    # =====================
     # PAIN
     # =====================
-    st.subheader("💥 Il problema reale: sprechi invisibili e margini erosi")
+    st.subheader("Il problema reale: sprechi invisibili e margini erosi")
 
     st.markdown(
         """
@@ -1533,14 +1528,14 @@ e vedi che produzione e margini non tornano, probabilmente ti ritrovi in almeno 
 - Lotti urgenti che mandano in caos il piano e fanno salire gli scarti (anche **8–10%**).
 - Excel, riunioni e report che richiedono tempo ma non dicono chiaramente **dove** intervenire.
 
-**Risultato**: impianti da **centinaia di migliaia di euro** che lavorano sotto il 70–75% di OEE e margini che si assottigliano.
+Risultato: impianti da **centinaia di migliaia di euro** che lavorano sotto il 70–75% di OEE e margini che si assottigliano.
 """
     )
 
     # =====================
     # SOLUZIONE
     # =====================
-    st.subheader("✅ La nostra proposta: +16% OEE in 90 giorni")
+    st.subheader("La nostra proposta: +16% OEE in 90 giorni")
 
     st.markdown(
         """
@@ -1560,7 +1555,7 @@ ForgiaLean unisce **Black Belt Lean Six Sigma**, **Operations Management** e **D
     # =====================
     # GRAFICI PRIMA/DOPO
     # =====================
-    st.subheader("📈 Come cambia la situazione: prima e dopo il progetto")
+    st.subheader("Come cambia la situazione: prima e dopo il progetto")
 
     col_g1, col_g2 = st.columns(2)
 
@@ -1582,7 +1577,7 @@ ForgiaLean unisce **Black Belt Lean Six Sigma**, **Operations Management** e **D
         )
         fig_oee.update_traces(texttemplate="%{y}%", textposition="outside")
         fig_oee.update_layout(showlegend=False)
-        st.plotly_chart(fig_oee, width="stretch")
+        st.plotly_chart(fig_oee, width="stretch")  # use_container_width → width
 
     with col_g2:
         fig_fermi = px.bar(
@@ -1596,12 +1591,12 @@ ForgiaLean unisce **Black Belt Lean Six Sigma**, **Operations Management** e **D
         )
         fig_fermi.update_traces(texttemplate="%{y:.1f} h", textposition="outside")
         fig_fermi.update_layout(showlegend=False)
-        st.plotly_chart(fig_fermi, width="stretch")
+        st.plotly_chart(fig_fermi, width="stretch")  # use_container_width → width
 
     # =====================
     # DIFFERENZIAZIONE
     # =====================
-    st.subheader("🎯 Perché scegliere ForgiaLean rispetto ad altre soluzioni")
+    st.subheader("Perché scegliere ForgiaLean rispetto ad altre soluzioni")
 
     st.markdown(
         """
@@ -1615,7 +1610,7 @@ ForgiaLean unisce **Black Belt Lean Six Sigma**, **Operations Management** e **D
     # =====================
     # BANDI 4.0
     # =====================
-    st.subheader("💡 Un vantaggio in più: bandi e incentivi 4.0")
+    st.subheader("Un vantaggio in più: bandi e incentivi 4.0")
 
     st.markdown(
         """
@@ -1623,15 +1618,17 @@ Oltre al recupero di capacità e margini, in molti casi gli investimenti su impi
 
 Durante il progetto:
 - Ti segnalo i principali **bandi e incentivi** potenzialmente rilevanti per il tuo caso (nazionali e/o regionali).
-- Ti aiuto a **tradurre il progetto operativo** in termini di obiettivi, deliverable e risultati attesi.
-- Mettiamo in evidenza i **benefici misurabili** (OEE, capacità recuperata, margini) che rafforzano la richiesta di contributo.
+- Ti aiuto a **tradurre il progetto operativo** in termini di obiettivi, deliverable e risultati attesi, così da semplificare il lavoro con il tuo consulente di finanza agevolata o con il commercialista.
+- Mettiamo in evidenza i **benefici misurabili** (OEE, capacità recuperata, margini) che possono rafforzare la richiesta di contributo.
+
+In questo modo hai sia un **miglioramento operativo concreto**, sia la possibilità di **ridurre l’esborso netto** se l’azienda decide di attivarsi sui bandi disponibili.
 """
     )
 
     # =====================
     # TESTIMONIANZE
     # =====================
-    st.subheader("⭐ Cosa dicono le aziende che hanno lavorato con noi")
+    st.subheader("Cosa dicono le aziende che hanno lavorato con noi")
 
     col_t1, col_t2 = st.columns(2)
 
@@ -1657,7 +1654,7 @@ Durante il progetto:
 
     st.markdown(
         """
-**Risultati ottenibili quando c'è impegno congiunto** 
+Risultati ottenibili quando c'è impegno congiunto 
 tra direzione, produzione e miglioramento continuo.
 """
     )
@@ -1669,16 +1666,16 @@ tra direzione, produzione e miglioramento continuo.
     if role != "admin":
         st.markdown(
             """
-**🔥 Se hai linee o impianti che lavorano sotto l'80% di OEE, continuare così è la scelta più costosa.**
+Se hai linee o impianti che lavorano sotto l'80% di OEE, **continuare così è la scelta più costosa**.
 
-Compila il form **in cima alla pagina** per il tuo mini‑report OEE gratuito: 
-sarà la base per valutare se un progetto ForgiaLean può portarti **+16% OEE e più margine**.
+Compila il form qui sopra per il mini‑report OEE gratuito: sarà la base per valutare
+se un progetto ForgiaLean può portarti **+16% OEE e più margine**, senza perdere altro tempo in riunioni sterili.
 """
         )
         st.stop()
 
     st.markdown("---")
-    st.subheader("🧮 Calcolatore rapido OEE e perdita economica (uso interno)")
+    st.subheader("Calcolatore rapido OEE e perdita economica (uso interno)")
 
     with st.expander("Calcolatore interno ForgiaLean"):
         col1, col2 = st.columns(2)
@@ -1746,25 +1743,25 @@ sarà la base per valutare se un progetto ForgiaLean può portarti **+16% OEE e 
                 capacita_persa_turno = gap_oee * ore_turno
                 perdita_euro_turno = capacita_persa_turno * valore_orario_calc
 
-                st.write(f"**OEE stimato**: **{oee*100:.1f}%** (target {oee_target*100:.0f}%)")
-                st.write(f"**Gap OEE**: **{gap_oee*100:.1f} punti**")
+                st.write(f"OEE stimato: **{oee*100:.1f}%** (target {oee_target*100:.0f}%)")
+                st.write(f"Gap OEE: **{gap_oee*100:.1f} punti**")
                 st.write(
-                    "**Capacità persa per turno** (1 macchina/linea): "
+                    "Capacità persa per turno (1 macchina/linea): "
                     f"**{capacita_persa_turno:.2f} ore equivalenti**"
                 )
                 st.write(
-                    "**Perdita economica per turno** (1 macchina/linea): "
+                    "Perdita economica per turno (1 macchina/linea): "
                     f"**€ {perdita_euro_turno:,.0f}**"
                 )
 
                 st.write(
-                    "⚠️ **Nota**: questi calcoli si riferiscono a **una macchina/linea**. "
+                    "⚠️ Nota: questi calcoli si riferiscono a **una macchina/linea**. "
                     "Se hai N macchine/linee simili, l'impatto potenziale è circa N× queste cifre."
                 )
                 if turni_anno > 0:
                     perdita_annua = perdita_euro_turno * turni_anno
                     st.write(
-                        "**Perdita economica stimata per anno** (1 macchina/linea): "
+                        "Perdita economica stimata per anno (1 macchina/linea): "
                         f"**€ {perdita_annua:,.0f}**"
                     )
                     st.write(
