@@ -159,6 +159,18 @@ class CrmActivity(SQLModel, table=True):
     data_attivita: Optional[date] = None
 
     opportunity: Optional[Opportunity] = Relationship(back_populates="activities")
+# === TRACKING APERTURE EMAIL ===
+class EmailOpen(SQLModel, table=True):
+    """Eventi di apertura email tracciati tramite pixel 1x1."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    mail_id: str = Field(index=True)
+    opened_at: datetime = Field(
+        default_factory=datetime.utcnow,
+        sa_column=Column(DateTime(timezone=True))
+    )
+    ip_address: Optional[str] = Field(default=None)
+    user_agent: Optional[str] = Field(default=None)
+
 class CrmAutomationRule(SQLModel, table=True):
     """Regole di automazione CRM (stile Keap/Infusionsoft, versione semplificata)."""
     rule_id: Optional[int] = Field(default=None, primary_key=True)
