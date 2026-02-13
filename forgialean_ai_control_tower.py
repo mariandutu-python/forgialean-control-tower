@@ -1342,25 +1342,7 @@ def page_presentation():
     # =====================
     # 🔥 RICHIEDI IL TUO MINI-REPORT OEE FORGIALEAN (PRIMA DI TUTTO)
     # =====================
-    st.markdown("# 🔥 Richiedi il tuo mini‑report OEE ForgiaLean")
-    
-    st.markdown(
-        """
-**Da qui inizia il tuo check OEE in 3 minuti.**
-
-Se gestisci **impianti o linee automatiche** (elettronica, metalmeccanico, packaging, food, ecc.)
-e vedi che produzione e margini non tornano, compila il form qui sotto per ricevere via email:
-
-- Una stima del tuo **OEE reale** sulla tua linea o macchina principale.
-- Una quantificazione in **€/giorno** della capacità che stai perdendo **per una macchina/linea**.
-- Una stima dell'impatto se hai **più macchine/linee simili** (es. 3 linee = circa 3× perdita €/giorno).
-- **3 leve di miglioramento immediate** su cui iniziare a lavorare.
-"""
-    )
-
-    st.markdown("---")
-    st.subheader("🔥 Richiedi il tuo mini‑report OEE ForgiaLean")
-
+    st.markdown("# 🔥 Richiedi il tuo mini‑report OEE ForgiaLean") 
     with st.form("lead_oee_form"):
         nome = st.text_input("👤 Nome e cognome *")
         azienda = st.text_input("🏭 Azienda *")
