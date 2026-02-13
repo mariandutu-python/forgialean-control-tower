@@ -1290,17 +1290,17 @@ def page_presentation():
                             opp.tipo_prossima_azione = f"CALL OEE - {disponibilita}"
                         if hasattr(opp, "note_prossima_azione"):
                             opp.note_prossima_azione = (
-                                f"Nome: {nome}\\nDisponibilità: {disponibilita}\\n{note}"
+                                f"Nome: {nome}\\\\nDisponibilità: {disponibilita}\\\\n{note}"
                             )
 
                         extra = (
-                            "\\n\\n--- Step call OEE ---\\n"
-                            f"Nome: {nome}\\n"
-                            f"Telefono: {telefono}\\n"
-                            f"Disponibilità: {disponibilita}\\n"
+                            "\\\\n\\\\n--- Step call OEE ---\\\\n"
+                            f"Nome: {nome}\\\\n"
+                            f"Telefono: {telefono}\\\\n"
+                            f"Disponibilità: {disponibilita}\\\\n"
                         )
                         if note.strip():
-                            extra += f"Note: {note.strip()}\\n"
+                            extra += f"Note: {note.strip()}\\\\n"
 
                         if hasattr(opp, "note"):
                             opp.note = (opp.note or "") + extra
@@ -1331,18 +1331,18 @@ def page_presentation():
 
                 st.balloons()
                 st.markdown(
-                    "### 📋 Prossimi passi:\\n"
-                    "1. **Ricevi la chiamata**\\n"
-                    "2. **Demo personalizzata**\\n"
+                    "### 📋 Prossimi passi:\\\\n"
+                    "1. **Ricevi la chiamata**\\\\n"
+                    "2. **Demo personalizzata**\\\\n"
                     "3. **Dashboard attiva**"
                 )
                 st.stop()
         st.stop()
 
     # =====================
-    # FORM MINI‑REPORT OEE (PRIMA DI TUTTO - SPAZIO INIZIALE)
+    # 🔥 RICHIEDI IL TUO MINI-REPORT OEE FORGIALEAN (PRIMA DI TUTTO)
     # =====================
-    st.markdown("# 📊 Mini‑report OEE gratuito in 3 minuti")
+    st.markdown("# 🔥 Richiedi il tuo mini‑report OEE ForgiaLean")
     
     st.markdown(
         """
@@ -1400,14 +1400,14 @@ e vedi che produzione e margini non tornano, compila il form qui sotto per ricev
             st.error("❌ Nome, azienda ed email sono obbligatori.")
         else:
             msg = (
-                "🟢 Nuova richiesta mini‑report OEE ForgiaLean\\n"
-                f"Nome: {nome}\\n"
-                f"Azienda: {azienda}\\n"
-                f"Email: {email}\\n"
-                f"Ore fermi/turno: {ore_fermi}\\n"
-                f"Scarti (%): {scarti}\\n"
-                f"Velocità reale vs nominale (%): {velocita}\\n"
-                f"Valore orario (€): {valore_orario}\\n"
+                "🟢 Nuova richiesta mini‑report OEE ForgiaLean\\\\n"
+                f"Nome: {nome}\\\\n"
+                f"Azienda: {azienda}\\\\n"
+                f"Email: {email}\\\\n"
+                f"Ore fermi/turno: {ore_fermi}\\\\n"
+                f"Scarti (%): {scarti}\\\\n"
+                f"Velocità reale vs nominale (%): {velocita}\\\\n"
+                f"Valore orario (€): {valore_orario}\\\\n"
                 f"Descrizione impianto: {descrizione[:200]}..."
             )
             send_telegram_message(msg)
@@ -1482,10 +1482,10 @@ e vedi che produzione e margini non tornano, compila il form qui sotto per ricev
                 invia_minireport_oee(email, subject, body)
 
                 st.success(
-                    "**🎉 GRAZIE!!!**\\n\\n"
+                    "**🎉 GRAZIE!!!**\\\\n\\\\n"
                     "Richiesta ricevuta. Riceverai entro **2 ore lavorative** una mail da "
                     "**info@forgialean.it** con il tuo mini‑report OEE personalizzato: "
-                    "**stima degli sprechi €/giorno** per una macchina/linea e **3 leve operative** su cui intervenire.\\n\\n"
+                    "**stima degli sprechi €/giorno** per una macchina/linea e **3 leve operative** su cui intervenire.\\\\n\\\\n"
                     "_⚠️ Se non la vedi in posta in arrivo, controlla anche la **cartella spam/indesiderata**._"
                 )
 
@@ -1582,7 +1582,7 @@ ForgiaLean unisce **Black Belt Lean Six Sigma**, **Operations Management** e **D
         )
         fig_oee.update_traces(texttemplate="%{y}%", textposition="outside")
         fig_oee.update_layout(showlegend=False)
-        st.plotly_chart(fig_oee, width="stretch")
+        st.plotly_chart(fig_oee, use_container_width=True)
 
     with col_g2:
         fig_fermi = px.bar(
@@ -1596,7 +1596,7 @@ ForgiaLean unisce **Black Belt Lean Six Sigma**, **Operations Management** e **D
         )
         fig_fermi.update_traces(texttemplate="%{y:.1f} h", textposition="outside")
         fig_fermi.update_layout(showlegend=False)
-        st.plotly_chart(fig_fermi, width="stretch")
+        st.plotly_chart(fig_fermi, use_container_width=True)
 
     # =====================
     # DIFFERENZIAZIONE
@@ -1770,7 +1770,6 @@ sarà la base per valutare se un progetto ForgiaLean può portarti **+16% OEE e 
                     st.write(
                         "Per più macchine/linee simili moltiplica questa stima per il numero di asset."
                     )
-
 
 # =========================
 # PAGINA: OVERVIEW
