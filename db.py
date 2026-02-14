@@ -560,6 +560,67 @@ class CashflowEvent(SQLModel, table=True):
     commessa_id: Optional[int] = Field(default=None, foreign_key="projectcommessa.commessa_id")
 
 
+def get_vendor_defaults(session: Session, vendor_id: int) -> dict:
+    """Restituisce i default contabili e di pagamento per un fornitore."""
+    v = session.get(Vendor, vendor_id)
+    if not v:
+        return {}
+
+    return {
+        "giorni_pagamento_default": v.giorni_pagamento_default,
+        "default_category_id": v.default_category_id,
+        "default_account_id": v.default_account_id,
+    }
+
+def learn_vendor_defaults(session: Session, vendor_id: int, min_samples: int = 3) -> None:
+    """
+    Analizza le ultime N spese del fornitore e aggiorna:
+    - categoria default
+    - conto default
+    - giorni di pagamento medi (se hai già data_pagamento).
+    """
+    v = session.get(Vendor, vendor_id)
+    if not v:
+        return
+
+    expenses_vendor = session.exec(
+        select(Expense)
+        .where(Expense.vendor_id == vendor_id)
+        .order_by(Expense.data.desc())
+    ).all()
+
+    if len(expenses_vendor) < min_samples:
+        return
+
+    from collections import Counter
+
+    cats = [e.category_id for e in expenses_vendor if e.category_id is not None]
+    if cats:
+        common_cat, count_cat = Counter(cats).most_common(1)[0]
+        if count_cat >= min_samples:
+            v.default_category_id = common_cat
+
+    accs = [e.account_id for e in expenses_vendor if e.account_id is not None]
+    if accs:
+        common_acc, count_acc = Counter(accs).most_common(1)[0]
+        if count_acc >= min_samples:
+            v.default_account_id = common_acc
+
+    deltas = []
+    for e in expenses_vendor:
+        if e.data and e.data_pagamento:
+            delta = (e.data_pagamento - e.data).days
+            if 0 < delta < 120:
+                deltas.append(delta)
+
+    if deltas:
+        avg_days = int(round(sum(deltas) / len(deltas)))
+        if 7 <= avg_days <= 120:
+            v.giorni_pagamento_default = avg_days
+
+    session.add(v)
+    session.commit()
+
 # =========================
 # ESTENSIONI CRM TIPO KEAP (NO ABBONAMENTI)
 # =========================
