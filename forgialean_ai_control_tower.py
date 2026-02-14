@@ -2416,8 +2416,12 @@ def page_vendors():
     with col_a:
         if not df_vendors.empty:
             st.dataframe(
-                df_vendors[["vendor_id", "ragione_sociale"]].rename(
-                    columns={"vendor_id": "ID", "ragione_sociale": "Ragione sociale"}
+                df_vendors[["vendor_id", "ragione_sociale", "piva"]].rename(
+                    columns={
+                        "vendor_id": "ID",
+                        "ragione_sociale": "Ragione sociale",
+                        "piva": "P.IVA",
+                    }
                 ),
                 use_container_width=True,
             )
@@ -2428,8 +2432,11 @@ def page_vendors():
         st.markdown("#### Nuovo fornitore")
         with st.form("new_vendor_form"):
             ragione_sociale = st.text_input("Ragione sociale")
-            partita_iva = st.text_input("Partita IVA / CF", "")
+            piva = st.text_input("Partita IVA / CF", "")
             email = st.text_input("Email", "")
+            indirizzo = st.text_input("Indirizzo", "")
+            comune = st.text_input("Comune", "")
+            provincia = st.text_input("Provincia", "")
             submit_vendor = st.form_submit_button("Salva fornitore")
 
         if submit_vendor:
@@ -2439,8 +2446,11 @@ def page_vendors():
                 with get_session() as session:
                     new_vendor = Vendor(
                         ragione_sociale=ragione_sociale.strip(),
-                        partita_iva=partita_iva.strip() or None,
+                        piva=piva.strip() or None,
                         email=email.strip() or None,
+                        indirizzo=indirizzo.strip() or None,
+                        comune=comune.strip() or None,
+                        provincia=provincia.strip() or None,
                     )
                     session.add(new_vendor)
                     session.commit()
@@ -2460,7 +2470,7 @@ def page_vendors():
     if uploaded_file is not None:
         file_bytes = uploaded_file.read()
 
-        # parser PDF esistente
+        # parser PDF (quello che ti restituisce num_fattura/data_fattura/data_scadenza/importi)
         parsed = parse_invoice_pdf(file_bytes)
 
         st.success("PDF letto, controlla e conferma i dati sotto.")
@@ -2479,25 +2489,30 @@ def page_vendors():
             except Exception:
                 return date.today()
 
-        # reload vendors per avere gli ID aggiornati
+        # reload vendors, categorie, conti
         with get_session() as session:
             vendors = session.exec(select(Vendor)).all()
+            cats = session.exec(select(ExpenseCategory)).all()
+            accounts = session.exec(select(Account)).all()
 
         df_vendors = pd.DataFrame([v.__dict__ for v in vendors]) if vendors else pd.DataFrame()
+        df_cats = pd.DataFrame([c.__dict__ for c in cats]) if cats else pd.DataFrame()
+        df_accs = pd.DataFrame([a.__dict__ for a in accounts]) if accounts else pd.DataFrame()
 
         if df_vendors.empty:
             st.warning("Prima registra almeno un fornitore nella sezione sopra.")
         else:
             df_vendors["label"] = df_vendors["vendor_id"].astype(str) + " - " + df_vendors["ragione_sociale"]
 
-            # eventuali categorie di spesa
-            with get_session() as session:
-                cats = session.exec(select(ExpenseCategory)).all()
-            df_cats = pd.DataFrame([c.__dict__ for c in cats]) if cats else pd.DataFrame()
             cat_labels = ["(nessuna)"]
             if not df_cats.empty:
-                df_cats["label"] = df_cats["expense_category_id"].astype(str) + " - " + df_cats["nome_categoria"]
+                df_cats["label"] = df_cats["category_id"].astype(str) + " - " + df_cats["nome"]
                 cat_labels += df_cats["label"].tolist()
+
+            acc_labels = ["(nessuno)"]
+            if not df_accs.empty:
+                df_accs["label"] = df_accs["account_id"].astype(str) + " - " + df_accs["nome"]
+                acc_labels += df_accs["label"].tolist()
 
             with st.form("new_expense_from_pdf"):
                 st.markdown("#### Dati fattura fornitore precompilati")
@@ -2506,6 +2521,7 @@ def page_vendors():
                 with col1:
                     vendor_label = st.selectbox("Fornitore", df_vendors["label"].tolist())
                     cat_label = st.selectbox("Categoria spesa (opzionale)", cat_labels)
+                    acc_label = st.selectbox("Conto di pagamento (opzionale)", acc_labels)
                     num_doc = st.text_input(
                         "Numero documento",
                         value=str(parsed.get("num_fattura") or ""),
@@ -2564,35 +2580,43 @@ def page_vendors():
                     if cat_label != "(nessuna)":
                         cat_id_sel = int(cat_label.split(" - ")[0])
 
+                    acc_id_sel: int | None = None
+                    if acc_label != "(nessuno)":
+                        acc_id_sel = int(acc_label.split(" - ")[0])
+
                     # se totale non è coerente, ricalcola
                     if totale <= 0 and (imponibile > 0 or iva > 0):
                         totale = imponibile + iva
 
                     with get_session() as session:
                         new_exp = Expense(
+                            data=data_doc,
                             vendor_id=vendor_id_sel,
-                            expense_category_id=cat_id_sel,
-                            num_documento=num_doc.strip(),
-                            data_documento=data_doc,
-                            data_scadenza=data_scad,
+                            category_id=cat_id_sel,
+                            account_id=acc_id_sel,
+                            descrizione=descrizione or None,
                             importo_imponibile=imponibile,
                             iva=iva,
                             importo_totale=totale,
-                            stato_pagamento=stato_pagamento,
+                            commessa_id=None,
+                            document_ref=num_doc.strip(),
+                            pagata=(stato_pagamento == "pagata"),
                             data_pagamento=data_pagamento if stato_pagamento == "pagata" else None,
-                            descrizione=descrizione or None,
+                            note=None,
                         )
                         session.add(new_exp)
                         session.commit()
                         session.refresh(new_exp)
 
-                        # opzionale: crea evento di cashflow per scadenza
+                        # evento di cashflow in uscita sulla scadenza
                         cf_event = CashflowEvent(
+                            data=data_scad,
                             tipo="uscita",
-                            data_evento=data_scad,
-                            importo=totale,
-                            descrizione=f"Fattura fornitore {num_doc.strip()} - {df_vendors.loc[df_vendors['vendor_id'] == vendor_id_sel, 'ragione_sociale'].values[0]}",
-                            expense_id=new_exp.expense_id,
+                            categoria="Costi fornitori",
+                            descrizione=f"Fattura fornitore {num_doc.strip()}",
+                            importo=-totale,  # negativa = uscita
+                            client_id=None,
+                            commessa_id=None,
                         )
                         session.add(cf_event)
                         session.commit()
