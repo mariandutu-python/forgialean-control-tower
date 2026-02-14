@@ -120,28 +120,50 @@ def parse_invoice_pdf(file_bytes: bytes) -> dict:
         "raw_text": text_norm,
     }
 
-    m_num = re.search(r"Numero documento\s+([0-9]+\/[0-9]+)", text_norm)
+    # --- Numero documento ---
+    # Nel tuo PDF: "Numero documento 85224"
+    m_num = re.search(r"Numero documento\s+([0-9/]+)", text_norm)
     if m_num:
-        result["num_fattura"] = m_num.group(1).strip()
+        num = m_num.group(1).strip()
+        # se è del tipo 85224, lo trasformiamo in 852/24
+        if re.fullmatch(r"\d{5}", num):
+            result["num_fattura"] = f"{num[:3]}/{num[3:]}"
+        else:
+            result["num_fattura"] = num
 
-    m_data = re.search(r"Data documento\s+(\d{2}\/\d{2}\/\d{4})", text_norm)
+    # --- Data documento ---
+    # Nel tuo PDF: "Data documento 16092024"
+    m_data = re.search(r"Data documento\s+(\d{8}|\d{2}/\d{2}/\d{4})", text_norm)
     if m_data:
-        result["data_fattura"] = m_data.group(1).strip()
+        ds = m_data.group(1).strip()
+        if re.fullmatch(r"\d{8}", ds):
+            # 16092024 -> 16/09/2024
+            ds = f"{ds[0:2]}/{ds[2:4]}/{ds[4:8]}"
+        result["data_fattura"] = ds
 
-    m_scad = re.search(r"Scadenza\s+(\d{2}\/\d{2}\/\d{4})", text_norm)
+    # --- Scadenza ---
+    # Nel tuo PDF: "Scadenza 28022025"
+    m_scad = re.search(r"Scadenza\s+(\d{8}|\d{2}/\d{2}/\d{4})", text_norm)
     if m_scad:
-        result["data_scadenza"] = m_scad.group(1).strip()
+        ds = m_scad.group(1).strip()
+        if re.fullmatch(r"\d{8}", ds):
+            ds = f"{ds[0:2]}/{ds[2:4]}/{ds[4:8]}"
+        result["data_scadenza"] = ds
 
-    m_tot_block = re.search(r"Totale documento.*?\n([0-9\.,]+)", text_norm)
-    if m_tot_block:
-        tot_str = m_tot_block.group(1).strip().replace(".", "").replace(",", ".")
+    # --- Totale documento ---
+    # "Totale documento EU 79,30"
+    m_tot = re.search(r"Totale documento.*?([0-9\.,]+)", text_norm)
+    if m_tot:
+        tot_str = m_tot.group(1).strip().replace(".", "").replace(",", ".")
         try:
             result["importo_totale"] = float(tot_str)
         except ValueError:
             pass
 
+    # --- Imponibile + IVA ---
+    # Nel PDF: "Totale I.V.A. ... 65,00 14,30"
     m_impon_iva = re.search(
-        r"Totale\s+I\.V\.A\.[^\n]*\n([0-9\.,]+)\n([0-9\.,]+)",
+        r"Totale\s+I\.V\.A\.[^\n]*\n.*?([0-9\.,]+)\s+([0-9\.,]+)",
         text_norm
     )
     if m_impon_iva:
@@ -156,12 +178,14 @@ def parse_invoice_pdf(file_bytes: bytes) -> dict:
         except ValueError:
             pass
 
-    m_descr = re.search(r"\n([A-Z0-9 ,\.\-]{10,})\n[n\. ]+1,00", text_norm)
+    # --- Descrizione riga ---
+    # Cerca una riga tutta maiuscola con almeno 10 caratteri (es. "ANALISI SPETTROGRAFICA 10100")
+    m_descr = re.search(r"\n([A-Z0-9 ,\.\-]{10,})\n", text_norm)
     if m_descr:
         result["descrizione"] = m_descr.group(1).strip()
 
     return result
-    
+   
 def inject_google_ads_tag():
     GA_JS = """
     <!-- Google tag (gtag.js) -->
