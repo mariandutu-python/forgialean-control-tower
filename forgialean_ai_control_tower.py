@@ -115,26 +115,28 @@ def parse_invoice_pdf(file_bytes: bytes) -> dict:
         "raw_text": text_norm,
     }
 
-    # --- Data + Numero sulla riga successiva ---
-    # Riga 1: "Rif. des. cliente Data documento Numero documento"
-    # Riga 2: "16/09/2024 852/24"
-    m_data_num = re.search(
-        r"Data documento\s+Numero documento\s*\n\s*([0-9]{2}/[0-9]{2}/[0-9]{4})\s+([0-9/]+)",
-        text_norm
-    )
-    if m_data_num:
-        result["data_fattura"] = m_data_num.group(1).strip()
-        result["num_fattura"] = m_data_num.group(2).strip()
+    # --- Data documento ---
+    # "Data documento\n16/09/2024"
+    m_data = re.search(r"Data documento\s*\n\s*([0-9]{2}/[0-9]{2}/[0-9]{4})", text_norm)
+    if m_data:
+        result["data_fattura"] = m_data.group(1).strip()
+
+    # --- Numero documento ---
+    # "Numero documento\n            852/24"
+    m_num = re.search(r"Numero documento\s*\n\s*([0-9/]+)", text_norm)
+    if m_num:
+        result["num_fattura"] = m_num.group(1).strip()
 
     # --- Scadenza ---
-    # "Scadenza\n28/02/2025"
-    m_scad = re.search(r"Scadenza\s*\n\s*([0-9]{2}/[0-9]{2}/[0-9]{4})", text_norm)
+    # Schema reale nel tuo PDF:
+    # "Tipo pagamento Scadenza Importo scadenza Incaricato del trasporto\nRicevuta 28/02/2025 79,30"
+    m_scad = re.search(r"Ricevuta\s+([0-9]{2}/[0-9]{2}/[0-9]{4})", text_norm)
     if m_scad:
         result["data_scadenza"] = m_scad.group(1).strip()
 
     # --- Totale documento ---
     # "Totale documento  EU\n79,30"
-    m_tot = re.search(r"Totale documento[^\n]*\n\s*([0-9\.,]+)", text_norm)
+    m_tot = re.search(r"Totale documento\s+EU\s*\n\s*([0-9\.,]+)", text_norm)
     if m_tot:
         tot_str = m_tot.group(1).strip().replace(".", "").replace(",", ".")
         try:
@@ -143,19 +145,24 @@ def parse_invoice_pdf(file_bytes: bytes) -> dict:
             pass
 
     # --- Imponibile + IVA ---
-    # Blocco vicino alla fine:
+    # Blocco finale nel testo:
+    # ...
+    # Totale
+    # I.V.A.
+    # Spese di trasporto
+    # Spese di incasso
+    # Spese di imballo
     # 65,00
     # 14,30
     # Totale documento  EU
     # 79,30
-    m_impon_iva_block = re.search(
-        r"(\d{1,3}(?:[.,]\d{3})*[.,]\d{2})\s*\n\s*"
-        r"(\d{1,3}(?:[.,]\d{3})*[.,]\d{2})\s*\n\s*Totale documento",
+    m_impon_iva = re.search(
+        r"Totale\s*\nI\.V\.A\.[\s\S]*?\n\s*([0-9\.,]+)\s*\n\s*([0-9\.,]+)\s*\n\s*Totale documento\s+EU",
         text_norm
     )
-    if m_impon_iva_block:
-        impon_str = m_impon_iva_block.group(1).strip().replace(".", "").replace(",", ".")
-        iva_str = m_impon_iva_block.group(2).strip().replace(".", "").replace(",", ".")
+    if m_impon_iva:
+        impon_str = m_impon_iva.group(1).strip().replace(".", "").replace(",", ".")
+        iva_str = m_impon_iva.group(2).strip().replace(".", "").replace(",", ".")
         try:
             result["importo_imponibile"] = float(impon_str)
         except ValueError:
