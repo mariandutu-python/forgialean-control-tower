@@ -59,6 +59,8 @@ from db import (
     learn_vendor_defaults,
 
 )
+init_db()
+migrate_db()
 
 from cache_functions import (
     get_all_clients,
