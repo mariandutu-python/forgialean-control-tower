@@ -115,68 +115,57 @@ def parse_invoice_pdf(file_bytes: bytes) -> dict:
         "raw_text": text_norm,
     }
 
-    # --- Data documento ---
-    # "Data documento\n16/09/2024"
-    m_data = re.search(r"Data documento\s*\n\s*([0-9]{2}/[0-9]{2}/[0-9]{4})", text_norm)
-    if m_data:
-        result["data_fattura"] = m_data.group(1).strip()
+    lines = [l.strip() for l in text_norm.splitlines() if l.strip()]
 
-    # --- Numero documento ---
-    # "Numero documento\n            852/24"
-    m_num = re.search(r"Numero documento\s*\n\s*([0-9/]+)", text_norm)
-    if m_num:
-        result["num_fattura"] = m_num.group(1).strip()
+    # --- Data documento + numero documento ---
+    # schema reale:
+    # "Rif. des. cliente Data documento Numero documento"
+    # "16/09/2024 852/24"
+    for i, line in enumerate(lines):
+        if "Data documento" in line and "Numero documento" in line:
+            if i + 1 < len(lines):
+                next_line = lines[i + 1]
+                parts = next_line.split()
+                # ci aspettiamo almeno 2 token: data e numero
+                if len(parts) >= 2:
+                    if re.fullmatch(r"\d{2}/\d{2}/\d{4}", parts[0]):
+                        result["data_fattura"] = parts[0]
+                    result["num_fattura"] = parts[1]
+            break
 
     # --- Scadenza ---
-    # Schema reale nel tuo PDF:
-    # "Tipo pagamento Scadenza Importo scadenza Incaricato del trasporto\nRicevuta 28/02/2025 79,30"
-    m_scad = re.search(r"Ricevuta\s+([0-9]{2}/[0-9]{2}/[0-9]{4})", text_norm)
-    if m_scad:
-        result["data_scadenza"] = m_scad.group(1).strip()
+    # "Ricevuta 28/02/2025 79,30"
+    for line in lines:
+        m_scad = re.search(r"Ricevuta\s+([0-9]{2}/[0-9]{2}/[0-9]{4})", line)
+        if m_scad:
+            result["data_scadenza"] = m_scad.group(1)
+            break
 
-    # --- Totale documento ---
-    # "Totale documento  EU\n79,30"
-    m_tot = re.search(r"Totale documento\s+EU\s*\n\s*([0-9\.,]+)", text_norm)
-    if m_tot:
-        tot_str = m_tot.group(1).strip().replace(".", "").replace(",", ".")
+    # --- Numeri finali: imponibile, IVA, totale ---
+    # nella zona finale abbiamo "... 65,00 14,30" e poi "Totale documento EU 79,30"
+    # prendiamo tutte le cifre con ,xx e usiamo le ultime 3 come imponibile, iva, totale
+    all_nums = re.findall(r"\d{1,3}(?:[.,]\d{3})*[.,]\d{2}", text_norm)
+    if len(all_nums) >= 3:
+        impon_str, iva_str, tot_str = all_nums[-3], all_nums[-2], all_nums[-1]
         try:
-            result["importo_totale"] = float(tot_str)
-        except ValueError:
-            pass
-
-    # --- Imponibile + IVA ---
-    # Blocco finale nel testo:
-    # ...
-    # Totale
-    # I.V.A.
-    # Spese di trasporto
-    # Spese di incasso
-    # Spese di imballo
-    # 65,00
-    # 14,30
-    # Totale documento  EU
-    # 79,30
-    m_impon_iva = re.search(
-        r"Totale\s*\nI\.V\.A\.[\s\S]*?\n\s*([0-9\.,]+)\s*\n\s*([0-9\.,]+)\s*\n\s*Totale documento\s+EU",
-        text_norm
-    )
-    if m_impon_iva:
-        impon_str = m_impon_iva.group(1).strip().replace(".", "").replace(",", ".")
-        iva_str = m_impon_iva.group(2).strip().replace(".", "").replace(",", ".")
-        try:
-            result["importo_imponibile"] = float(impon_str)
+            result["importo_imponibile"] = float(impon_str.replace(".", "").replace(",", "."))
         except ValueError:
             pass
         try:
-            result["iva"] = float(iva_str)
+            result["iva"] = float(iva_str.replace(".", "").replace(",", "."))
+        except ValueError:
+            pass
+        try:
+            result["importo_totale"] = float(tot_str.replace(".", "").replace(",", "."))
         except ValueError:
             pass
 
     # --- Descrizione riga principale ---
-    # "ANALISI SPETTROGRAFICA 10100"
-    m_descr = re.search(r"\n([A-Z0-9 ,\.\-]{10,})\n", text_norm)
-    if m_descr:
-        result["descrizione"] = m_descr.group(1).strip()
+    # cerchiamo una riga in maiuscolo che contenga "ANALISI" ecc.
+    for line in lines:
+        if line.isupper() and len(line) >= 10 and not line.startswith("INDIRIZZO"):
+            result["descrizione"] = line
+            break
 
     return result
    
