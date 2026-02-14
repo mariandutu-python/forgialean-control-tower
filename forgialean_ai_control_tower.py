@@ -90,14 +90,8 @@ import re
 
 def parse_invoice_pdf(file_bytes: bytes) -> dict:
     """
-    Legge un PDF di fattura e prova a estrarre:
-    - data documento
-    - numero documento
-    - imponibile
-    - iva
-    - totale
-    - scadenza pagamento
-    - descrizione riga principale
+    Parser per fatture tipo Ordini_clienti-2.PDF:
+    estrae numero, date, imponibile, IVA, totale, scadenza.
     """
     import pdfplumber
     import re
@@ -108,7 +102,6 @@ def parse_invoice_pdf(file_bytes: bytes) -> dict:
             page_text = page.extract_text() or ""
             text += page_text + "\n"
 
-    # normalizzo CRLF e raddoppio un po' gli spazi
     text_norm = text.replace("\r", "\n")
 
     result = {
@@ -122,26 +115,25 @@ def parse_invoice_pdf(file_bytes: bytes) -> dict:
         "raw_text": text_norm,
     }
 
-    # --- Numero documento ---
-    # Pattern: "Numero documento\n            852/24"
-    m_num = re.search(r"Numero documento\s*\n\s*([0-9/]+)", text_norm)
-    if m_num:
-        result["num_fattura"] = m_num.group(1).strip()
-
-    # --- Data documento ---
-    # Pattern: "Data documento\n16/09/2024"
-    m_data = re.search(r"Data documento\s*\n\s*([0-9]{2}/[0-9]{2}/[0-9]{4})", text_norm)
-    if m_data:
-        result["data_fattura"] = m_data.group(1).strip()
+    # --- Data + Numero sulla riga successiva ---
+    # Riga 1: "Rif. des. cliente Data documento Numero documento"
+    # Riga 2: "16/09/2024 852/24"
+    m_data_num = re.search(
+        r"Data documento\s+Numero documento\s*\n\s*([0-9]{2}/[0-9]{2}/[0-9]{4})\s+([0-9/]+)",
+        text_norm
+    )
+    if m_data_num:
+        result["data_fattura"] = m_data_num.group(1).strip()
+        result["num_fattura"] = m_data_num.group(2).strip()
 
     # --- Scadenza ---
-    # Pattern: "Scadenza\n28/02/2025"
+    # "Scadenza\n28/02/2025"
     m_scad = re.search(r"Scadenza\s*\n\s*([0-9]{2}/[0-9]{2}/[0-9]{4})", text_norm)
     if m_scad:
         result["data_scadenza"] = m_scad.group(1).strip()
 
     # --- Totale documento ---
-    # Pattern: "Totale documento  EU\n79,30"
+    # "Totale documento  EU\n79,30"
     m_tot = re.search(r"Totale documento[^\n]*\n\s*([0-9\.,]+)", text_norm)
     if m_tot:
         tot_str = m_tot.group(1).strip().replace(".", "").replace(",", ".")
@@ -151,14 +143,14 @@ def parse_invoice_pdf(file_bytes: bytes) -> dict:
             pass
 
     # --- Imponibile + IVA ---
-    # Dal tuo testo:
+    # Blocco vicino alla fine:
     # 65,00
     # 14,30
     # Totale documento  EU
     # 79,30
-    # Prendiamo le due cifre immediatamente prima di "Totale documento"
     m_impon_iva_block = re.search(
-        r"([0-9\.,]+)\s*\n\s*([0-9\.,]+)\s*\n\s*Totale documento",
+        r"(\d{1,3}(?:[.,]\d{3})*[.,]\d{2})\s*\n\s*"
+        r"(\d{1,3}(?:[.,]\d{3})*[.,]\d{2})\s*\n\s*Totale documento",
         text_norm
     )
     if m_impon_iva_block:
@@ -174,7 +166,7 @@ def parse_invoice_pdf(file_bytes: bytes) -> dict:
             pass
 
     # --- Descrizione riga principale ---
-    # Dal PDF: "ANALISI SPETTROGRAFICA 10100"
+    # "ANALISI SPETTROGRAFICA 10100"
     m_descr = re.search(r"\n([A-Z0-9 ,\.\-]{10,})\n", text_norm)
     if m_descr:
         result["descrizione"] = m_descr.group(1).strip()
@@ -5491,9 +5483,19 @@ def page_finance_invoices():
 
         st.success("PDF letto, controlla e conferma i dati sotto.")
 
-        # DEBUG: testo grezzo estratto (utile finché ottimizziamo le regex)
+        # DEBUG: testo grezzo + dict parsato
         with st.expander("Mostra testo grezzo estratto dal PDF"):
             st.text(parsed["raw_text"])
+            st.json(parsed)
+
+        # helper per convertire stringa data → date
+        def to_date(s: str | None):
+            if not s:
+                return date.today()
+            try:
+                return datetime.strptime(s, "%d/%m/%Y").date()
+            except Exception:
+                return date.today()
 
         # Carico clienti
         df_clients = pd.DataFrame([c.__dict__ for c in clients]) if clients else pd.DataFrame()
@@ -5519,15 +5521,6 @@ def page_finance_invoices():
             if not df_fasi_pdf.empty:
                 df_fasi_pdf["label"] = df_fasi_pdf["fase_id"].astype(str) + " - " + df_fasi_pdf["nome_fase"]
                 fasi_labels_pdf += df_fasi_pdf["label"].tolist()
-
-            # helper per convertire stringa data → date
-            def to_date(s: str | None):
-                if not s:
-                    return date.today()
-                try:
-                    return datetime.strptime(s, "%d/%m/%Y").date()
-                except Exception:
-                    return date.today()
 
             with st.form("new_invoice_from_pdf"):
                 st.markdown("#### Dati fattura precompilati")
