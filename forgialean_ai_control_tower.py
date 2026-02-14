@@ -55,6 +55,8 @@ from db import (
     CampaignEvent,
     CrmAutomationRule,
     run_crm_automations,
+    get_vendor_defaults,
+    learn_vendor_defaults,
 
 )
 

@@ -493,6 +493,10 @@ class Vendor(SQLModel, table=True):
     provincia: Optional[str] = None
     note: Optional[str] = None
 
+    # 🔹 Payment terms / default contabili per fornitore
+    giorni_pagamento_default: Optional[int] = None      # es. 30, 60
+    default_category_id: Optional[int] = None           # categoria costo tipica
+    default_account_id: Optional[int] = None            # conto finanziario tipico
 
 class ExpenseCategory(SQLModel, table=True):
     """Categorie di costo (es. software, viaggi, formazione, affitti, ecc.)"""
