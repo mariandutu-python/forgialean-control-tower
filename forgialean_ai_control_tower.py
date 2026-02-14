@@ -5478,7 +5478,7 @@ def page_finance_invoices():
     if uploaded_file is not None:
         file_bytes = uploaded_file.read()
 
-        # usa il parser dedicato
+        # parser PDF
         parsed = parse_invoice_pdf(file_bytes)
 
         st.success("PDF letto, controlla e conferma i dati sotto.")
@@ -5532,15 +5532,15 @@ def page_finance_invoices():
                     fase_label_pdf = st.selectbox("Fase (opzionale)", fasi_labels_pdf)
                     num_fattura_pdf = st.text_input(
                         "Numero fattura",
-                        parsed.get("num_fattura") or "",
+                        value=parsed.get("num_fattura") or "",
                     )
                     data_fattura_pdf = st.date_input(
                         "Data fattura",
-                        value=to_date(parsed.get("data_fattura")),
+                        value=to_date(parsed.get("data_fattura") or None),
                     )
                     data_scadenza_pdf = st.date_input(
                         "Data scadenza",
-                        value=to_date(parsed.get("data_scadenza")),
+                        value=to_date(parsed.get("data_scadenza") or None),
                     )
                 with col2:
                     imponibile_pdf = st.number_input(
