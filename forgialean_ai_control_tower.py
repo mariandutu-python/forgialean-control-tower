@@ -100,13 +100,15 @@ def parse_invoice_pdf(file_bytes: bytes) -> dict:
     - descrizione riga principale
     """
     import pdfplumber
-    text = ""
+    import re
 
+    text = ""
     with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
         for page in pdf.pages:
             page_text = page.extract_text() or ""
             text += page_text + "\n"
 
+    # normalizzo CRLF e raddoppio un po' gli spazi
     text_norm = text.replace("\r", "\n")
 
     result = {
@@ -121,38 +123,26 @@ def parse_invoice_pdf(file_bytes: bytes) -> dict:
     }
 
     # --- Numero documento ---
-    # Nel tuo PDF: "Numero documento 85224"
-    m_num = re.search(r"Numero documento\s+([0-9/]+)", text_norm)
+    # Pattern: "Numero documento\n            852/24"
+    m_num = re.search(r"Numero documento\s*\n\s*([0-9/]+)", text_norm)
     if m_num:
-        num = m_num.group(1).strip()
-        # se è del tipo 85224, lo trasformiamo in 852/24
-        if re.fullmatch(r"\d{5}", num):
-            result["num_fattura"] = f"{num[:3]}/{num[3:]}"
-        else:
-            result["num_fattura"] = num
+        result["num_fattura"] = m_num.group(1).strip()
 
     # --- Data documento ---
-    # Nel tuo PDF: "Data documento 16092024"
-    m_data = re.search(r"Data documento\s+(\d{8}|\d{2}/\d{2}/\d{4})", text_norm)
+    # Pattern: "Data documento\n16/09/2024"
+    m_data = re.search(r"Data documento\s*\n\s*([0-9]{2}/[0-9]{2}/[0-9]{4})", text_norm)
     if m_data:
-        ds = m_data.group(1).strip()
-        if re.fullmatch(r"\d{8}", ds):
-            # 16092024 -> 16/09/2024
-            ds = f"{ds[0:2]}/{ds[2:4]}/{ds[4:8]}"
-        result["data_fattura"] = ds
+        result["data_fattura"] = m_data.group(1).strip()
 
     # --- Scadenza ---
-    # Nel tuo PDF: "Scadenza 28022025"
-    m_scad = re.search(r"Scadenza\s+(\d{8}|\d{2}/\d{2}/\d{4})", text_norm)
+    # Pattern: "Scadenza\n28/02/2025"
+    m_scad = re.search(r"Scadenza\s*\n\s*([0-9]{2}/[0-9]{2}/[0-9]{4})", text_norm)
     if m_scad:
-        ds = m_scad.group(1).strip()
-        if re.fullmatch(r"\d{8}", ds):
-            ds = f"{ds[0:2]}/{ds[2:4]}/{ds[4:8]}"
-        result["data_scadenza"] = ds
+        result["data_scadenza"] = m_scad.group(1).strip()
 
     # --- Totale documento ---
-    # "Totale documento EU 79,30"
-    m_tot = re.search(r"Totale documento.*?([0-9\.,]+)", text_norm)
+    # Pattern: "Totale documento  EU\n79,30"
+    m_tot = re.search(r"Totale documento[^\n]*\n\s*([0-9\.,]+)", text_norm)
     if m_tot:
         tot_str = m_tot.group(1).strip().replace(".", "").replace(",", ".")
         try:
@@ -161,14 +151,19 @@ def parse_invoice_pdf(file_bytes: bytes) -> dict:
             pass
 
     # --- Imponibile + IVA ---
-    # Nel PDF: "Totale I.V.A. ... 65,00 14,30"
-    m_impon_iva = re.search(
-        r"Totale\s+I\.V\.A\.[^\n]*\n.*?([0-9\.,]+)\s+([0-9\.,]+)",
+    # Dal tuo testo:
+    # 65,00
+    # 14,30
+    # Totale documento  EU
+    # 79,30
+    # Prendiamo le due cifre immediatamente prima di "Totale documento"
+    m_impon_iva_block = re.search(
+        r"([0-9\.,]+)\s*\n\s*([0-9\.,]+)\s*\n\s*Totale documento",
         text_norm
     )
-    if m_impon_iva:
-        impon_str = m_impon_iva.group(1).strip().replace(".", "").replace(",", ".")
-        iva_str = m_impon_iva.group(2).strip().replace(".", "").replace(",", ".")
+    if m_impon_iva_block:
+        impon_str = m_impon_iva_block.group(1).strip().replace(".", "").replace(",", ".")
+        iva_str = m_impon_iva_block.group(2).strip().replace(".", "").replace(",", ".")
         try:
             result["importo_imponibile"] = float(impon_str)
         except ValueError:
@@ -178,8 +173,8 @@ def parse_invoice_pdf(file_bytes: bytes) -> dict:
         except ValueError:
             pass
 
-    # --- Descrizione riga ---
-    # Cerca una riga tutta maiuscola con almeno 10 caratteri (es. "ANALISI SPETTROGRAFICA 10100")
+    # --- Descrizione riga principale ---
+    # Dal PDF: "ANALISI SPETTROGRAFICA 10100"
     m_descr = re.search(r"\n([A-Z0-9 ,\.\-]{10,})\n", text_norm)
     if m_descr:
         result["descrizione"] = m_descr.group(1).strip()
